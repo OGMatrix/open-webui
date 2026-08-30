@@ -81,6 +81,7 @@
 		type ReasoningHints
 	} from '$lib/utils/reasoning';
 	import { getOllamaModelInfo } from '$lib/apis/ollama';
+	import { getOpenAIModelCapabilities } from '$lib/apis/openai';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import ModelSelector from './ModelSelector.svelte';
 
@@ -204,26 +205,42 @@
 		atSelectedModel ?? $models.find((model) => model?.id === selectedModels?.[0]);
 	// Ollama reports what a model actually supports, so ask it rather than guess.
 	// Cached per model id, and only ever asked once, including after a failure.
+	// Providers with an endpoint that describes the served model. Everything else
+	// is left to the name patterns.
+	const REASONING_PROBE_PROVIDERS = new Set(['llama.cpp']);
 	const reasoningHintCache = new Map<string, ReasoningHints>();
 	let reasoningHints: ReasoningHints | null = null;
 
 	const loadReasoningHints = async (
-		model: { id?: string; owned_by?: string } | null | undefined
+		model: { id?: string; owned_by?: string; provider?: string } | null | undefined
 	) => {
 		const id = model?.id;
 		reasoningHints = id ? (reasoningHintCache.get(id) ?? null) : null;
 
-		if (!id || model?.owned_by !== 'ollama' || reasoningHintCache.has(id)) {
+		const askable =
+			model?.owned_by === 'ollama' || REASONING_PROBE_PROVIDERS.has(model?.provider ?? '');
+		if (!id || !askable || reasoningHintCache.has(id)) {
 			return;
 		}
 
 		// Cache before awaiting so a burst of model switches cannot pile up calls.
 		reasoningHintCache.set(id, {});
-		const info = await getOllamaModelInfo(localStorage.token, id).catch(() => null);
-		const capabilities = info?.capabilities;
-		const hints: ReasoningHints = Array.isArray(capabilities)
-			? { thinking: capabilities.includes('thinking') }
-			: {};
+
+		let hints: ReasoningHints = {};
+		if (model?.owned_by === 'ollama') {
+			const info = await getOllamaModelInfo(localStorage.token, id).catch(() => null);
+			const capabilities = info?.capabilities;
+			if (Array.isArray(capabilities)) {
+				hints = { thinking: capabilities.includes('thinking') };
+			}
+		} else {
+			const capabilities = await getOpenAIModelCapabilities(localStorage.token, id).catch(
+				() => null
+			);
+			if (typeof capabilities?.reasoning === 'boolean') {
+				hints = { thinking: capabilities.reasoning };
+			}
+		}
 
 		reasoningHintCache.set(id, hints);
 		if (activeReasoningModel?.id === id) {

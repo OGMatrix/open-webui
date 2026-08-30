@@ -272,6 +272,35 @@ def get_model_management_root_url(url: str, provider: str) -> str:
     return root_url
 
 
+# Endpoints that describe what a served model can do. Only providers that expose
+# something machine-readable are listed; the rest advertise nothing.
+MODEL_CAPABILITY_ENDPOINTS = {
+    'llama.cpp': '/props',
+}
+
+
+def derive_llamacpp_capabilities(props: dict) -> dict:
+    """Read what llama.cpp's /props says about the loaded model.
+
+    Thinking is a chat template feature there. A template that hardcodes
+    <think> always reasons and has nothing to toggle, so only templates that
+    take an `enable_thinking` argument are reported as controllable.
+    """
+    template = props.get('chat_template')
+    if not isinstance(template, str):
+        # Newer builds can return a list of templates keyed by name.
+        templates = props.get('chat_templates') or props.get('chat_template_tool_use')
+        template = templates if isinstance(templates, str) else ''
+
+    return {'reasoning': 'enable_thinking' in template}
+
+
+def derive_provider_capabilities(provider: str, payload: dict) -> dict:
+    if provider == 'llama.cpp' and isinstance(payload, dict):
+        return derive_llamacpp_capabilities(payload)
+    return {}
+
+
 def get_provider_model_loaded_state(model: dict, provider: str, manual_model_ids: bool = False) -> bool | None:
     if provider == 'lmstudio':
         if model.get('loaded_instances'):
@@ -940,6 +969,73 @@ async def get_models(request: Request, url_idx: int | None = None, user=Depends(
         models['data'] = await get_filtered_models(models, user)
 
     return models
+
+
+class ModelCapabilitiesForm(BaseModel):
+    model: str
+
+
+@router.post('/model/capabilities')
+async def get_model_capabilities(request: Request, form_data: ModelCapabilitiesForm, user=Depends(get_verified_user)):
+    """What the serving provider reports about a model.
+
+    Only the derived flags are returned, never the provider's raw response:
+    llama.cpp's /props also carries the model path and sampling defaults, which
+    are of no use here and should not be handed to every user.
+
+    Never raises for a provider that cannot answer. The caller treats an empty
+    result as "unknown" and falls back to its own detection.
+    """
+    model_id = form_data.model
+
+    models = request.app.state.OPENAI_MODELS
+    if not models or model_id not in models:
+        await get_all_models(request, user=user)
+        models = request.app.state.OPENAI_MODELS
+
+    model = models.get(model_id)
+    if not model or 'urlIdx' not in model:
+        return {'capabilities': {}}
+
+    await check_model_access(user, await Models.get_model_by_id(model_id), BYPASS_MODEL_ACCESS_CONTROL)
+
+    url_idx = model['urlIdx']
+    try:
+        url, key, api_config = await get_openai_connection(url_idx)
+    except IndexError:
+        return {'capabilities': {}}
+
+    provider = api_config.get('provider', '')
+    path = MODEL_CAPABILITY_ENDPOINTS.get(provider)
+    if not path:
+        return {'capabilities': {}}
+
+    root_url = get_model_management_root_url(url, provider)
+    headers, cookies = await get_headers_and_cookies(request, root_url, key, api_config, user=user)
+
+    response = None
+    try:
+        session = await get_session()
+        response = await session.get(
+            f'{root_url}{path}',
+            headers=headers,
+            cookies=cookies,
+            ssl=AIOHTTP_CLIENT_SESSION_SSL,
+            timeout=get_client_timeout(),
+        )
+        if not response.ok:
+            return {'capabilities': {}}
+
+        payload = await response.json(loads=JSONCodec.loads)
+    except Exception as e:
+        # A provider that is down or does not serve this path is not an error
+        # here; the client simply learns nothing.
+        log.debug('capability probe failed for %s: %s', model_id, e)
+        return {'capabilities': {}}
+    finally:
+        await cleanup_response(response)
+
+    return {'capabilities': derive_provider_capabilities(provider, payload)}
 
 
 class ProviderModelOperationForm(BaseModel):
