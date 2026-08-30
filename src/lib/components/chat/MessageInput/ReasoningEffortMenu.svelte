@@ -45,7 +45,13 @@
 </script>
 
 {#if mode}
-	<Dropdown bind:show side="top" align="start" sideOffset={6} contentClass="w-60">
+	<Dropdown
+		bind:show
+		side="top"
+		align="start"
+		sideOffset={6}
+		contentClass="z-50 w-64 rounded-lg bg-white dark:bg-gray-900 dark:text-white shadow-lg border border-gray-300/30 dark:border-gray-700/40 outline-hidden"
+	>
 		<Tooltip content={$i18n.t('Thinking effort')} placement="top">
 			<button
 				type="button"
