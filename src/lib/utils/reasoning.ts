@@ -13,7 +13,7 @@
  *    `custom_params`, which the backend merges into the request body.
  */
 
-export const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high'] as const;
+export const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
 
 export type ReasoningLevel = (typeof REASONING_LEVELS)[number];
 
@@ -29,13 +29,16 @@ export type ReasoningMode = {
 type ModelLike = { id?: string; name?: string; owned_by?: string } | null | undefined;
 
 const EFFORT_LEVELS: ReasoningLevel[] = ['minimal', 'low', 'medium', 'high'];
+// gpt-5 also takes an extra-high step. Providers reject efforts they do not
+// know, so this stays on the family that documents it.
+const GPT5_LEVELS: ReasoningLevel[] = ['minimal', 'low', 'medium', 'high', 'xhigh'];
 const GRADED_LEVELS: ReasoningLevel[] = ['off', 'low', 'medium', 'high'];
 const SWITCH_LEVELS: ReasoningLevel[] = ['off', 'high'];
 
 // Families that take a graded effort on an OpenAI-shaped request.
 const EFFORT_PATTERNS: { pattern: RegExp; levels: ReasoningLevel[] }[] = [
 	// gpt-5 and o3/o4 accept the full range including "minimal".
-	{ pattern: /(^|[/:-])gpt-5/, levels: EFFORT_LEVELS },
+	{ pattern: /(^|[/:-])gpt-5/, levels: GPT5_LEVELS },
 	{ pattern: /(^|[/:-])o[34]([-.]|$)/, levels: EFFORT_LEVELS },
 	// o1 predates "minimal".
 	{ pattern: /(^|[/:-])o1([-.]|$)/, levels: ['low', 'medium', 'high'] },

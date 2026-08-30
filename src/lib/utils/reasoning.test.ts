@@ -12,9 +12,14 @@ describe('getReasoningMode', () => {
 	it('gives OpenAI reasoning models a graded effort', () => {
 		expect(getReasoningMode(model('gpt-5'))).toEqual({
 			transport: 'reasoning_effort',
-			levels: ['minimal', 'low', 'medium', 'high']
+			levels: ['minimal', 'low', 'medium', 'high', 'xhigh']
 		});
 		expect(getReasoningMode(model('o3-mini'))?.levels).toContain('minimal');
+	});
+
+	it('keeps the extra-high step on the family that documents it', () => {
+		expect(getReasoningMode(model('o3-mini'))?.levels).not.toContain('xhigh');
+		expect(getReasoningMode(model('claude-sonnet-4'))?.levels).not.toContain('xhigh');
 	});
 
 	it('leaves "minimal" off o1, which predates it', () => {
