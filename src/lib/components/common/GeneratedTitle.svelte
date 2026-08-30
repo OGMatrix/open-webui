@@ -22,6 +22,7 @@
 	let revealChars: string[] = [];
 	let pendingReveal = false;
 	let previousGenerating = false;
+	let titleWhenStarted = '';
 	let timer: ReturnType<typeof setTimeout> | null = null;
 
 	$: text = typeof title === 'string' ? title : title == null ? '' : String(title);
@@ -60,6 +61,10 @@
 		previousGenerating = isGenerating;
 
 		if (isGenerating) {
+			// While generating, callers keep showing a stand-in ("New Chat", or the
+			// old title). Remember it, so the reveal waits for the real one instead
+			// of animating the placeholder back in.
+			titleWhenStarted = text;
 			revealing = false;
 			pendingReveal = false;
 			clearTimer();
@@ -67,8 +72,8 @@
 		}
 
 		if (finished) {
-			// The title may land a tick after the flag clears.
-			if (text) {
+			// The generated title usually lands a tick after the flag clears.
+			if (text && text !== titleWhenStarted) {
 				startReveal(text);
 			} else {
 				pendingReveal = true;
@@ -77,7 +82,7 @@
 	};
 
 	$: syncGenerating(generating);
-	$: if (pendingReveal && text) {
+	$: if (pendingReveal && text && text !== titleWhenStarted) {
 		pendingReveal = false;
 		startReveal(text);
 	}
@@ -105,31 +110,43 @@
 
 <style>
 	.generated-title-skeleton {
+		/* Base and sheen are set per theme below. Element-level opacity is
+		   deliberately avoided: it dims the sheen along with the bar and the
+		   sweep stops being visible. */
+		--skeleton-base: rgba(0, 0, 0, 0.09);
+		--skeleton-sheen: rgba(0, 0, 0, 0.28);
+
 		display: inline-block;
 		width: var(--skeleton-width, 9rem);
 		max-width: 100%;
-		height: 0.7em;
+		height: 0.72em;
 		vertical-align: middle;
 		border-radius: 9999px;
-		background-color: currentColor;
-		opacity: 0.16;
+		background-color: var(--skeleton-base);
 		background-image: linear-gradient(
 			90deg,
 			transparent 0%,
-			rgba(255, 255, 255, 0.55) 50%,
+			var(--skeleton-sheen) 45%,
+			var(--skeleton-sheen) 55%,
 			transparent 100%
 		);
-		background-size: 200% 100%;
+		/* A narrow band reads as a sweep; a full-width one just looks like a flash. */
+		background-size: 55% 100%;
 		background-repeat: no-repeat;
-		animation: generated-title-shimmer 1.5s ease-in-out infinite;
+		animation: generated-title-shimmer 1.25s ease-in-out infinite;
+	}
+
+	:global(.dark) .generated-title-skeleton {
+		--skeleton-base: rgba(255, 255, 255, 0.13);
+		--skeleton-sheen: rgba(255, 255, 255, 0.4);
 	}
 
 	@keyframes generated-title-shimmer {
-		0% {
-			background-position: 150% 0;
+		from {
+			background-position: -60% 0;
 		}
-		100% {
-			background-position: -50% 0;
+		to {
+			background-position: 160% 0;
 		}
 	}
 
