@@ -114,8 +114,9 @@
 		   deliberately avoided: it dims the sheen along with the bar and the
 		   sweep stops being visible. */
 		--skeleton-base: rgba(0, 0, 0, 0.09);
-		--skeleton-sheen: rgba(0, 0, 0, 0.28);
+		--skeleton-sheen: rgba(0, 0, 0, 0.26);
 
+		position: relative;
 		display: inline-block;
 		width: var(--skeleton-width, 9rem);
 		max-width: 100%;
@@ -123,30 +124,42 @@
 		vertical-align: middle;
 		border-radius: 9999px;
 		background-color: var(--skeleton-base);
-		background-image: linear-gradient(
+		overflow: hidden;
+	}
+
+	/* The sheen lives on a doubled-up, repeating layer that is translated by
+	   exactly one repetition. Start and end frames are therefore identical, so
+	   the loop has no seam, and a highlight is always somewhere in view instead
+	   of the bar going dark between passes. */
+	.generated-title-skeleton::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: 200%;
+		background-image: repeating-linear-gradient(
 			90deg,
 			transparent 0%,
-			var(--skeleton-sheen) 45%,
-			var(--skeleton-sheen) 55%,
-			transparent 100%
+			var(--skeleton-sheen) 25%,
+			transparent 50%
 		);
-		/* A narrow band reads as a sweep; a full-width one just looks like a flash. */
-		background-size: 55% 100%;
-		background-repeat: no-repeat;
-		animation: generated-title-shimmer 1.25s ease-in-out infinite;
+		animation: generated-title-shimmer 1.6s linear infinite;
+		will-change: transform;
 	}
 
 	:global(.dark) .generated-title-skeleton {
 		--skeleton-base: rgba(255, 255, 255, 0.13);
-		--skeleton-sheen: rgba(255, 255, 255, 0.4);
+		--skeleton-sheen: rgba(255, 255, 255, 0.38);
 	}
 
 	@keyframes generated-title-shimmer {
 		from {
-			background-position: -60% 0;
+			transform: translateX(0);
 		}
 		to {
-			background-position: 160% 0;
+			/* One full repetition of the 50%-wide pattern on a 200%-wide layer. */
+			transform: translateX(-50%);
 		}
 	}
 
@@ -175,9 +188,10 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.generated-title-skeleton {
+		.generated-title-skeleton::after {
 			animation: none;
-			background-image: none;
+			/* Leave a still highlight rather than an empty bar. */
+			transform: translateX(-25%);
 		}
 
 		.generated-title-reveal > span {
