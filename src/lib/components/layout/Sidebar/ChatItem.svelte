@@ -50,6 +50,7 @@
 	import DragGhost from '$lib/components/common/DragGhost.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import ChatHoverPreview from './ChatHoverPreview.svelte';
+	import GeneratedTitle from '$lib/components/common/GeneratedTitle.svelte';
 	import ChatIcon from './icons/Chat.svelte';
 	import MoreHorizontalIcon from './icons/MoreHorizontal.svelte';
 	import SparklesIcon from './icons/Sparkles.svelte';
@@ -67,6 +68,8 @@
 
 	export let id;
 	export let title;
+	/** True while the backend is still generating this chat's title. */
+	export let titleGenerating = false;
 	export let createdAt: number | null = null;
 	export let updatedAt: number | null = null;
 	export let lastReadAt: number | null = null;
@@ -540,7 +543,7 @@
 				? 'font-normal text-gray-800 dark:text-gray-200'
 				: ''} {($mobile || showInlineActions) && !readonly ? 'pr-12' : ''}"
 		>
-			{title}
+			<GeneratedTitle {title} generating={titleGenerating} skeletonWidth="7.5rem" />
 		</div>
 	</div>
 

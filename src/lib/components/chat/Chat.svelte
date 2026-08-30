@@ -32,6 +32,7 @@
 		temporaryChatEnabled,
 		mobile,
 		chatTitle,
+		generatingTitleChatIds,
 		showArtifacts,
 		artifactContents,
 		tools,
@@ -1205,6 +1206,13 @@
 
 	const chatEventHandler = async (event, cb) => {
 		console.log(event);
+
+		// Handled before the active-chat guard: a title can land for a chat the
+		// user has already navigated away from, and its placeholder still needs
+		// clearing in the sidebar.
+		if (event?.data?.type === 'chat:title') {
+			setTitleGenerating(event.chat_id, false);
+		}
 
 		if (event.chat_id === $chatId) {
 			await tick();
@@ -2552,6 +2560,50 @@
 		}));
 	};
 
+	// The backend only reports the finished title, so the placeholder is driven
+	// from this side: raised when we ask for a title, cleared when it lands.
+	// The timeout is a backstop for a generation that fails or never answers,
+	// so a chat is never left showing a placeholder forever.
+	const TITLE_GENERATION_TIMEOUT_MS = 90000;
+	const titleGenerationTimers = new Map();
+
+	const setTitleGenerating = (id: string | undefined | null, generating: boolean) => {
+		if (!id) {
+			return;
+		}
+
+		const timer = titleGenerationTimers.get(id);
+		if (timer) {
+			clearTimeout(timer);
+			titleGenerationTimers.delete(id);
+		}
+
+		generatingTitleChatIds.update((ids) => {
+			const next = new Set(ids);
+			if (generating) {
+				next.add(id);
+			} else {
+				next.delete(id);
+			}
+			return next;
+		});
+
+		if (generating) {
+			titleGenerationTimers.set(
+				id,
+				setTimeout(() => setTitleGenerating(id, false), TITLE_GENERATION_TIMEOUT_MS)
+			);
+		}
+	};
+
+	// A brand new chat has no id yet when the request goes out, so remember that
+	// a title was asked for and bind it to the chat as soon as its id exists.
+	let pendingTitleGeneration = false;
+	$: if (pendingTitleGeneration && $chatId) {
+		pendingTitleGeneration = false;
+		setTitleGenerating($chatId, true);
+	}
+
 	const chatCompletedHandler = async (_chatId, modelId, responseMessageId, messages) => {
 		// Backend handles outlet filters and persistence inline.
 		// Just refresh the sidebar chat list.
@@ -3500,6 +3552,24 @@
 		const responseMessage = _history.messages[responseMessageId];
 		const userMessage = _history.messages[responseMessage.parentId];
 
+		// Titles are only generated for the first message of a saved chat. Derived
+		// once so the placeholder below cannot drift from what we actually request.
+		const isFirstMessageOfSavedChat =
+			!$temporaryChatEnabled &&
+			(!_chatId ||
+				(embedded &&
+					(userMessage?.parentId ?? null) === null &&
+					createMessagesList(_history, responseMessageId).length === 2));
+		const willGenerateTitle = isFirstMessageOfSavedChat && ($settings?.title?.auto ?? true);
+
+		if (willGenerateTitle) {
+			if (_chatId) {
+				setTitleGenerating(_chatId, true);
+			} else {
+				pendingTitleGeneration = true;
+			}
+		}
+
 		const chatMessageFiles = _messages
 			.filter((message) => message.files)
 			.flatMap((message) => message.files);
@@ -3680,13 +3750,9 @@
 				...(continueResponse ? { assistant_message_id: responseMessageId } : {}),
 
 				background_tasks: {
-					...(!$temporaryChatEnabled &&
-					(!_chatId ||
-						(embedded &&
-							(userMessage?.parentId ?? null) === null &&
-							createMessagesList(_history, responseMessageId).length === 2))
+					...(isFirstMessageOfSavedChat
 						? {
-								title_generation: $settings?.title?.auto ?? true,
+								title_generation: willGenerateTitle,
 								tags_generation: $settings?.autoTags ?? true
 							}
 						: {}),

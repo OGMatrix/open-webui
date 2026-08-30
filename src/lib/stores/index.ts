@@ -53,6 +53,13 @@ export const TTSWorker = writable(null);
 
 export const chatId = writable('');
 export const chatTitle = writable('');
+// Chat ids whose title the backend is still generating. Drives the placeholder
+// in the sidebar and the header until the generated title arrives.
+export const generatingTitleChatIds = writable<Set<string>>(new Set());
+// Chat ids are untyped at several call sites, so this takes the id as-is rather
+// than forcing those callers to prove it is a string.
+export const isGeneratingTitle = (ids: Set<string>, chatId: unknown) =>
+	ids.has(String(chatId ?? ''));
 
 export const channels = writable([]);
 export const channelId = writable(null);
