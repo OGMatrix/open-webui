@@ -167,6 +167,40 @@ export const getOllamaVersion = async (token: string, urlIdx?: number) => {
 	return res?.version ?? false;
 };
 
+/**
+ * Ollama's own metadata for a model. `capabilities` is the authoritative list of
+ * what it supports ("thinking", "tools", "vision", ...), which is why the
+ * thinking controls read it rather than guessing from the model name.
+ */
+export const getOllamaModelInfo = async (token: string = '', model: string) => {
+	let error = null;
+
+	const res = await fetch(`${OLLAMA_API_BASE_URL}/api/show`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		},
+		body: JSON.stringify({ model })
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			console.error(err);
+			error = err?.detail ?? 'Server connection failed';
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
 export const getOllamaModels = async (token: string = '', urlIdx: null | number = null) => {
 	let error = null;
 

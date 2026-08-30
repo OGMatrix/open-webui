@@ -74,7 +74,13 @@
 
 	import InputMenu from './MessageInput/InputMenu.svelte';
 	import ReasoningEffortMenu from './MessageInput/ReasoningEffortMenu.svelte';
-	import { applyReasoningLevel, getReasoningMode, readReasoningLevel } from '$lib/utils/reasoning';
+	import {
+		applyReasoningLevel,
+		getReasoningMode,
+		readReasoningLevel,
+		type ReasoningHints
+	} from '$lib/utils/reasoning';
+	import { getOllamaModelInfo } from '$lib/apis/ollama';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import ModelSelector from './ModelSelector.svelte';
 
@@ -196,7 +202,37 @@
 	// switching models swaps the available levels.
 	$: activeReasoningModel =
 		atSelectedModel ?? $models.find((model) => model?.id === selectedModels?.[0]);
-	$: reasoningMode = getReasoningMode(activeReasoningModel);
+	// Ollama reports what a model actually supports, so ask it rather than guess.
+	// Cached per model id, and only ever asked once, including after a failure.
+	const reasoningHintCache = new Map<string, ReasoningHints>();
+	let reasoningHints: ReasoningHints | null = null;
+
+	const loadReasoningHints = async (
+		model: { id?: string; owned_by?: string } | null | undefined
+	) => {
+		const id = model?.id;
+		reasoningHints = id ? (reasoningHintCache.get(id) ?? null) : null;
+
+		if (!id || model?.owned_by !== 'ollama' || reasoningHintCache.has(id)) {
+			return;
+		}
+
+		// Cache before awaiting so a burst of model switches cannot pile up calls.
+		reasoningHintCache.set(id, {});
+		const info = await getOllamaModelInfo(localStorage.token, id).catch(() => null);
+		const capabilities = info?.capabilities;
+		const hints: ReasoningHints = Array.isArray(capabilities)
+			? { thinking: capabilities.includes('thinking') }
+			: {};
+
+		reasoningHintCache.set(id, hints);
+		if (activeReasoningModel?.id === id) {
+			reasoningHints = hints;
+		}
+	};
+
+	$: loadReasoningHints(activeReasoningModel);
+	$: reasoningMode = getReasoningMode(activeReasoningModel, reasoningHints);
 	$: reasoningLevel = readReasoningLevel(params, reasoningMode);
 	export let codeInterpreterEnabled = false;
 	export let toolApprovalMode = 'full';

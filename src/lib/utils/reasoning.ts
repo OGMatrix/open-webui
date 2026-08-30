@@ -26,7 +26,20 @@ export type ReasoningMode = {
 
 // Only the fields actually used for detection: widening this to the full Model
 // type would drag in shapes that differ between providers.
-type ModelLike = { id?: string; name?: string; owned_by?: string } | null | undefined;
+type ModelLike =
+	| { id?: string; name?: string; owned_by?: string; info?: { meta?: { capabilities?: any } } }
+	| null
+	| undefined;
+
+/**
+ * What the provider itself says about the model, where it can be asked.
+ * Ollama reports this on /api/show; OpenAI-shaped APIs advertise nothing, so
+ * there the name patterns below remain the only signal.
+ */
+export type ReasoningHints = {
+	/** Provider-reported support. Undefined means "was not able to ask". */
+	thinking?: boolean;
+};
 
 const EFFORT_LEVELS: ReasoningLevel[] = ['minimal', 'low', 'medium', 'high'];
 // gpt-5 also takes an extra-high step. Providers reject efforts they do not
@@ -58,13 +71,26 @@ const normalize = (model: ModelLike) => `${model?.id ?? ''} ${model?.name ?? ''}
 /**
  * Returns the reasoning controls for a model, or null when it has none.
  */
-export const getReasoningMode = (model: ModelLike): ReasoningMode | null => {
+export const getReasoningMode = (
+	model: ModelLike,
+	hints: ReasoningHints | null = null
+): ReasoningMode | null => {
 	if (!model) {
 		return null;
 	}
 
 	const haystack = normalize(model);
 	const isOllama = model.owned_by === 'ollama';
+
+	// An explicit per-model capability wins over everything: it is the only way
+	// to correct a wrong guess for a provider that cannot be asked.
+	const declared = model.info?.meta?.capabilities?.reasoning;
+	// Then whatever the provider reported, then the name patterns.
+	const known = declared ?? hints?.thinking;
+
+	if (known === false) {
+		return null;
+	}
 
 	for (const { pattern, levels } of EFFORT_PATTERNS) {
 		if (pattern.test(haystack)) {
@@ -76,7 +102,8 @@ export const getReasoningMode = (model: ModelLike): ReasoningMode | null => {
 		}
 	}
 
-	if (SWITCH_PATTERN.test(haystack)) {
+	if (known === true || SWITCH_PATTERN.test(haystack)) {
+		// Nothing said which levels, so offer the switch every thinking model has.
 		return {
 			transport: isOllama ? 'ollama_think' : 'chat_template',
 			levels: SWITCH_LEVELS

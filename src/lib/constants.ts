@@ -116,6 +116,8 @@ export const DEFAULT_CAPABILITIES = {
 	terminal: true,
 	citations: true,
 	status_updates: true,
+	// undefined = decide automatically from the model; true/false forces it
+	reasoning: undefined,
 	usage: undefined,
 	memory: true,
 	builtin_tools: true

@@ -48,6 +48,35 @@ describe('getReasoningMode', () => {
 		});
 	});
 
+	it('prefers what the provider reported over the name patterns', () => {
+		// A thinking model Ollama does not advertise as one.
+		expect(getReasoningMode(model('qwen3:32b', 'ollama'), { thinking: false })).toBeNull();
+		// And one whose name gives nothing away.
+		expect(getReasoningMode(model('my-custom-model', 'ollama'), { thinking: true })).toEqual({
+			transport: 'ollama_think',
+			levels: ['off', 'high']
+		});
+	});
+
+	it('lets an explicit model capability override everything', () => {
+		const forcedOn = {
+			id: 'mystery-model',
+			owned_by: 'openai',
+			info: { meta: { capabilities: { reasoning: true } } }
+		};
+		expect(getReasoningMode(forcedOn)?.transport).toBe('chat_template');
+
+		const forcedOff = {
+			id: 'gpt-5',
+			owned_by: 'openai',
+			info: { meta: { capabilities: { reasoning: false } } }
+		};
+		expect(getReasoningMode(forcedOff)).toBeNull();
+
+		// An explicit capability beats a provider report that disagrees.
+		expect(getReasoningMode(forcedOn, { thinking: false })).not.toBeNull();
+	});
+
 	it('returns nothing for models with no thinking mode', () => {
 		expect(getReasoningMode(model('gpt-4o'))).toBeNull();
 		expect(getReasoningMode(model('llama3.1:8b', 'ollama'))).toBeNull();
