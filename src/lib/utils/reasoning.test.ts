@@ -77,6 +77,46 @@ describe('getReasoningMode', () => {
 		expect(getReasoningMode(forcedOn, { thinking: false })).not.toBeNull();
 	});
 
+	it('believes a gateway that lists its supported parameters', () => {
+		// OpenRouter ships this on every model in its catalogue.
+		const withReasoning = {
+			id: 'z-ai/glm-4.6',
+			owned_by: 'openai',
+			supported_parameters: ['temperature', 'top_p', 'reasoning', 'tools']
+		};
+		expect(getReasoningMode(withReasoning)).toEqual({
+			transport: 'reasoning_effort',
+			levels: ['off', 'low', 'medium', 'high']
+		});
+
+		// Listed its parameters, and reasoning was not one of them.
+		const without = {
+			id: 'meta-llama/llama-3.3-70b-instruct',
+			owned_by: 'openai',
+			supported_parameters: ['temperature', 'top_p', 'tools']
+		};
+		expect(getReasoningMode(without)).toBeNull();
+	});
+
+	it('keeps a specific ladder over the gateway’s generic one', () => {
+		const gpt5 = {
+			id: 'openai/gpt-5',
+			owned_by: 'openai',
+			supported_parameters: ['reasoning']
+		};
+		expect(getReasoningMode(gpt5)?.levels).toContain('xhigh');
+	});
+
+	it('still lets an explicit capability force it on', () => {
+		const forced = {
+			id: 'some/model',
+			owned_by: 'openai',
+			supported_parameters: ['temperature'],
+			info: { meta: { capabilities: { reasoning: true } } }
+		};
+		expect(getReasoningMode(forced)).not.toBeNull();
+	});
+
 	it('returns nothing for models with no thinking mode', () => {
 		expect(getReasoningMode(model('gpt-4o'))).toBeNull();
 		expect(getReasoningMode(model('llama3.1:8b', 'ollama'))).toBeNull();

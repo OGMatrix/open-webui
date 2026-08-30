@@ -27,7 +27,15 @@ export type ReasoningMode = {
 // Only the fields actually used for detection: widening this to the full Model
 // type would drag in shapes that differ between providers.
 type ModelLike =
-	| { id?: string; name?: string; owned_by?: string; info?: { meta?: { capabilities?: any } } }
+	| {
+			id?: string;
+			name?: string;
+			owned_by?: string;
+			/** Gateways such as OpenRouter list what a model accepts. The backend
+			    keeps the provider's raw model object, so this arrives as-is. */
+			supported_parameters?: unknown;
+			info?: { meta?: { capabilities?: any } };
+	  }
 	| null
 	| undefined;
 
@@ -99,6 +107,22 @@ export const getReasoningMode = (
 				transport: isOllama ? 'ollama_think' : 'reasoning_effort',
 				levels
 			};
+		}
+	}
+
+	// Gateways that advertise their parameters are authoritative for anything the
+	// patterns above did not already pin down to a specific ladder.
+	const declaredParams = model.supported_parameters;
+	if (Array.isArray(declaredParams)) {
+		const advertised = declaredParams.some(
+			(param) => param === 'reasoning' || param === 'reasoning_effort'
+		);
+		if (advertised) {
+			return { transport: 'reasoning_effort', levels: GRADED_LEVELS };
+		}
+		// It listed its parameters and reasoning was not among them.
+		if (known !== true) {
+			return null;
 		}
 	}
 
