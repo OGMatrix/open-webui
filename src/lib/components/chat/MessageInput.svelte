@@ -73,6 +73,8 @@
 	import { getSuggestionRenderer } from '../common/RichTextInput/suggestions';
 
 	import InputMenu from './MessageInput/InputMenu.svelte';
+	import ReasoningEffortMenu from './MessageInput/ReasoningEffortMenu.svelte';
+	import { applyReasoningLevel, getReasoningMode, readReasoningLevel } from '$lib/utils/reasoning';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import ModelSelector from './ModelSelector.svelte';
 
@@ -187,6 +189,15 @@
 
 	export let imageGenerationEnabled = false;
 	export let webSearchEnabled = false;
+	/** Chat-level params; the thinking picker reads and writes its choice here. */
+	export let params: Record<string, any> = {};
+
+	// The thinking controls follow whichever model the next message goes to, so
+	// switching models swaps the available levels.
+	$: activeReasoningModel =
+		atSelectedModel ?? $models.find((model) => model?.id === selectedModels?.[0]);
+	$: reasoningMode = getReasoningMode(activeReasoningModel);
+	$: reasoningLevel = readReasoningLevel(params, reasoningMode);
 	export let codeInterpreterEnabled = false;
 	export let toolApprovalMode = 'full';
 	export let onToolApprovalModeChange: Function = () => {};
@@ -2424,6 +2435,16 @@
 													</Tooltip>
 												{/if}
 											{/each}
+
+											{#if reasoningMode}
+												<ReasoningEffortMenu
+													mode={reasoningMode}
+													level={reasoningLevel}
+													onSelect={(next) => {
+														params = applyReasoningLevel(params, reasoningMode, next);
+													}}
+												/>
+											{/if}
 
 											{#if webSearchEnabled && showWebSearchButton}
 												<Tooltip content={$i18n.t('Web Search')} placement="top">

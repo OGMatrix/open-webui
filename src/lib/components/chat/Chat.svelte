@@ -4586,6 +4586,7 @@
 										bind:selectedToolIds
 										bind:selectedSkillIds
 										bind:selectedFilterIds
+										bind:params
 										bind:imageGenerationEnabled
 										bind:codeInterpreterEnabled
 										{pendingOAuthTools}
@@ -4678,6 +4679,7 @@
 										bind:selectedToolIds
 										bind:selectedSkillIds
 										bind:selectedFilterIds
+										bind:params
 										bind:imageGenerationEnabled
 										bind:codeInterpreterEnabled
 										{pendingOAuthTools}
@@ -4738,6 +4740,7 @@
 									bind:selectedToolIds
 									bind:selectedSkillIds
 									bind:selectedFilterIds
+									bind:params
 									bind:imageGenerationEnabled
 									bind:codeInterpreterEnabled
 									bind:webSearchEnabled
