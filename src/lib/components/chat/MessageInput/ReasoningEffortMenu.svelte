@@ -29,7 +29,8 @@
 		low: 'Low',
 		medium: 'Medium',
 		high: 'High',
-		xhigh: 'Extra high'
+		xhigh: 'Extra high',
+		max: 'Maximum'
 	};
 
 	const labelFor = (value: ReasoningLevel) => $i18n.t(LABELS[value]);

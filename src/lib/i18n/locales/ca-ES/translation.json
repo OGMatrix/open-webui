@@ -1689,6 +1689,7 @@
 	"Max tokens to retrieve (1024-32768, default 8192)": "Nombre màxim de tokens a obtenir (1024-32768, per defecte 8192)",
 	"Max Upload Count": "Nombre màxim de càrregues",
 	"Max Upload Size": "Mida màxima de càrrega",
+	"Maximum": "Màxim",
 	"Maximum characters to return from fetched URLs. Leave empty for no limit.": "Caràcters màxims que es retornen de les URL recuperades. Deixa-ho en blanc si no hi ha límit.",
 	"Maximum concurrent embedding requests. Set to 0 for unlimited.": "Màxim de sol·licituds d'inserció simultània. Establir-ho a 0 per il·limitat.",
 	"Maximum file size in MB. Leave empty for unlimited.": "Mida màxima del fitxer en MB. Deixar-ho buit per il·limitat.",

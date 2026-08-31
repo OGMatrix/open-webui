@@ -1699,6 +1699,7 @@
 	"Max tokens to retrieve (1024-32768, default 8192)": "",
 	"Max Upload Count": "Maximální počet nahrání",
 	"Max Upload Size": "Maximální velikost nahrávaných souborů",
+	"Maximum": "Maximální",
 	"Maximum characters to return from fetched URLs. Leave empty for no limit.": "",
 	"Maximum concurrent embedding requests. Set to 0 for unlimited.": "",
 	"Maximum file size in MB. Leave empty for unlimited.": "",

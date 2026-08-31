@@ -1679,6 +1679,7 @@
 	"Max tokens to retrieve (1024-32768, default 8192)": "Getirilecek maksimum token (1024-32768, varsayılan 8192)",
 	"Max Upload Count": "Maksimum Yükleme Sayısı",
 	"Max Upload Size": "Maksimum Yükleme Boyutu",
+	"Maximum": "En yüksek",
 	"Maximum characters to return from fetched URLs. Leave empty for no limit.": "Getirilen URL'lerden döndürülecek maksimum karakter sayısı. Sınır olmaması için boş bırakın.",
 	"Maximum concurrent embedding requests. Set to 0 for unlimited.": "",
 	"Maximum file size in MB. Leave empty for unlimited.": "",

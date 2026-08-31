@@ -1699,6 +1699,7 @@
 	"Max tokens to retrieve (1024-32768, default 8192)": "Maks. tokenów do pobrania (1024-32768, domyślnie 8192)",
 	"Max Upload Count": "Maks. liczba plików",
 	"Max Upload Size": "Maks. rozmiar pliku",
+	"Maximum": "Maksymalny",
 	"Maximum characters to return from fetched URLs. Leave empty for no limit.": "Maksymalna liczba znaków zwracanych z pobranych adresów URL. Pozostaw puste dla braku limitu.",
 	"Maximum concurrent embedding requests. Set to 0 for unlimited.": "Maksymalna liczba równoległych żądań embeddingu. Ustaw 0, aby usunąć limit.",
 	"Maximum file size in MB. Leave empty for unlimited.": "Maksymalny rozmiar pliku w MB. Pozostaw puste, aby usunąć limit.",

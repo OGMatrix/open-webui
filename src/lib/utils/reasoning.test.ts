@@ -77,6 +77,61 @@ describe('getReasoningMode', () => {
 		expect(getReasoningMode(forcedOn, { thinking: false })).not.toBeNull();
 	});
 
+	it('uses the exact efforts a gateway states for a model', () => {
+		// Shapes taken verbatim from OpenRouter's public catalogue.
+		expect(
+			getReasoningMode({
+				id: 'tencent/hy4-preview',
+				reasoning: {
+					mandatory: false,
+					default_enabled: true,
+					supported_efforts: ['high', 'low', 'none'],
+					default_effort: 'high'
+				}
+			})
+		).toEqual({ transport: 'reasoning_effort', levels: ['off', 'low', 'high'] });
+	});
+
+	it('sorts the stated efforts ascending whatever order they arrive in', () => {
+		expect(
+			getReasoningMode({
+				id: 'some/model',
+				reasoning: { supported_efforts: ['max', 'xhigh', 'high', 'medium', 'low'] }
+			})?.levels
+		).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
+	});
+
+	it('drops the off option for a model that must reason', () => {
+		expect(
+			getReasoningMode({
+				id: 'some/model',
+				reasoning: { mandatory: true, supported_efforts: ['none', 'low', 'high'] }
+			})?.levels
+		).toEqual(['low', 'high']);
+	});
+
+	it('still offers a control when reasoning is compulsory but unspecified', () => {
+		// 33 models in the catalogue look like this.
+		expect(
+			getReasoningMode({ id: 'liquid/lfm-2.5-2.6b:free', reasoning: { mandatory: true } })
+		).toEqual({ transport: 'reasoning_effort', levels: ['high'] });
+	});
+
+	it('ignores a reasoning object that states nothing useful', () => {
+		expect(getReasoningMode({ id: 'plain/model', reasoning: { mandatory: false } })).toBeNull();
+		expect(getReasoningMode({ id: 'plain/model', reasoning: null })).toBeNull();
+	});
+
+	it('lets stated efforts beat the name patterns', () => {
+		// The pattern would give gpt-5 its own ladder; the gateway knows better.
+		expect(
+			getReasoningMode({
+				id: 'openai/gpt-5',
+				reasoning: { supported_efforts: ['low', 'high'] }
+			})?.levels
+		).toEqual(['low', 'high']);
+	});
+
 	it('believes a gateway that lists its supported parameters', () => {
 		// OpenRouter ships this on every model in its catalogue.
 		const withReasoning = {

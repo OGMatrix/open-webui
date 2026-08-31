@@ -1679,6 +1679,7 @@
 	"Max tokens to retrieve (1024-32768, default 8192)": "最大检索 Token 数（1024-32768，默认 8192）",
 	"Max Upload Count": "最大上传数量",
 	"Max Upload Size": "最大上传大小",
+	"Maximum": "最大",
 	"Maximum characters to return from fetched URLs. Leave empty for no limit.": "从 URL 抓取内容时返回的最大字符数。留空表示不限制。",
 	"Maximum concurrent embedding requests. Set to 0 for unlimited.": "最大并发嵌入请求数。设为 0 表示不限制。",
 	"Maximum file size in MB. Leave empty for unlimited.": "最大文件大小（MB）。留空表示不限制。",

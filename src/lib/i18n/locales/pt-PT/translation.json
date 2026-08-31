@@ -1689,6 +1689,7 @@
 	"Max tokens to retrieve (1024-32768, default 8192)": "",
 	"Max Upload Count": "Contagem Máxima de Envio",
 	"Max Upload Size": "Tamanho Máximo de Envio",
+	"Maximum": "Máximo",
 	"Maximum characters to return from fetched URLs. Leave empty for no limit.": "",
 	"Maximum concurrent embedding requests. Set to 0 for unlimited.": "",
 	"Maximum file size in MB. Leave empty for unlimited.": "",

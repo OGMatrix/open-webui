@@ -1679,6 +1679,7 @@
 	"Max tokens to retrieve (1024-32768, default 8192)": "Lekérhető tokenek maximális száma (1024–32768, alapértelmezett: 8192)",
 	"Max Upload Count": "Maximum feltöltések száma",
 	"Max Upload Size": "Maximum feltöltési méret",
+	"Maximum": "Maximális",
 	"Maximum characters to return from fetched URLs. Leave empty for no limit.": "A lekért URL-ekből visszaadott karakterek maximális száma. Korlát nélkül hagyd üresen.",
 	"Maximum concurrent embedding requests. Set to 0 for unlimited.": "A párhuzamos beágyazási kérések maximális száma. Korlátlanhoz állítsd 0-ra.",
 	"Maximum file size in MB. Leave empty for unlimited.": "Maximális fájlméret MB-ban. Korlátlanhoz hagyd üresen.",

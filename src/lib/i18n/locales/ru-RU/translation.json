@@ -1699,6 +1699,7 @@
 	"Max tokens to retrieve (1024-32768, default 8192)": "Максимум токенов для извлечения (1024-32768, по умолчанию 8192)",
 	"Max Upload Count": "Максимальное количество загрузок",
 	"Max Upload Size": "Максимальный размер загрузок",
+	"Maximum": "Максимальный",
 	"Maximum characters to return from fetched URLs. Leave empty for no limit.": "Максимальное количество символов, возвращаемых из загруженных URL. Оставьте пустым для снятия ограничения.",
 	"Maximum concurrent embedding requests. Set to 0 for unlimited.": "",
 	"Maximum file size in MB. Leave empty for unlimited.": "",

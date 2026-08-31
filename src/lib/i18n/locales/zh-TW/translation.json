@@ -1669,6 +1669,7 @@
 	"Max tokens to retrieve (1024-32768, default 8192)": "最大擷取 Token 數（1024-32768，預設 8192）",
 	"Max Upload Count": "最大上傳數量",
 	"Max Upload Size": "最大上傳大小",
+	"Maximum": "最大",
 	"Maximum characters to return from fetched URLs. Leave empty for no limit.": "從 URL 擷取內容時可回傳的最大字元數。留空表示無限制。",
 	"Maximum concurrent embedding requests. Set to 0 for unlimited.": "",
 	"Maximum file size in MB. Leave empty for unlimited.": "",

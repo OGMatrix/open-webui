@@ -1679,6 +1679,7 @@
 	"Max tokens to retrieve (1024-32768, default 8192)": "Haettavien tokenien enimmäismäärä (1024–32768, oletus 8192)",
 	"Max Upload Count": "Latausten enimmäismäärä",
 	"Max Upload Size": "Latausten enimmäiskoko",
+	"Maximum": "Suurin",
 	"Maximum characters to return from fetched URLs. Leave empty for no limit.": "Maksimimerkkimäärä haetuista URL-osoitteista. Jätä tyhjäksi, jos et halua rajoitusta.",
 	"Maximum concurrent embedding requests. Set to 0 for unlimited.": "Samanaikaisten upotuspyyntöjen enimmäismäärä. Aseta 0 rajattomaksi.",
 	"Maximum file size in MB. Leave empty for unlimited.": "Tiedoston enimmäiskoko megatavuina. Jätä tyhjäksi, jos et halua rajoitusta.",

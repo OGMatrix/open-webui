@@ -1679,6 +1679,7 @@
 	"Max tokens to retrieve (1024-32768, default 8192)": "Max antal token att hämta (1024-32768, standard 8192)",
 	"Max Upload Count": "Max antal uppladdningar",
 	"Max Upload Size": "Max uppladdningsstorlek",
+	"Maximum": "Maximal",
 	"Maximum characters to return from fetched URLs. Leave empty for no limit.": "Maximalt antal tecken som ska returneras från hämtade webbadresser. Lämna tomt för ingen begränsning.",
 	"Maximum concurrent embedding requests. Set to 0 for unlimited.": "",
 	"Maximum file size in MB. Leave empty for unlimited.": "",

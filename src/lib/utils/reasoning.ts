@@ -13,7 +13,16 @@
  *    `custom_params`, which the backend merges into the request body.
  */
 
-export const REASONING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
+// Ascending. 'off' is our name for what gateways call 'none'.
+export const REASONING_LEVELS = [
+	'off',
+	'minimal',
+	'low',
+	'medium',
+	'high',
+	'xhigh',
+	'max'
+] as const;
 
 export type ReasoningLevel = (typeof REASONING_LEVELS)[number];
 
@@ -34,6 +43,8 @@ type ModelLike =
 			/** Gateways such as OpenRouter list what a model accepts. The backend
 			    keeps the provider's raw model object, so this arrives as-is. */
 			supported_parameters?: unknown;
+			/** OpenRouter states the exact efforts a model takes. */
+			reasoning?: unknown;
 			info?: { meta?: { capabilities?: any } };
 	  }
 	| null
@@ -76,6 +87,41 @@ const EFFORT_PATTERNS: { pattern: RegExp; levels: ReasoningLevel[] }[] = [
 const SWITCH_PATTERN =
 	/(qwen-?3|qwq|deepseek-?r1|deepseek-?v3\.[1-9]|magistral|glm-?4\.[5-9]|glm-?z1|minimax-?m[12]|exaone-?deep|phi-4-reasoning|granite-?3\.[2-9]|nemotron|seed-oss|hunyuan-a13b|ernie-4\.5|kimi-k2-thinking|smollm3|reka-flash-3|olmo-?3)/;
 
+/**
+ * OpenRouter carries a `reasoning` object per model stating the efforts it
+ * actually accepts. That beats guessing from the name, so it is read first.
+ * Verified against their public catalogue: the values in the wild are
+ * none, minimal, low, medium, high, xhigh and max, listed in no fixed order.
+ */
+const fromDeclaredReasoning = (declared: unknown): ReasoningMode | null => {
+	if (!declared || typeof declared !== 'object') {
+		return null;
+	}
+
+	const payload = declared as Record<string, unknown>;
+	const efforts = payload.supported_efforts;
+
+	if (!Array.isArray(efforts) || efforts.length === 0) {
+		// It says thinking is compulsory but not which efforts: offer no switch,
+		// since turning it off is not on the table.
+		return payload.mandatory === true ? { transport: 'reasoning_effort', levels: ['high'] } : null;
+	}
+
+	// Their order varies; ours is always ascending so the menu reads sensibly.
+	const levels = REASONING_LEVELS.filter(
+		(level) => efforts.includes(level) || (level === 'off' && efforts.includes('none'))
+	);
+
+	if (levels.length === 0) {
+		return null;
+	}
+
+	// A model that must reason cannot be switched off, whatever it lists.
+	const usable = payload.mandatory === true ? levels.filter((level) => level !== 'off') : levels;
+
+	return usable.length > 0 ? { transport: 'reasoning_effort', levels: usable } : null;
+};
+
 const normalize = (model: ModelLike) => `${model?.id ?? ''} ${model?.name ?? ''}`.toLowerCase();
 
 /**
@@ -100,6 +146,12 @@ export const getReasoningMode = (
 
 	if (known === false) {
 		return null;
+	}
+
+	// What the gateway states about this exact model outranks the name patterns.
+	const stated = fromDeclaredReasoning(model.reasoning);
+	if (stated) {
+		return stated;
 	}
 
 	for (const { pattern, levels } of EFFORT_PATTERNS) {

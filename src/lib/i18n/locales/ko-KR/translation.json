@@ -1670,6 +1670,7 @@
 	"Max tokens to retrieve (1024-32768, default 8192)": "",
 	"Max Upload Count": "업로드 최대 수",
 	"Max Upload Size": "업로드 최대 사이즈",
+	"Maximum": "최대치",
 	"Maximum characters to return from fetched URLs. Leave empty for no limit.": "가져온 URL에서 반환할 최대 문자 수입니다. 제한이 없으면 비워 두세요.",
 	"Maximum concurrent embedding requests. Set to 0 for unlimited.": "",
 	"Maximum file size in MB. Leave empty for unlimited.": "최대 파일 크기(MB)입니다. 제한하지 않으려면 비워 두세요.",
