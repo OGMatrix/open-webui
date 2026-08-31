@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import { marked } from 'marked';
 
 	import { getContext, tick } from 'svelte';
@@ -10,6 +12,8 @@
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import { copyToClipboard, sanitizeResponseContent } from '$lib/utils';
 	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte';
+	import ArrowDownTray from '$lib/components/icons/ArrowDownTray.svelte';
+	import Spinner from '$lib/components/common/Spinner.svelte';
 	import Check from '$lib/components/icons/Check.svelte';
 	import ModelItemMenu from './ModelItemMenu.svelte';
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
@@ -17,7 +21,7 @@
 	import Tag from '$lib/components/icons/Tag.svelte';
 	import Label from '$lib/components/icons/Label.svelte';
 
-	const i18n = getContext('i18n');
+	const i18n = getContext<Writable<i18nType>>('i18n');
 
 	export let selectedModelIdx: number = -1;
 	export let item: any = {};
@@ -27,6 +31,11 @@
 	export let compareEnabled = false;
 
 	export let unloadModelHandler: (model: any) => void = () => {};
+	export let loadModelHandler: (model: any) => void = () => {};
+	/** True when this model's connection can be told to load it. */
+	export let canLoad = false;
+	/** True while a load for this model is in flight. */
+	export let isLoading = false;
 	export let pinModelHandler: (modelId: string) => void = () => {};
 	export let deleteModelHandler: (model: any) => void = () => {};
 	export let selectionOnly = false;
@@ -276,6 +285,30 @@
 	</div>
 
 	<div class="ml-auto flex shrink-0 items-center gap-1.5 pl-2">
+		{#if !selectionOnly && $user?.role === 'admin' && canLoad}
+			<Tooltip
+				content={isLoading ? `${$i18n.t('Loading')}` : `${$i18n.t('Load model')}`}
+				className="flex-shrink-0 {isLoading ? '' : 'group-hover/item:opacity-100 opacity-0'}"
+			>
+				<button
+					class="focus-ring flex disabled:opacity-50"
+					aria-label={$i18n.t('Load model')}
+					disabled={isLoading}
+					on:click={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						loadModelHandler(item.model);
+					}}
+				>
+					{#if isLoading}
+						<Spinner className="size-3" />
+					{:else}
+						<ArrowDownTray className="size-3" />
+					{/if}
+				</button>
+			</Tooltip>
+		{/if}
+
 		{#if !selectionOnly && $user?.role === 'admin' && item.model.loaded}
 			<Tooltip
 				content={`${$i18n.t('Eject')}`}

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import { marked } from 'marked';
 	import Fuse from 'fuse.js';
 
@@ -19,7 +21,8 @@
 		downloadProviderModel,
 		getErrorMessage,
 		getOpenAIConfig,
-		getProviderModelDownloadStatus
+		getProviderModelDownloadStatus,
+		loadProviderModel
 	} from '$lib/apis/openai';
 
 	import {
@@ -48,7 +51,7 @@
 
 	import ModelItem from './ModelItem.svelte';
 
-	const i18n = getContext('i18n');
+	const i18n = getContext<Writable<i18nType>>('i18n');
 	const dispatch = createEventDispatcher();
 
 	export let id = '';
@@ -877,6 +880,40 @@
 		}
 	};
 
+	// Model ids currently being loaded, so the row can show progress and the
+	// button cannot be pressed twice.
+	let loadingModelIds = new Set<string>();
+
+	/** Whether this model's connection can be told to load it. */
+	const supportsLoading = (model: any) =>
+		model?.loaded === false &&
+		typeof model?.urlIdx === 'number' &&
+		MANAGEMENT_PROVIDERS.has(normalizeProvider(model?.provider ?? ''));
+
+	const loadModelHandler = async (model: any) => {
+		if (!supportsLoading(model) || loadingModelIds.has(model.id)) {
+			return;
+		}
+
+		loadingModelIds = new Set(loadingModelIds).add(model.id);
+		try {
+			await loadProviderModel(localStorage.token, model.urlIdx, model.id);
+			toast.success($i18n.t('Model loaded successfully'));
+			models.set(
+				await getModels(
+					localStorage.token,
+					$config?.features?.enable_direct_connections && ($settings?.directConnections ?? null)
+				)
+			);
+		} catch (error) {
+			toast.error($i18n.t('Error loading model: {{error}}', { error }));
+		} finally {
+			const next = new Set(loadingModelIds);
+			next.delete(model.id);
+			loadingModelIds = next;
+		}
+	};
+
 	let showDeleteConfirm = false;
 	let deleteModelTarget: any = null;
 
@@ -1178,6 +1215,9 @@
 										value={primaryValue}
 										{pinModelHandler}
 										{unloadModelHandler}
+										{loadModelHandler}
+										canLoad={supportsLoading(item.model)}
+										isLoading={loadingModelIds.has(item.model?.id)}
 										{deleteModelHandler}
 										{selectionOnly}
 										{compareEnabled}
