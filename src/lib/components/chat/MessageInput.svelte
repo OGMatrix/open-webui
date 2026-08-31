@@ -86,6 +86,7 @@
 	import { getOpenAIModelCapabilities } from '$lib/apis/openai';
 	import ContextPanel from './MessageInput/ContextPanel.svelte';
 	import ContextIndicator from './MessageInput/ContextIndicator.svelte';
+	import InfoCircle from '$lib/components/icons/InfoCircle.svelte';
 	import { sumChatUsage } from '$lib/utils/tokenUsage';
 	import { getContextWindow } from '$lib/utils/contextWindow';
 	import { getModelPricing } from '$lib/utils/cost';
@@ -628,6 +629,21 @@
 	$: contextIsEstimated =
 		!statusContextUsage?.tokens && Boolean(statusContextUsage?.estimated_tokens);
 	$: modelPricing = getModelPricing(activeReasoningModel);
+
+	// What the next request would put in the window: what is already there, plus
+	// the draft. Warn before sending rather than explaining the failure after.
+	// The draft is estimated from its text, so this is deliberately approximate
+	// and only speaks up once the overrun is past a rounding error.
+	const CONTEXT_WARNING_MARGIN = 0.02;
+	$: draftTokens = estimateTokens(prompt ?? '');
+	$: projectedContextTokens = contextTokenCount + draftTokens;
+	$: contextWouldOverflow =
+		contextThresholdValue !== null &&
+		contextThresholdValue > 0 &&
+		projectedContextTokens > contextThresholdValue * (1 + CONTEXT_WARNING_MARGIN);
+	$: contextOverflowBy = contextWouldOverflow
+		? projectedContextTokens - (contextThresholdValue as number)
+		: 0;
 	$: chatTokenUsage = sumChatUsage(
 		history?.currentId ? createMessagesList(history, history.currentId) : []
 	);
@@ -1869,6 +1885,32 @@
 										onDelete={onQueueDelete}
 									/>
 								{/each}
+							</div>
+						{/if}
+
+						{#if contextWouldOverflow}
+							<div
+								class="mx-1 mb-1 flex items-start gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-400/10 dark:text-amber-300"
+								role="status"
+							>
+								<InfoCircle className="size-3.5 shrink-0 mt-px" />
+								<div class="min-w-0">
+									<div>
+										{$i18n.t(
+											'This message would exceed the context window by about {{tokens}} tokens.',
+											{ tokens: formatTokenCount(contextOverflowBy) }
+										)}
+									</div>
+									{#if contextCompactionEnabled}
+										<button
+											type="button"
+											class="mt-0.5 underline underline-offset-2 hover:no-underline"
+											on:click={() => compactHandler()}
+										>
+											{$i18n.t('Compact the conversation first')}
+										</button>
+									{/if}
+								</div>
 							</div>
 						{/if}
 
