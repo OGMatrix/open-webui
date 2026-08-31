@@ -7,6 +7,7 @@
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import { formatTokenCount, formatTokenRate, type ChatUsage } from '$lib/utils/tokenUsage';
 	import { formatGenerationDuration } from '$lib/utils/generationStats';
+	import SpeedSparkline from './SpeedSparkline.svelte';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
 
@@ -169,13 +170,14 @@
 				{/if}
 
 				{#if usage.tokensPerSecond !== null}
-					<div
-						class="flex items-baseline justify-between gap-3 border-t border-gray-100 pt-1.5 dark:border-gray-800"
-					>
-						<span class="text-gray-500 dark:text-gray-400">{$i18n.t('Average speed')}</span>
-						<span class="shrink-0 tabular-nums text-gray-600 dark:text-gray-300">
-							{formatTokenRate(usage.tokensPerSecond)} t/s
-						</span>
+					<div class="border-t border-gray-100 pt-1.5 dark:border-gray-800">
+						<div class="flex items-baseline justify-between gap-3">
+							<span class="text-gray-500 dark:text-gray-400">{$i18n.t('Average speed')}</span>
+							<span class="shrink-0 tabular-nums text-gray-600 dark:text-gray-300">
+								{formatTokenRate(usage.tokensPerSecond)} t/s
+							</span>
+						</div>
+						<SpeedSparkline rates={usage.turnRates} className="mt-1" />
 					</div>
 				{/if}
 			</div>
