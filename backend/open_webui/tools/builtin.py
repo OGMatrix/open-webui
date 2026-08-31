@@ -4517,3 +4517,184 @@ async def delete_calendar_event(
     except Exception as e:
         log.exception(f'delete_calendar_event error: {e}')
         return JSONCodec.dumps({'error': str(e)})
+
+
+####################
+#
+# Diagrams
+#
+####################
+
+# Fenced languages the chat renders as a diagram rather than as source. Kept in
+# step with CodeBlock.svelte, which is what actually draws them.
+DIAGRAM_LANGUAGES = ('mermaid', 'vega-lite', 'vega')
+
+# Bracket pairs that must balance. Mermaid node labels break silently when they
+# do not, which is the single most common way a generated diagram fails to draw.
+_BRACKET_PAIRS = {'(': ')', '[': ']', '{': '}'}
+_CLOSING_BRACKETS = {v: k for k, v in _BRACKET_PAIRS.items()}
+
+
+def _find_unbalanced(source: str) -> list[str]:
+    """Reports unbalanced brackets and quotes, ignoring anything inside a string.
+
+    Deliberately shallow: it does not parse the diagram grammar, so it cannot
+    reject a valid diagram it simply does not understand.
+    """
+    problems: list[str] = []
+    stack: list[tuple[str, int]] = []
+    in_quote: str | None = None
+    line = 1
+
+    for index, char in enumerate(source):
+        if char == '\n':
+            if in_quote:
+                problems.append(f'unterminated {in_quote} quote on line {line}')
+                in_quote = None
+            line += 1
+            continue
+
+        if in_quote:
+            if char == in_quote:
+                in_quote = None
+            continue
+
+        if char in ('"', "'"):
+            # An apostrophe inside a word is not a quote.
+            if char == "'" and index > 0 and source[index - 1].isalpha():
+                continue
+            in_quote = char
+        elif char in _BRACKET_PAIRS:
+            stack.append((char, line))
+        elif char in _CLOSING_BRACKETS:
+            if not stack:
+                problems.append(f'unexpected "{char}" on line {line}')
+            elif stack[-1][0] != _CLOSING_BRACKETS[char]:
+                opener, opened_at = stack[-1]
+                problems.append(f'"{opener}" from line {opened_at} closed by "{char}" on line {line}')
+                stack.pop()
+            else:
+                stack.pop()
+
+    if in_quote:
+        problems.append(f'unterminated {in_quote} quote')
+    for opener, opened_at in stack:
+        problems.append(f'"{opener}" on line {opened_at} is never closed')
+
+    return problems
+
+
+def _validate_mermaid(source: str) -> tuple[list[str], list[str]]:
+    """Returns (errors, hints) for a mermaid diagram."""
+    errors = _find_unbalanced(source)
+    hints: list[str] = []
+
+    lines = [line.strip() for line in source.splitlines()]
+    body = [line for line in lines if line and not line.startswith('%%')]
+    if not body:
+        errors.append('the diagram is empty')
+        return errors, hints
+
+    if len(body) == 1:
+        hints.append('the diagram declares a type but has no content')
+
+    if errors:
+        hints.append(
+            'Mermaid node labels cannot contain bare brackets or quotes. '
+            'Wrap such a label in double quotes, e.g. A["f(x)"].'
+        )
+
+    return errors, hints
+
+
+def _validate_vega(source: str, lite: bool) -> tuple[list[str], list[str]]:
+    """Returns (errors, hints) for a Vega or Vega-Lite specification."""
+    try:
+        spec = JSONCodec.loads(source)
+    except Exception as e:
+        return [f'not valid JSON: {e}'], ['A specification must be a single JSON object.']
+
+    if not isinstance(spec, dict):
+        return ['the specification must be a JSON object'], []
+
+    errors: list[str] = []
+    hints: list[str] = []
+
+    if lite:
+        # Any one of these makes it a renderable Vega-Lite spec.
+        composition = ('mark', 'layer', 'hconcat', 'vconcat', 'concat', 'facet', 'repeat', 'spec')
+        if not any(key in spec for key in composition):
+            errors.append('no "mark" and no composition key (' + ', '.join(composition[1:]) + ')')
+    elif 'marks' not in spec:
+        errors.append('a Vega specification needs "marks"')
+
+    if 'data' not in spec and 'datasets' not in spec:
+        hints.append('No "data" given, so the chart will draw nothing unless the mark supplies its own.')
+
+    return errors, hints
+
+
+async def create_diagram(
+    diagram_type: str,
+    source: str,
+) -> str:
+    """
+    Check a diagram and return it ready to place in your reply.
+
+    Use this whenever a diagram or chart would explain something better than
+    prose: flow charts, sequence diagrams, class diagrams, state machines, entity
+    relationships, Gantt charts, mind maps and the rest of Mermaid, or a chart
+    from a Vega-Lite specification.
+
+    Call it before writing the diagram into your answer. If it reports problems,
+    fix them and call again. On success it returns the finished fenced block:
+    copy that into your reply exactly as given, and it will be drawn for the user.
+
+    The check covers structure only, not the full diagram grammar, so a diagram
+    that passes can still be rejected by the renderer.
+
+    :param diagram_type: One of "mermaid", "vega-lite" or "vega".
+    :param source: The diagram source. Mermaid text, or a JSON specification.
+    :return: The fenced block to include, or the problems to fix.
+    """
+    language = (diagram_type or '').strip().lower()
+    if language in ('vegalite', 'vega_lite'):
+        language = 'vega-lite'
+
+    if language not in DIAGRAM_LANGUAGES:
+        return JSONCodec.dumps(
+            {
+                'status': 'invalid',
+                'errors': [f'unknown diagram type "{diagram_type}"'],
+                'supported': list(DIAGRAM_LANGUAGES),
+            }
+        )
+
+    text = (source or '').strip()
+    if not text:
+        return JSONCodec.dumps({'status': 'invalid', 'errors': ['no diagram source was given']})
+
+    if language == 'mermaid':
+        errors, hints = _validate_mermaid(text)
+    else:
+        errors, hints = _validate_vega(text, lite=language == 'vega-lite')
+
+    if errors:
+        return JSONCodec.dumps(
+            {
+                'status': 'invalid',
+                'errors': errors,
+                'hints': hints,
+                'advice': 'Fix these and call create_diagram again.',
+            }
+        )
+
+    result = {
+        'status': 'ok',
+        'block': f'```{language}\n{text}\n```',
+        'advice': 'Place this block in your reply exactly as given.',
+    }
+    if hints:
+        result['hints'] = hints
+
+    return JSONCodec.dumps(result)

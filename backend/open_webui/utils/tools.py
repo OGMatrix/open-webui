@@ -50,6 +50,7 @@ from open_webui.tools.builtin import (
     calculate_timestamp,
     create_automation,
     create_calendar_event,
+    create_diagram,
     create_tasks,
     delegate_task,
     delete_automation,
@@ -581,6 +582,11 @@ async def get_builtin_tools(
 
     if is_builtin_tool_enabled('user_input', True):
         builtin_functions.append(ask_user)
+
+    # Diagrams: the chat renders mermaid and vega-lite blocks, and this lets the
+    # model check one before it reaches the reader as a broken drawing.
+    if is_builtin_tool_enabled('diagrams'):
+        builtin_functions.append(create_diagram)
 
     metadata = extra_params.get('__metadata__') or {}
     chat_files = metadata.get('files') or extra_params.get('__files__') or []
