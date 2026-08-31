@@ -26,9 +26,15 @@
 	$: visible = tokens > 0;
 
 	// A ring reads as "how full" at a glance, where a number needs reading.
-	const RADIUS = 6;
+	// Geometry matches the sibling icons: a 24 viewBox at stroke 1.75, so it sits
+	// at the same size and weight as the buttons either side of it.
+	const RADIUS = 9;
 	const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-	$: dash = (Math.max(percent, hasThreshold ? 0 : 100) / 100) * CIRCUMFERENCE;
+	// A hair of arc even at 1%, so a nearly empty window reads as "barely used"
+	// rather than as a broken ring.
+	const MIN_ARC = 0.05;
+	$: fill = hasThreshold ? Math.max(percent / 100, MIN_ARC) : 1;
+	$: dash = fill * CIRCUMFERENCE;
 
 	$: tone =
 		percent >= 90
@@ -55,26 +61,22 @@
 					? 'bg-gray-50 dark:bg-gray-800'
 					: 'bg-transparent hover:bg-gray-50 dark:hover:bg-gray-800'} {tone}"
 			>
-				<svg viewBox="0 0 16 16" class="size-4 shrink-0" aria-hidden="true">
+				<svg
+					viewBox="0 0 24 24"
+					class="size-4 shrink-0"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.75"
+					aria-hidden="true"
+				>
+					<circle cx="12" cy="12" r={RADIUS} opacity="0.25" />
 					<circle
-						cx="8"
-						cy="8"
+						cx="12"
+						cy="12"
 						r={RADIUS}
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						opacity="0.22"
-					/>
-					<circle
-						cx="8"
-						cy="8"
-						r={RADIUS}
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
 						stroke-linecap="round"
 						stroke-dasharray="{dash} {CIRCUMFERENCE}"
-						transform="rotate(-90 8 8)"
+						transform="rotate(-90 12 12)"
 						style="transition: stroke-dasharray 500ms"
 					/>
 				</svg>
