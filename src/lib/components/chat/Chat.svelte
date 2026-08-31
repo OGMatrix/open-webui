@@ -605,6 +605,14 @@
 				allowOther: pendingAskUser.args?.allow_other !== false,
 				timeoutMs: null,
 				onConfirm: (value) => {
+					// A resumed prompt has only answer or reject, so declining lands on reject.
+					if (value?.status === 'declined') {
+						void rejectPendingAskUser(
+							pendingAskUser.message.id,
+							pendingAskUser.call.call_id || pendingAskUser.call.id
+						);
+						return;
+					}
 					void answerPendingAskUser(
 						pendingAskUser.message.id,
 						pendingAskUser.call.call_id || pendingAskUser.call.id,
