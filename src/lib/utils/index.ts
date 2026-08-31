@@ -1,3 +1,4 @@
+import { isDark } from '$lib/utils/darkMode';
 import type { Writable } from 'svelte/store';
 import { v4 as uuidv4 } from 'uuid';
 import sha256 from 'js-sha256';
@@ -2081,11 +2082,14 @@ export const decodeString = (str: string) => {
 	}
 };
 
+// Mermaid is a module singleton, so its theme is global and the last initialize
+// call wins. Re-applying it on every render is what keeps an already-drawn
+// diagram from keeping the colours of the theme it was born in.
 export const initMermaid = async () => {
 	const { default: mermaid } = await import('mermaid');
 	mermaid.initialize({
 		startOnLoad: false, // Should be false when using render API
-		theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+		theme: isDark() ? 'dark' : 'default',
 		securityLevel: 'loose',
 		htmlLabels: false
 	});
@@ -2159,6 +2163,39 @@ export const renderMermaidDiagram = async (
 	}
 };
 
+/**
+ * Chart colours for the current theme.
+ *
+ * Vega writes every colour into the SVG it produces, so unlike the rest of the
+ * chat a chart cannot pick the theme up from CSS. The background goes
+ * transparent in both themes as well, so a chart sits on the message surface
+ * instead of on a white card punched into it.
+ */
+export const vegaThemeConfig = (dark: boolean) => {
+	const base = { background: 'transparent', view: { stroke: 'transparent' } };
+	if (!dark) {
+		return base;
+	}
+
+	const muted = '#9ca3af';
+	const strong = '#d1d5db';
+	return {
+		...base,
+		title: { color: strong, subtitleColor: muted },
+		// Covers any guide the more specific keys below do not reach.
+		style: { 'guide-label': { fill: muted }, 'guide-title': { fill: strong } },
+		axis: {
+			domainColor: '#4b5563',
+			gridColor: '#374151',
+			tickColor: '#4b5563',
+			labelColor: muted,
+			titleColor: strong
+		},
+		legend: { labelColor: muted, titleColor: strong },
+		header: { labelColor: muted, titleColor: strong }
+	};
+};
+
 export const renderVegaVisualization = async (spec: string, lang: string = '', i18n?: any) => {
 	const vega = await import('vega');
 	const parsedSpec = JSON.parse(spec);
@@ -2174,10 +2211,13 @@ export const renderVegaVisualization = async (spec: string, lang: string = '', i
 		lang === 'vega-lite' ||
 		(parsedSpec.$schema && parsedSpec.$schema.includes('vega-lite')) ||
 		hasVegaLiteKeys;
+	// A spec that brings its own config keeps it: Vega merges the spec over this.
+	const themeConfig = vegaThemeConfig(isDark());
+
 	let vegaSpec = parsedSpec;
 	if (isVegaLite) {
 		const vegaLite = await import('vega-lite');
-		vegaSpec = vegaLite.compile(parsedSpec).spec;
+		vegaSpec = vegaLite.compile(parsedSpec, { config: themeConfig as any }).spec;
 	}
 	// Specs come from untrusted chat content: block external loads via data.url (loader.load)
 	// and image mark hrefs emitted into the SVG (loader.sanitize).
@@ -2194,7 +2234,10 @@ export const renderVegaVisualization = async (spec: string, lang: string = '', i
 		}
 		return sanitize(uri, options);
 	};
-	const view = new vega.View(vega.parse(vegaSpec), { loader, renderer: 'none' });
+	const view = new vega.View(vega.parse(vegaSpec, themeConfig as any), {
+		loader,
+		renderer: 'none'
+	});
 	const svg = await view.toSVG();
 	return svg;
 };

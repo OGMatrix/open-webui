@@ -3,11 +3,8 @@
 	import { onMount, getContext } from 'svelte';
 	const i18n = getContext('i18n');
 
-	import fileSaver from 'file-saver';
-	const { saveAs } = fileSaver;
-
 	import { marked, type Token } from 'marked';
-	import { copyToClipboard, unescapeHtml } from '$lib/utils';
+	import { unescapeHtml } from '$lib/utils';
 	import { resolveChatMessageToolCall } from '$lib/apis/chats';
 
 	import { WEBUI_BASE_URL } from '$lib/constants';
@@ -21,12 +18,11 @@
 	import Collapsible from '$lib/components/common/Collapsible.svelte';
 	import ToolCallDisplay from '$lib/components/common/ToolCallDisplay.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
-	import Download from '$lib/components/icons/Download.svelte';
 	import ConsecutiveDetailsGroup from './ConsecutiveDetailsGroup.svelte';
 
 	import HtmlToken from './HTMLToken.svelte';
-	import Clipboard from '$lib/components/icons/Clipboard.svelte';
 	import ColonFenceBlock from './ColonFenceBlock.svelte';
+	import MarkdownTable from './MarkdownTable.svelte';
 
 	export let id: string;
 	export let chatId = '';
@@ -135,44 +131,6 @@
 	$: singlePlainBlock =
 		displayTokens.length === 1 &&
 		(displayTokens[0]?.type === 'paragraph' || displayTokens[0]?.type === 'text');
-
-	const exportTableToCSVHandler = (token, tokenIdx = 0) => {
-		console.log('Exporting table to CSV');
-
-		// Extract header row text, decode HTML entities, and escape for CSV.
-		const header = token.header.map(
-			(headerCell) => `"${decode(headerCell.text).replace(/"/g, '""')}"`
-		);
-
-		// Create an array for rows that will hold the mapped cell text.
-		const rows = token.rows.map((row) =>
-			row.map((cell) => {
-				// Map tokens into a single text
-				const cellContent = cell.tokens.map((token) => token.text).join('');
-				// Decode HTML entities and escape double quotes, wrap in double quotes
-				return `"${decode(cellContent).replace(/"/g, '""')}"`;
-			})
-		);
-
-		// Combine header and rows
-		const csvData = [header, ...rows];
-
-		// Join the rows using commas (,) as the separator and rows using newline (\n).
-		const csvContent = csvData.map((row) => row.join(',')).join('\n');
-
-		// Log rows and CSV content to ensure everything is correct.
-		console.log(csvData);
-		console.log(csvContent);
-
-		// To handle Unicode characters, you need to prefix the data with a BOM:
-		const bom = '\uFEFF'; // BOM for UTF-8
-
-		// Create a new Blob prefixed with the BOM to ensure proper Unicode encoding.
-		const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=UTF-8' });
-
-		// Use FileSaver.js's saveAs function to save the generated CSV file.
-		saveAs(blob, `table-${id}-${tokenIdx}.csv`);
-	};
 </script>
 
 <!-- {JSON.stringify(tokens)} -->
@@ -216,90 +174,7 @@
 			{token.text}
 		{/if}
 	{:else if token.type === 'table'}
-		<div class="relative w-full group mb-2">
-			<div class="scrollbar-hidden relative overflow-x-auto max-w-full">
-				<table
-					class=" w-full text-sm text-start text-gray-500 dark:text-gray-400 max-w-full rounded-xl"
-					dir="auto"
-				>
-					<thead class="text-xs text-gray-700 uppercase dark:text-gray-400 border-none">
-						<tr class="">
-							{#each token.header as header, headerIdx}
-								<th
-									scope="col"
-									class="px-2.5! py-2! cursor-pointer border-b border-gray-100! dark:border-gray-800!"
-									style={token.align[headerIdx] ? `text-align: ${token.align[headerIdx]}` : ''}
-								>
-									<div class="gap-1.5 text-start">
-										<div class="shrink-0 break-normal">
-											<MarkdownInlineTokens
-												id={`${id}-${tokenIdx}-header-${headerIdx}`}
-												tokens={header.tokens}
-												{done}
-												{sourceIds}
-												{onSourceClick}
-											/>
-										</div>
-									</div>
-								</th>
-							{/each}
-						</tr>
-					</thead>
-					<tbody>
-						{#each token.rows as row, rowIdx}
-							<tr class="text-xs">
-								{#each row ?? [] as cell, cellIdx}
-									<td
-										class="px-3! py-2! text-gray-900 dark:text-white w-max {token.rows.length -
-											1 ===
-										rowIdx
-											? ''
-											: 'border-b border-gray-50! dark:border-gray-850!'}"
-										style={token.align[cellIdx] ? `text-align: ${token.align[cellIdx]}` : ''}
-									>
-										<div class="break-normal">
-											<MarkdownInlineTokens
-												id={`${id}-${tokenIdx}-row-${rowIdx}-${cellIdx}`}
-												tokens={cell.tokens}
-												{done}
-												{sourceIds}
-												{onSourceClick}
-											/>
-										</div>
-									</td>
-								{/each}
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-
-			<div class=" absolute top-1 right-1.5 z-20 hover-reveal flex gap-0.5">
-				<Tooltip content={$i18n.t('Copy')}>
-					<button
-						class="p-1 rounded-lg bg-transparent transition"
-						on:click={(e) => {
-							e.stopPropagation();
-							copyToClipboard(token.raw.trim(), null, $settings?.copyFormatted ?? false);
-						}}
-					>
-						<Clipboard className=" size-3.5" strokeWidth="1.5" />
-					</button>
-				</Tooltip>
-
-				<Tooltip content={$i18n.t('Export to CSV')}>
-					<button
-						class="p-1 rounded-lg bg-transparent transition"
-						on:click={(e) => {
-							e.stopPropagation();
-							exportTableToCSVHandler(token, tokenIdx);
-						}}
-					>
-						<Download className=" size-3.5" strokeWidth="1.5" />
-					</button>
-				</Tooltip>
-			</div>
-		</div>
+		<MarkdownTable {id} {token} {tokenIdx} {done} {sourceIds} {onSourceClick} />
 	{:else if token.type === 'blockquote'}
 		{@const alert = alertComponent(token)}
 		{#if alert}

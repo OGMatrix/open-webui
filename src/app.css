@@ -131,6 +131,60 @@ textarea::-webkit-scrollbar-corner {
 	@apply underline;
 }
 
+/*
+ * Chat markdown: structure a long answer can be read from, rather than
+ * decoration. Everything here is additive to the prose classes above.
+ */
+
+/* A hairline under the top two levels gives a long answer visible sections. */
+.markdown-prose :where(h1, h2):not(:where([class~='not-prose'] *)) {
+	@apply border-b border-gray-100 pb-1 dark:border-gray-850/60;
+}
+
+/*
+ * Quotes read as quoted from the accent bar alone. The typography default adds
+ * italics and literal quote marks on top of that, which fight the bar and hurt
+ * legibility in a language with long words.
+ */
+.markdown-prose :where(blockquote):not(:where([class~='not-prose'] *)) {
+	@apply border-s-2 border-gray-200 ps-3.5 font-normal not-italic text-gray-600 dark:border-gray-700 dark:text-gray-300;
+	border-inline-start-width: 2px;
+	quotes: none;
+}
+
+.markdown-prose :where(blockquote p:first-of-type)::before,
+.markdown-prose :where(blockquote p:last-of-type)::after {
+	content: none;
+}
+
+/* Links: underlined at rest, and the underline thickens where the cursor is. */
+.markdown-prose :where(a):not(:where([class~='not-prose'] *)) {
+	@apply font-normal text-gray-900 underline decoration-gray-300 underline-offset-2 transition dark:text-gray-100 dark:decoration-gray-600;
+	text-decoration-thickness: 1px;
+}
+
+.markdown-prose :where(a):not(:where([class~='not-prose'] *)):hover {
+	@apply decoration-gray-500 dark:decoration-gray-400;
+	text-decoration-thickness: 2px;
+}
+
+/* Task lists: the checkbox picks up the text colour instead of browser blue. */
+.markdown-prose input[type='checkbox'] {
+	@apply size-3.5 rounded-sm border-gray-300 align-middle dark:border-gray-600;
+	accent-color: currentColor;
+}
+
+/* Keyboard keys, which models reach for in any set of instructions. */
+.markdown-prose :where(kbd):not(:where([class~='not-prose'] *)) {
+	@apply rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[0.8em] font-normal text-gray-700 dark:border-gray-700 dark:bg-gray-850 dark:text-gray-200;
+	box-shadow: 0 1px 0 rgb(0 0 0 / 0.06);
+}
+
+/* Images sit in rounded frames like every other block in the chat. */
+.markdown-prose :where(img):not(:where([class~='not-prose'] *)) {
+	@apply rounded-lg;
+}
+
 .drag-region {
 	-webkit-app-region: drag;
 }

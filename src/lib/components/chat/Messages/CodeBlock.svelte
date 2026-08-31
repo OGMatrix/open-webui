@@ -1,7 +1,10 @@
 <script lang="ts">
 	import hljs from 'highlight.js';
+	import { darkMode } from '$lib/utils/darkMode';
 	import { toast } from 'svelte-sonner';
 	import { getContext, onMount, tick, onDestroy } from 'svelte';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import { config, pyodideWorker as pyodideWorkerStore } from '$lib/stores';
 
 	import { createPyodideWorker } from '$lib/pyodide/createPyodideWorker';
@@ -19,6 +22,8 @@
 
 	import CodeEditor from '$lib/components/common/CodeEditor.svelte';
 	import SvgPanZoom from '$lib/components/common/SVGPanZoom.svelte';
+	import ExclamationTriangle from '$lib/components/icons/ExclamationTriangle.svelte';
+	import Spinner from '$lib/components/common/Spinner.svelte';
 
 	import ChevronUp from '$lib/components/icons/ChevronUp.svelte';
 	import ChevronUpDown from '$lib/components/icons/ChevronUpDown.svelte';
@@ -26,7 +31,7 @@
 	import Cube from '$lib/components/icons/Cube.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 
-	const i18n = getContext('i18n');
+	const i18n: Writable<i18nType> = getContext('i18n');
 
 	export let id = '';
 	export let edit = true;
@@ -62,8 +67,8 @@
 
 	let _token = null;
 
-	let renderHTML = null;
-	let renderError = null;
+	let renderHTML: string | null = null;
+	let renderError: string | null = null;
 
 	let highlightedCode = null;
 	let executing = false;
@@ -355,13 +360,11 @@
 		};
 	};
 
-	let mermaid = null;
-	const renderMermaid = async (code) => {
-		if (!mermaid) {
-			mermaid = await initMermaid();
-		}
-		return await renderMermaidDiagram(mermaid, code);
-	};
+	// No caching here on purpose: initMermaid re-applies the current theme, which
+	// is what lets a diagram follow a light/dark switch.
+	const renderMermaid = async (code) => renderMermaidDiagram(await initMermaid(), code);
+
+	let renderedDark: boolean | null = null;
 
 	const render = async () => {
 		onUpdate(token, id);
@@ -398,6 +401,14 @@
 	}
 
 	$: if (_token) {
+		renderedDark = $darkMode;
+		render();
+	}
+
+	// A diagram bakes the theme colours into its SVG, so a theme switch needs a
+	// fresh render rather than new CSS.
+	$: if (renderHTML && $darkMode !== renderedDark) {
+		renderedDark = $darkMode;
 		render();
 	}
 
@@ -443,17 +454,34 @@
 					className=" rounded-2xl max-h-fit overflow-hidden"
 					svg={renderHTML}
 					content={_token.text}
+					name={lang === 'mermaid' ? 'diagram' : 'chart'}
 				/>
-			{:else}
+			{:else if renderError}
+				<!-- A diagram that will not draw: say so plainly, and keep the source
+				     one click away rather than dumping it over the conversation. -->
 				<div class="p-3">
-					{#if renderError}
-						<div
-							class="flex gap-2.5 border px-4 py-3 border-red-600/10 bg-red-600/10 rounded-2xl mb-2"
-						>
-							{renderError}
+					<div
+						class="flex items-start gap-2.5 rounded-xl bg-red-500/[0.07] px-3.5 py-2.5 text-xs text-red-700 ring-1 ring-red-500/15 dark:text-red-300"
+					>
+						<div class="mt-px shrink-0">
+							<ExclamationTriangle className="size-3.5" />
 						</div>
-					{/if}
-					<pre>{code}</pre>
+						<div class="min-w-0 leading-relaxed">{renderError}</div>
+					</div>
+					<details class="group mt-2">
+						<summary
+							class="cursor-pointer list-none text-xs text-gray-500 transition hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+						>
+							{$i18n.t('Show source')}
+						</summary>
+						<pre class="mt-2 overflow-x-auto text-xs">{code}</pre>
+					</details>
+				</div>
+			{:else}
+				<!-- Still arriving: the fence has not closed, so there is nothing to draw yet. -->
+				<div class="flex items-center gap-2 px-3.5 py-3 text-xs text-gray-500 dark:text-gray-400">
+					<Spinner className="size-3.5" />
+					<span>{lang === 'mermaid' ? $i18n.t('Drawing diagram') : $i18n.t('Drawing chart')}</span>
 				</div>
 			{/if}
 		{:else}
