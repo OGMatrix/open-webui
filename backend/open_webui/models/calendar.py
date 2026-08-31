@@ -197,9 +197,6 @@ class CalendarEventForm(BaseModel):
     @classmethod
     def reject_sub_daily_rrule(cls, value: Optional[str]) -> Optional[str]:
         if value:
-            # Imported lazily: open_webui.utils.automations reaches back into
-            # open_webui.config, which imports this module while it is still
-            # initializing (config runs the migrations at import time).
             from open_webui.utils.automations import rrule_interval_seconds
 
             try:
@@ -232,9 +229,6 @@ class CalendarEventUpdateForm(BaseModel):
     @classmethod
     def reject_sub_daily_rrule(cls, value: Optional[str]) -> Optional[str]:
         if value:
-            # Imported lazily: open_webui.utils.automations reaches back into
-            # open_webui.config, which imports this module while it is still
-            # initializing (config runs the migrations at import time).
             from open_webui.utils.automations import rrule_interval_seconds
 
             try:
