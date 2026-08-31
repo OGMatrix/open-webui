@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import DOMPurify from 'dompurify';
 	import { toast } from 'svelte-sonner';
 
@@ -82,6 +84,8 @@
 	} from '$lib/utils/reasoning';
 	import { getOllamaModelInfo } from '$lib/apis/ollama';
 	import { getOpenAIModelCapabilities } from '$lib/apis/openai';
+	import ContextPanel from './MessageInput/ContextPanel.svelte';
+	import { sumChatUsage } from '$lib/utils/tokenUsage';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import ModelSelector from './ModelSelector.svelte';
 
@@ -122,7 +126,7 @@
 	import QueuedMessageItem from './MessageInput/QueuedMessageItem.svelte';
 	import TaskList from './Messages/ResponseMessage/TaskList.svelte';
 
-	const i18n = getContext('i18n');
+	const i18n = getContext<Writable<i18nType>>('i18n');
 
 	type AskUserPrompt = {
 		show: boolean;
@@ -599,6 +603,18 @@
 			: `${contextTokens} ${$i18n.t('tokens')}`
 		: $i18n.t('unknown');
 	$: contextBarPercent = contextHasThreshold ? Math.min(contextPercent, 100) : 0;
+
+	// Feeding the context panel: the raw numbers rather than the pre-joined string.
+	$: contextTokenCount = Number(
+		statusContextUsage?.estimated_tokens || statusContextUsage?.tokens || 0
+	);
+	$: contextThresholdValue = contextHasThreshold ? Number(statusContextUsage?.threshold) : null;
+	// Open WebUI estimates the window from message text until a turn reports usage.
+	$: contextIsEstimated =
+		!statusContextUsage?.tokens && Boolean(statusContextUsage?.estimated_tokens);
+	$: chatTokenUsage = sumChatUsage(
+		history?.currentId ? createMessagesList(history, history.currentId) : []
+	);
 
 	const getCommand = () => {
 		const chatInput = document.getElementById('chat-input');
@@ -1844,7 +1860,7 @@
 							<div class="mx-1 rounded-2xl bg-white text-xs dark:bg-gray-900">
 								<div class="flex items-center justify-between px-3 py-1.5">
 									<div class="flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300">
-										<span>Status</span>
+										<span>{$i18n.t('Status')}</span>
 									</div>
 
 									<button
@@ -1854,35 +1870,23 @@
 											showStatusPanel = false;
 										}}
 									>
-										Close
+										{$i18n.t('Close')}
 									</button>
 								</div>
 
 								<div class="space-y-0.5 px-3 pb-2">
-									<div class="rounded-xl py-0.5 text-gray-600 dark:text-gray-400">
-										<div class="flex min-h-4 items-center gap-3">
-											<span class="min-w-0 flex-1 truncate">Context usage</span>
-											<span
-												class="shrink-0 font-mono text-[0.625rem] text-gray-400 dark:text-gray-600"
-											>
-												{contextValue}
-											</span>
-										</div>
-										{#if contextHasThreshold}
-											<div
-												class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-gray-100 dark:bg-white/8"
-											>
-												<div
-													class="h-full rounded-full bg-gray-300 dark:bg-white/20"
-													style={`width: ${contextBarPercent}%`}
-												></div>
-											</div>
-										{/if}
+									<div class="rounded-xl py-0.5">
+										<ContextPanel
+											tokens={contextTokenCount}
+											threshold={contextThresholdValue}
+											estimated={contextIsEstimated}
+											usage={chatTokenUsage}
+										/>
 									</div>
 
 									{#if messageQueue.length}
 										<div class="flex min-h-5 items-center gap-3 text-gray-600 dark:text-gray-400">
-											<span class="min-w-0 flex-1 truncate">Queued messages</span>
+											<span class="min-w-0 flex-1 truncate">{$i18n.t('Queued messages')}</span>
 											<span class="font-mono text-[0.625rem] text-gray-400 dark:text-gray-600">
 												{messageQueue.length}
 											</span>
