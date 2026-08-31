@@ -4950,6 +4950,18 @@ async def streaming_chat_response_handler(response, ctx):
                                     choices = data.get('choices', [])
 
                                     # Normalize usage data to standard format
+                                    # Prefill progress, where the provider reports it. Sent on its own so
+                                    # it reaches the client while the prompt is still being read, long
+                                    # before any usage figures exist.
+                                    prompt_progress = data.get('prompt_progress')
+                                    if isinstance(prompt_progress, dict):
+                                        await event_emitter(
+                                            {
+                                                'type': 'chat:completion',
+                                                'data': {'prompt_progress': prompt_progress},
+                                            }
+                                        )
+                                    
                                     raw_usage = data.get('usage', {}) or {}
                                     raw_usage.update(data.get('timings', {}))  # llama.cpp
                                     if raw_usage:

@@ -27,6 +27,11 @@ export type ChatUsage = TurnUsage & {
 	lastTurn: TurnUsage | null;
 	/** How long the most recent turn spent before its first token. */
 	lastTimeToFirstTokenMs: number | null;
+	/**
+	 * Decode rate of each measured turn, oldest first. Lets the panel show how
+	 * speed moved across the chat rather than only where it ended up.
+	 */
+	turnRates: number[];
 };
 
 const toCount = (value: unknown): number => {
@@ -116,7 +121,8 @@ export const sumChatUsage = (messages: MessageLike[] | null | undefined): ChatUs
 		turns: 0,
 		tokensPerSecond: null,
 		lastTurn: null,
-		lastTimeToFirstTokenMs: null
+		lastTimeToFirstTokenMs: null,
+		turnRates: []
 	};
 
 	let ratedTokens = 0;
@@ -143,6 +149,7 @@ export const sumChatUsage = (messages: MessageLike[] | null | undefined): ChatUs
 			if (decodeMs > 0) {
 				ratedTokens += stats.tokens;
 				ratedMs += decodeMs;
+				totals.turnRates.push(stats.tokens / (decodeMs / 1000));
 			}
 		}
 

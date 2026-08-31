@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	applyGenerationUsage,
+	recordPrefillProgress,
 	completeGenerationStats,
 	createGenerationStats,
 	formatGenerationDuration,
@@ -139,6 +140,56 @@ describe('generationStats', () => {
 	it('is not prefilling once the response is no longer streaming', () => {
 		const abandoned = createGenerationStats(T0);
 		expect(getGenerationStatsView(abandoned, T0 + 3000, false)?.prefilling).toBe(false);
+	});
+
+	it('reads the prefill report llama.cpp actually sends', () => {
+		// Captured from a live llama-server stream.
+		const stats = recordPrefillProgress(createGenerationStats(T0), {
+			total: 5657,
+			cache: 0,
+			processed: 4130,
+			time_ms: 5588
+		});
+		const view = getGenerationStatsView(stats, T0 + 5588, true);
+
+		expect(view?.prefill?.total).toBe(5657);
+		expect(view?.prefill?.processed).toBe(4130);
+		expect(view?.prefill?.percent).toBeCloseTo(73.0, 0);
+		// 5588ms for 4130 tokens, 1527 left -> about 2.07s
+		expect(view?.prefill?.remainingMs).toBeCloseTo(2066, -2);
+	});
+
+	it('does not let a late report rewind the bar', () => {
+		let stats = recordPrefillProgress(createGenerationStats(T0), {
+			total: 100,
+			processed: 80,
+			time_ms: 800
+		});
+		stats = recordPrefillProgress(stats, { total: 100, processed: 40, time_ms: 400 });
+		expect(stats.prefill?.processed).toBe(80);
+	});
+
+	it('stops projecting once the prompt is fully read', () => {
+		const stats = recordPrefillProgress(createGenerationStats(T0), {
+			total: 5657,
+			cache: 0,
+			processed: 5657,
+			time_ms: 8584
+		});
+		const view = getGenerationStatsView(stats, T0 + 8584, true);
+		expect(view?.prefill?.percent).toBe(100);
+		expect(view?.prefill?.remainingMs).toBeNull();
+	});
+
+	it('ignores a report with nothing usable in it', () => {
+		const base = createGenerationStats(T0);
+		expect(recordPrefillProgress(base, null).prefill).toBeUndefined();
+		expect(recordPrefillProgress(base, { total: 0, processed: 0 }).prefill).toBeUndefined();
+		expect(recordPrefillProgress(base, 'nope').prefill).toBeUndefined();
+	});
+
+	it('reports no prefill detail when the provider sent none', () => {
+		expect(getGenerationStatsView(createGenerationStats(T0), T0 + 100, true)?.prefill).toBeNull();
 	});
 
 	it('returns nothing without a measurement', () => {

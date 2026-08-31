@@ -71,6 +71,7 @@
 		completeGenerationStats,
 		createGenerationStats,
 		recordGenerationDelta,
+		recordPrefillProgress,
 		syncGenerationProgress,
 		type GenerationStats
 	} from '$lib/utils/generationStats';
@@ -2865,7 +2866,18 @@
 	};
 
 	const chatCompletionEventHandler = async (data, message, chatId) => {
-		const { id, done, choices, content, output, sources, selected_model_id, error, usage } = data;
+		const {
+			id,
+			done,
+			choices,
+			content,
+			output,
+			sources,
+			selected_model_id,
+			error,
+			usage,
+			prompt_progress
+		} = data;
 
 		// Runs before any content lands so a continued response baselines against
 		// the text already on the message instead of recounting it.
@@ -2930,6 +2942,10 @@
 			message.generationStats,
 			getMeasuredText(message)
 		);
+
+		if (prompt_progress) {
+			message.generationStats = recordPrefillProgress(message.generationStats, prompt_progress);
+		}
 
 		if (usage) {
 			message.usage = usage;

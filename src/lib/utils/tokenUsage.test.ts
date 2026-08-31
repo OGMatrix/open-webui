@@ -135,6 +135,25 @@ describe('sumChatUsage', () => {
 		expect(totals.tokensPerSecond).toBeCloseTo(10);
 	});
 
+	it('keeps each measured turn’s rate, oldest first', () => {
+		const totals = sumChatUsage([
+			{
+				role: 'assistant',
+				generationStats: { tokens: 10, firstTokenAt: T0, completedAt: T0 + 1000 }
+			},
+			{ role: 'user' },
+			{
+				role: 'assistant',
+				generationStats: { tokens: 40, firstTokenAt: T0, completedAt: T0 + 2000 }
+			},
+			// No stats: contributes nothing rather than a zero.
+			{ role: 'assistant', usage: { prompt_tokens: 5, completion_tokens: 5 } }
+		]);
+		expect(totals.turnRates).toHaveLength(2);
+		expect(totals.turnRates[0]).toBeCloseTo(10);
+		expect(totals.turnRates[1]).toBeCloseTo(20);
+	});
+
 	it('reports no rate when nothing was measured', () => {
 		expect(
 			sumChatUsage([{ role: 'assistant', usage: { prompt_tokens: 5 } }]).tokensPerSecond

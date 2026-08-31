@@ -1639,6 +1639,16 @@ async def generate_chat_completion(
     prefix_id = api_config.get('prefix_id', None)
     payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
 
+    # llama.cpp reports how far it has read the prompt, but only when asked. The
+    # client uses it to show prefill progress instead of an idle spinner. Left
+    # alone if the caller already set it.
+    if (
+        api_config.get('provider') == 'llama.cpp'
+        and payload.get('stream')
+        and 'return_progress' not in payload
+    ):
+        payload['return_progress'] = True
+
     # Add user info to the payload if the model is a pipeline
     if 'pipeline' in model and model.get('pipeline'):
         payload['user'] = {

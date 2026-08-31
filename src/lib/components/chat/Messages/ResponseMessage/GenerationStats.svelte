@@ -64,9 +64,20 @@
 
 	$: rateTooltip = $i18n.t('Tokens per second, measured from the first token onward.');
 
-	$: prefillTooltip = $i18n.t(
-		'The model is processing the prompt. Generation has not started yet.'
-	);
+	$: prefillTooltip = view?.prefill
+		? [
+				$i18n.t('The model is processing the prompt. Generation has not started yet.'),
+				$i18n.t('{{processed}} of {{total}} prompt tokens read', {
+					processed: view.prefill.processed.toLocaleString(),
+					total: view.prefill.total.toLocaleString()
+				}),
+				view.prefill.cached > 0
+					? $i18n.t('{{tokens}} from cache', { tokens: view.prefill.cached.toLocaleString() })
+					: null
+			]
+				.filter(Boolean)
+				.join('\n')
+		: $i18n.t('The model is processing the prompt. Generation has not started yet.');
 
 	onDestroy(stopTicking);
 </script>
@@ -93,8 +104,22 @@
 						d="M6.75 3h10.5M6.75 21h10.5M7.5 3v4.5L12 12l-4.5 4.5V21M16.5 3v4.5L12 12l4.5 4.5V21"
 					/>
 				</svg>
-				<span>{$i18n.t('Processing prompt')}</span>
+				<span>
+					{$i18n.t('Processing prompt')}{#if view.prefill}<span class="ml-1 tabular-nums"
+							>{Math.round(view.prefill.percent)}%</span
+						>{/if}
+				</span>
 			</Tooltip>
+
+			{#if view.prefill && view.prefill.remainingMs !== null}
+				<Tooltip
+					content={$i18n.t('Estimated time left')}
+					placement="top-start"
+					className="flex items-center gap-1"
+				>
+					<span class="tabular-nums">~{formatGenerationDuration(view.prefill.remainingMs)}</span>
+				</Tooltip>
+			{/if}
 		{:else}
 			<Tooltip content={tokensTooltip} placement="top-start" className="flex items-center gap-1">
 				<svg

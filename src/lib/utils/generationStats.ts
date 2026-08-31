@@ -24,6 +24,32 @@ export type GenerationStats = {
 	/** Decode rate reported by the provider, when it reports one */
 	tokensPerSecond?: number;
 	promptTokens?: number;
+	/** Prefill progress, for providers that report it while reading the prompt. */
+	prefill?: PrefillProgress;
+};
+
+/**
+ * How far a provider has read the prompt. llama.cpp reports this as
+ * `prompt_progress` when the request asks for it.
+ */
+export type PrefillProgress = {
+	/** Prompt tokens in total. */
+	total: number;
+	/** Tokens read so far, including whatever came from cache. */
+	processed: number;
+	/** Tokens served from cache rather than computed. */
+	cached: number;
+	/** Milliseconds spent so far. */
+	elapsedMs: number;
+};
+
+export type PrefillView = {
+	percent: number;
+	processed: number;
+	total: number;
+	cached: number;
+	/** Estimated milliseconds left, or null while there is nothing to go on. */
+	remainingMs: number | null;
 };
 
 export type GenerationStatsView = {
@@ -34,6 +60,8 @@ export type GenerationStatsView = {
 	exact: boolean;
 	/** Streaming, but no token has arrived yet: the model is still on the prompt. */
 	prefilling: boolean;
+	/** Prefill detail, where the provider reported any. */
+	prefill: PrefillView | null;
 };
 
 // Streamed deltas carry a single token far more often than not, so a delta
@@ -169,6 +197,45 @@ export const applyGenerationUsage = (
 	return next;
 };
 
+/**
+ * Records a provider's prefill progress report.
+ *
+ * Values that go backwards are ignored: the report arrives on its own events and
+ * a late one must not rewind a bar the user is watching.
+ */
+export const recordPrefillProgress = (
+	stats: GenerationStats | null | undefined,
+	progress: unknown,
+	now: number = Date.now()
+): GenerationStats => {
+	if (!progress || typeof progress !== 'object') {
+		return stats ?? createGenerationStats(now);
+	}
+
+	const payload = progress as Record<string, unknown>;
+	const total = toFiniteNumber(payload.total);
+	const processed = toFiniteNumber(payload.processed);
+
+	if (total === null || total <= 0 || processed === null || processed < 0) {
+		return stats ?? createGenerationStats(now);
+	}
+
+	const next: GenerationStats = stats ? { ...stats } : createGenerationStats(now);
+	const previous = next.prefill;
+	if (previous && processed < previous.processed) {
+		return next;
+	}
+
+	next.prefill = {
+		total,
+		processed: Math.min(processed, total),
+		cached: toFiniteNumber(payload.cache) ?? 0,
+		elapsedMs: toFiniteNumber(payload.time_ms) ?? 0
+	};
+
+	return next;
+};
+
 export const completeGenerationStats = (
 	stats: GenerationStats | null | undefined,
 	now: number = Date.now()
@@ -212,7 +279,33 @@ export const getGenerationStatsView = (
 			? Math.max(0, stats.firstTokenAt - stats.startedAt)
 			: null,
 		exact: Boolean(stats.exact),
-		prefilling: streaming && !stats.firstTokenAt
+		prefilling: streaming && !stats.firstTokenAt,
+		prefill: buildPrefillView(stats)
+	};
+};
+
+const buildPrefillView = (stats: GenerationStats): PrefillView | null => {
+	const prefill = stats.prefill;
+	if (!prefill || prefill.total <= 0) {
+		return null;
+	}
+
+	const percent = Math.min(100, Math.max(0, (prefill.processed / prefill.total) * 100));
+
+	// Project from the rate achieved so far. Needs a little of both to mean
+	// anything, and nothing is left to wait for once it is done.
+	let remainingMs: number | null = null;
+	if (prefill.elapsedMs > 0 && prefill.processed > 0 && prefill.processed < prefill.total) {
+		const perToken = prefill.elapsedMs / prefill.processed;
+		remainingMs = Math.max(0, (prefill.total - prefill.processed) * perToken);
+	}
+
+	return {
+		percent,
+		processed: prefill.processed,
+		total: prefill.total,
+		cached: prefill.cached,
+		remainingMs
 	};
 };
 
