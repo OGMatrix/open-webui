@@ -37,12 +37,17 @@
 				? 'text-amber-600 dark:text-amber-400'
 				: 'text-gray-500 dark:text-gray-400';
 
-	$: label = hasThreshold ? `${Math.round(percent)}%` : formatTokenCount(tokens);
+	// The pill is icon-only, so the numbers live in the tooltip.
+	$: tooltip = hasThreshold
+		? `${$i18n.t('Context')}: ${formatTokenCount(tokens)} / ${formatTokenCount(
+				threshold as number
+			)} · ${$i18n.t('{{percent}}% used', { percent: Math.round(percent) })}`
+		: `${$i18n.t('Context')}: ${formatTokenCount(tokens)}`;
 </script>
 
 {#if visible}
 	<Dropdown bind:show side="top" align="start" sideOffset={6}>
-		<Tooltip content={$i18n.t('Context')} placement="top">
+		<Tooltip content={tooltip} placement="top">
 			<button
 				type="button"
 				aria-label={$i18n.t('Context')}
@@ -73,13 +78,6 @@
 						style="transition: stroke-dasharray 500ms"
 					/>
 				</svg>
-				<div
-					class="truncate pr-0.5 tabular-nums {percent >= 70
-						? 'block'
-						: 'hidden group-hover:block'}"
-				>
-					{label}
-				</div>
 			</button>
 		</Tooltip>
 

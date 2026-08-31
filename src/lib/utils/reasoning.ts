@@ -47,6 +47,8 @@ type ModelLike =
 export type ReasoningHints = {
 	/** Provider-reported support. Undefined means "was not able to ask". */
 	thinking?: boolean;
+	/** Context window the serving process reported, where it states one. */
+	contextLength?: number;
 };
 
 const EFFORT_LEVELS: ReasoningLevel[] = ['minimal', 'low', 'medium', 'high'];

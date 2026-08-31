@@ -25,6 +25,8 @@ export type ChatUsage = TurnUsage & {
 	tokensPerSecond: number | null;
 	/** The most recent turn that reported usage. */
 	lastTurn: TurnUsage | null;
+	/** How long the most recent turn spent before its first token. */
+	lastTimeToFirstTokenMs: number | null;
 };
 
 const toCount = (value: unknown): number => {
@@ -93,6 +95,7 @@ type MessageLike = {
 	info?: { usage?: unknown };
 	generationStats?: {
 		tokens?: number;
+		startedAt?: number;
 		firstTokenAt?: number;
 		completedAt?: number;
 		lastTokenAt?: number;
@@ -112,7 +115,8 @@ export const sumChatUsage = (messages: MessageLike[] | null | undefined): ChatUs
 		cachedTokens: 0,
 		turns: 0,
 		tokensPerSecond: null,
-		lastTurn: null
+		lastTurn: null,
+		lastTimeToFirstTokenMs: null
 	};
 
 	let ratedTokens = 0;
@@ -140,6 +144,10 @@ export const sumChatUsage = (messages: MessageLike[] | null | undefined): ChatUs
 				ratedTokens += stats.tokens;
 				ratedMs += decodeMs;
 			}
+		}
+
+		if (stats?.firstTokenAt && stats.startedAt) {
+			totals.lastTimeToFirstTokenMs = Math.max(0, stats.firstTokenAt - stats.startedAt);
 		}
 	}
 

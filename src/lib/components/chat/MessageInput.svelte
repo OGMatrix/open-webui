@@ -87,6 +87,7 @@
 	import ContextPanel from './MessageInput/ContextPanel.svelte';
 	import ContextIndicator from './MessageInput/ContextIndicator.svelte';
 	import { sumChatUsage } from '$lib/utils/tokenUsage';
+	import { getContextWindow } from '$lib/utils/contextWindow';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import ModelSelector from './ModelSelector.svelte';
 
@@ -244,6 +245,9 @@
 			);
 			if (typeof capabilities?.reasoning === 'boolean') {
 				hints = { thinking: capabilities.reasoning };
+			}
+			if (typeof capabilities?.context_length === 'number') {
+				hints.contextLength = capabilities.context_length;
 			}
 		}
 
@@ -609,7 +613,12 @@
 	$: contextTokenCount = Number(
 		statusContextUsage?.estimated_tokens || statusContextUsage?.tokens || 0
 	);
-	$: contextThresholdValue = contextHasThreshold ? Number(statusContextUsage?.threshold) : null;
+	// Compaction only sets a threshold when it is switched on. Without one the
+	// bar has nothing to fill against, so fall back to the model's own window.
+	$: probedContextLength = reasoningHints?.contextLength ?? null;
+	$: contextThresholdValue = contextHasThreshold
+		? Number(statusContextUsage?.threshold)
+		: getContextWindow(activeReasoningModel, { ...$settings?.params, ...params }, probedContextLength);
 	// Open WebUI estimates the window from message text until a turn reports usage.
 	$: contextIsEstimated =
 		!statusContextUsage?.tokens && Boolean(statusContextUsage?.estimated_tokens);

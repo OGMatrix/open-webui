@@ -36,6 +36,13 @@
 
 	$: active = level !== null;
 
+	// Icon-only pills, so the current choice belongs in the tooltip.
+	$: switchTooltip = `${$i18n.t('Thinking')}: ${switchedOn ? $i18n.t('On') : $i18n.t('Off')}`;
+	$: menuTooltip =
+		level === null
+			? `${$i18n.t('Thinking effort')}: ${$i18n.t('Model default')}`
+			: `${$i18n.t('Thinking effort')}: ${labelFor(level)}`;
+
 	const pillClass = (on: boolean) =>
 		`group flex max-w-full items-center gap-1.5 overflow-hidden rounded-full p-[0.375rem] text-sm transition-colors duration-300 focus:outline-hidden ${
 			on
@@ -46,7 +53,7 @@
 
 {#if mode}
 	{#if isSwitch}
-		<Tooltip content={$i18n.t('Thinking')} placement="top">
+		<Tooltip content={switchTooltip} placement="top">
 			<button
 				type="button"
 				aria-label={$i18n.t('Thinking')}
@@ -55,19 +62,13 @@
 				on:click|preventDefault={() => onSelect(switchedOn ? 'off' : 'high')}
 			>
 				<LightBulb className="size-4" strokeWidth="1.75" />
-				<div class="{switchedOn ? 'block' : 'hidden group-hover:block'} truncate pr-0.5">
-					{$i18n.t('Thinking')}
-				</div>
 			</button>
 		</Tooltip>
 	{:else}
 		<Dropdown bind:show side="top" align="start" sideOffset={6}>
-			<Tooltip content={$i18n.t('Thinking effort')} placement="top">
+			<Tooltip content={menuTooltip} placement="top">
 				<button type="button" aria-label={$i18n.t('Thinking effort')} class={pillClass(active)}>
 					<LightBulb className="size-4" strokeWidth="1.75" />
-					<div class="{active ? 'block' : 'hidden group-hover:block'} truncate pr-0.5">
-						{level === null ? $i18n.t('Thinking') : labelFor(level)}
-					</div>
 				</button>
 			</Tooltip>
 

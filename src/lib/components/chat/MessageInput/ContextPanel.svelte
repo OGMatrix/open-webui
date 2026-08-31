@@ -6,6 +6,7 @@
 
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
 	import { formatTokenCount, formatTokenRate, type ChatUsage } from '$lib/utils/tokenUsage';
+	import { formatGenerationDuration } from '$lib/utils/generationStats';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
 
@@ -36,6 +37,13 @@
 	$: hasDetails = Boolean(
 		usage && (usage.turns > 0 || usage.tokensPerSecond !== null || usage.lastTurn)
 	);
+
+	$: totalTokens = usage ? usage.promptTokens + usage.completionTokens : 0;
+	// Share of the last prompt that the provider served from cache.
+	$: cacheShare =
+		usage?.lastTurn && usage.lastTurn.promptTokens > 0
+			? Math.round((usage.lastTurn.cachedTokens / usage.lastTurn.promptTokens) * 100)
+			: null;
 </script>
 
 <div class="text-xs">
@@ -105,6 +113,14 @@
 								>{formatTokenCount(usage.completionTokens)}</span
 							>
 						</div>
+						<div class="flex items-baseline justify-between gap-3">
+							<span class="text-gray-500 dark:text-gray-400"
+								>{$i18n.t('Total')} · {$i18n.t('{{count}} turns', { count: usage.turns })}</span
+							>
+							<span class="shrink-0 tabular-nums font-medium text-gray-700 dark:text-gray-200"
+								>{formatTokenCount(totalTokens)}</span
+							>
+						</div>
 					</div>
 				{/if}
 
@@ -123,9 +139,29 @@
 						</div>
 						{#if usage.lastTurn.cachedTokens > 0}
 							<div class="flex items-baseline justify-between gap-3">
-								<span class="text-gray-500 dark:text-gray-400">{$i18n.t('Cached')}</span>
+								<span class="text-gray-500 dark:text-gray-400">
+									{$i18n.t('Cached')}{#if cacheShare !== null}<span
+											class="ml-1 text-gray-400 dark:text-gray-600">{cacheShare}%</span
+										>{/if}
+								</span>
 								<span class="shrink-0 tabular-nums font-medium text-gray-700 dark:text-gray-200"
 									>{formatTokenCount(usage.lastTurn.cachedTokens)}</span
+								>
+							</div>
+						{/if}
+						<div class="flex items-baseline justify-between gap-3">
+							<span class="text-gray-500 dark:text-gray-400">{$i18n.t('Generated')}</span>
+							<span class="shrink-0 tabular-nums text-gray-600 dark:text-gray-300"
+								>{formatTokenCount(usage.lastTurn.completionTokens)}</span
+							>
+						</div>
+						{#if usage.lastTimeToFirstTokenMs !== null}
+							<div class="flex items-baseline justify-between gap-3">
+								<span class="text-gray-500 dark:text-gray-400"
+									>{$i18n.t('Time to first token')}</span
+								>
+								<span class="shrink-0 tabular-nums text-gray-600 dark:text-gray-300"
+									>{formatGenerationDuration(usage.lastTimeToFirstTokenMs)}</span
 								>
 							</div>
 						{/if}

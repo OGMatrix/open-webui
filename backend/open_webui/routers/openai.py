@@ -294,7 +294,16 @@ def derive_llamacpp_capabilities(props: dict) -> dict:
         templates = props.get('chat_templates') or props.get('chat_template_tool_use')
         template = templates if isinstance(templates, str) else ''
 
-    return {'reasoning': 'enable_thinking' in template}
+    capabilities = {'reasoning': 'enable_thinking' in template}
+
+    # The size the server was actually started with, which is the number that
+    # matters. It beats the model's trained length from /v1/models.
+    settings = props.get('default_generation_settings')
+    n_ctx = settings.get('n_ctx') if isinstance(settings, dict) else props.get('n_ctx')
+    if isinstance(n_ctx, (int, float)) and not isinstance(n_ctx, bool) and n_ctx > 0:
+        capabilities['context_length'] = int(n_ctx)
+
+    return capabilities
 
 
 def derive_provider_capabilities(provider: str, payload: dict) -> dict:
