@@ -85,6 +85,7 @@
 	import { getOllamaModelInfo } from '$lib/apis/ollama';
 	import { getOpenAIModelCapabilities } from '$lib/apis/openai';
 	import ContextPanel from './MessageInput/ContextPanel.svelte';
+	import ContextIndicator from './MessageInput/ContextIndicator.svelte';
 	import { sumChatUsage } from '$lib/utils/tokenUsage';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import ModelSelector from './ModelSelector.svelte';
@@ -2495,6 +2496,13 @@
 													</Tooltip>
 												{/if}
 											{/each}
+
+											<ContextIndicator
+												tokens={contextTokenCount}
+												threshold={contextThresholdValue}
+												estimated={contextIsEstimated}
+												usage={chatTokenUsage}
+											/>
 
 											{#if reasoningMode}
 												<ReasoningEffortMenu
