@@ -675,6 +675,7 @@
 	"Copy URL": "URL másolása",
 	"Copying to clipboard was successful!": "Sikeres másolás a vágólapra!",
 	"CORS must be properly configured by the provider to allow requests from Open WebUI.": "A CORS-t megfelelően kell konfigurálnia a szolgáltatónak, hogy engedélyezze az Open WebUI-ból érkező kéréseket.",
+	"Cost": "Költség",
 	"Could not load release notes.": "Nem sikerült betölteni a kiadási megjegyzéseket.",
 	"Could not read file.": "Nem sikerült beolvasni a fájlt.",
 	"CPU": "CPU",

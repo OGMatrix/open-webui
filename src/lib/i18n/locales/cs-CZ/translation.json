@@ -691,6 +691,7 @@
 	"Copy URL": "",
 	"Copying to clipboard was successful!": "Kopírování do schránky bylo úspěšné!",
 	"CORS must be properly configured by the provider to allow requests from Open WebUI.": "CORS musí být správně nakonfigurován poskytovatelem, aby povolil požadavky z Open WebUI.",
+	"Cost": "Náklady",
 	"Could not load release notes.": "",
 	"Could not read file.": "",
 	"CPU": "",

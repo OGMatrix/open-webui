@@ -88,6 +88,7 @@
 	import ContextIndicator from './MessageInput/ContextIndicator.svelte';
 	import { sumChatUsage } from '$lib/utils/tokenUsage';
 	import { getContextWindow } from '$lib/utils/contextWindow';
+	import { getModelPricing } from '$lib/utils/cost';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import ModelSelector from './ModelSelector.svelte';
 
@@ -618,10 +619,15 @@
 	$: probedContextLength = reasoningHints?.contextLength ?? null;
 	$: contextThresholdValue = contextHasThreshold
 		? Number(statusContextUsage?.threshold)
-		: getContextWindow(activeReasoningModel, { ...$settings?.params, ...params }, probedContextLength);
+		: getContextWindow(
+				activeReasoningModel,
+				{ ...$settings?.params, ...params },
+				probedContextLength
+			);
 	// Open WebUI estimates the window from message text until a turn reports usage.
 	$: contextIsEstimated =
 		!statusContextUsage?.tokens && Boolean(statusContextUsage?.estimated_tokens);
+	$: modelPricing = getModelPricing(activeReasoningModel);
 	$: chatTokenUsage = sumChatUsage(
 		history?.currentId ? createMessagesList(history, history.currentId) : []
 	);
@@ -1891,6 +1897,7 @@
 											threshold={contextThresholdValue}
 											estimated={contextIsEstimated}
 											usage={chatTokenUsage}
+											pricing={modelPricing}
 										/>
 									</div>
 
@@ -2511,6 +2518,7 @@
 												threshold={contextThresholdValue}
 												estimated={contextIsEstimated}
 												usage={chatTokenUsage}
+												pricing={modelPricing}
 											/>
 
 											{#if reasoningMode}

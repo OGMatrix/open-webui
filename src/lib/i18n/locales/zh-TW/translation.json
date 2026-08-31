@@ -667,6 +667,7 @@
 	"Copy URL": "複製 URL",
 	"Copying to clipboard was successful!": "成功複製到剪貼簿！",
 	"CORS must be properly configured by the provider to allow requests from Open WebUI.": "CORS 必須由供應商正確設定，以允許來自 Open WebUI 的請求。",
+	"Cost": "費用",
 	"Could not load release notes.": "",
 	"Could not read file.": "無法讀取檔案。",
 	"CPU": "CPU",

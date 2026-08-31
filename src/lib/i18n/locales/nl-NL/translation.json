@@ -675,6 +675,7 @@
 	"Copy URL": "URL kopiëren",
 	"Copying to clipboard was successful!": "Kopiëren naar klembord was succesvol!",
 	"CORS must be properly configured by the provider to allow requests from Open WebUI.": "CORS moet goed geconfigureerd zijn bij de provider om verzoeken van Open WebUI toe te staan",
+	"Cost": "Kosten",
 	"Could not load release notes.": "",
 	"Could not read file.": "Kon bestand niet lezen.",
 	"CPU": "CPU",

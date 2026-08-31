@@ -691,6 +691,7 @@
 	"Copy URL": "Копировать ссылку",
 	"Copying to clipboard was successful!": "Копирование в буфер обмена прошло успешно!",
 	"CORS must be properly configured by the provider to allow requests from Open WebUI.": "CORS должен быть должным образом настроен провайдером, чтобы разрешать запросы из Open WebUI.",
+	"Cost": "Стоимость",
 	"Could not load release notes.": "",
 	"Could not read file.": "Не удалось прочитать файл.",
 	"CPU": "ЦП",

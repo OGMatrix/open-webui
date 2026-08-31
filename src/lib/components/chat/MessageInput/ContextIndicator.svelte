@@ -7,6 +7,7 @@
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import ContextPanel from './ContextPanel.svelte';
 	import { formatTokenCount, type ChatUsage } from '$lib/utils/tokenUsage';
+	import type { ModelPricing } from '$lib/utils/cost';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
 
@@ -14,6 +15,7 @@
 	export let threshold: number | null = null;
 	export let estimated = false;
 	export let usage: ChatUsage | null = null;
+	export let pricing: ModelPricing | null = null;
 
 	let show = false;
 
@@ -87,7 +89,7 @@
 			<div
 				class="w-72 rounded-xl border border-gray-100 bg-white p-3 text-gray-900 shadow-lg dark:border-gray-800 dark:bg-gray-850 dark:text-white"
 			>
-				<ContextPanel {tokens} {threshold} {estimated} {usage} />
+				<ContextPanel {tokens} {threshold} {estimated} {usage} {pricing} />
 			</div>
 		</div>
 	</Dropdown>

@@ -668,6 +668,7 @@
 	"Copy URL": "URL 복사",
 	"Copying to clipboard was successful!": "성공적으로 클립보드에 복사되었습니다!",
 	"CORS must be properly configured by the provider to allow requests from Open WebUI.": "Open WebUI의 요청을 허용하려면 공급자가 CORS를 올바르게 구성해야 합니다.",
+	"Cost": "비용",
 	"Could not load release notes.": "",
 	"Could not read file.": "파일을 읽을 수 없습니다.",
 	"CPU": "CPU",

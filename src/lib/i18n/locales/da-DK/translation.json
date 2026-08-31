@@ -675,6 +675,7 @@
 	"Copy URL": "",
 	"Copying to clipboard was successful!": "Kopieret til udklipsholder!",
 	"CORS must be properly configured by the provider to allow requests from Open WebUI.": "CORS skal være korrekt konfigureret af udbyderen for at tillade anmodninger fra Open WebUI.",
+	"Cost": "Omkostning",
 	"Could not load release notes.": "",
 	"Could not read file.": "",
 	"CPU": "",

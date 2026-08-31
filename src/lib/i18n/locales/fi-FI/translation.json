@@ -675,6 +675,7 @@
 	"Copy URL": "Kopioi linkki",
 	"Copying to clipboard was successful!": "Kopioiminen leikepöydälle onnistui!",
 	"CORS must be properly configured by the provider to allow requests from Open WebUI.": "CORS täytyy olla konfiguroitu palveluntarjoajan toimesta pyyntöjen hyväksymiseksi Open WebUI:sta.",
+	"Cost": "Kustannus",
 	"Could not load release notes.": "Julkaisutietojen lataaminen epäonnistui.",
 	"Could not read file.": "Tiedostoa ei voitu lukea.",
 	"CPU": "",

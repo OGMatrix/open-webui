@@ -8,6 +8,12 @@
 	import { formatTokenCount, formatTokenRate, type ChatUsage } from '$lib/utils/tokenUsage';
 	import { formatGenerationDuration } from '$lib/utils/generationStats';
 	import SpeedSparkline from './SpeedSparkline.svelte';
+	import {
+		estimateChatCost,
+		estimateTurnCost,
+		formatCost,
+		type ModelPricing
+	} from '$lib/utils/cost';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
 
@@ -18,6 +24,8 @@
 	/** True while the count is an estimate rather than a provider figure. */
 	export let estimated = false;
 	export let usage: ChatUsage | null = null;
+	/** Published rates, where the provider has any. Local models have none. */
+	export let pricing: ModelPricing | null = null;
 
 	let showDetails = false;
 
@@ -40,6 +48,8 @@
 	);
 
 	$: totalTokens = usage ? usage.promptTokens + usage.completionTokens : 0;
+	$: chatCost = estimateChatCost(usage, pricing);
+	$: lastTurnCost = estimateTurnCost(usage?.lastTurn ?? null, pricing);
 	// Share of the last prompt that the provider served from cache.
 	$: cacheShare =
 		usage?.lastTurn && usage.lastTurn.promptTokens > 0
@@ -118,9 +128,12 @@
 							<span class="text-gray-500 dark:text-gray-400"
 								>{$i18n.t('Total')} · {$i18n.t('{{count}} turns', { count: usage.turns })}</span
 							>
-							<span class="shrink-0 tabular-nums font-medium text-gray-700 dark:text-gray-200"
-								>{formatTokenCount(totalTokens)}</span
-							>
+							<span class="shrink-0 tabular-nums font-medium text-gray-700 dark:text-gray-200">
+								{formatTokenCount(totalTokens)}{#if chatCost !== null}<span
+										class="ml-1.5 font-normal text-gray-400 dark:text-gray-600"
+										>{formatCost(chatCost)}</span
+									>{/if}
+							</span>
 						</div>
 					</div>
 				{/if}
@@ -156,6 +169,14 @@
 								>{formatTokenCount(usage.lastTurn.completionTokens)}</span
 							>
 						</div>
+						{#if lastTurnCost !== null}
+							<div class="flex items-baseline justify-between gap-3">
+								<span class="text-gray-500 dark:text-gray-400">{$i18n.t('Cost')}</span>
+								<span class="shrink-0 tabular-nums text-gray-600 dark:text-gray-300"
+									>{formatCost(lastTurnCost)}</span
+								>
+							</div>
+						{/if}
 						{#if usage.lastTimeToFirstTokenMs !== null}
 							<div class="flex items-baseline justify-between gap-3">
 								<span class="text-gray-500 dark:text-gray-400"

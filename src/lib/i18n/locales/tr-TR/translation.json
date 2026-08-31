@@ -675,6 +675,7 @@
 	"Copy URL": "URL'yi Kopyala",
 	"Copying to clipboard was successful!": "Panoya kopyalama başarılı!",
 	"CORS must be properly configured by the provider to allow requests from Open WebUI.": "Open WebUI’dan gelen isteklerin kabul edilebilmesi için sağlayıcının CORS yapılandırmasının doğru şekilde yapılmış olması gerekir.",
+	"Cost": "Maliyet",
 	"Could not load release notes.": "",
 	"Could not read file.": "Dosya okunamadı.",
 	"CPU": "İşlemci",

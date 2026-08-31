@@ -683,6 +683,7 @@
 	"Copy URL": "",
 	"Copying to clipboard was successful!": "Copia negli appunti riuscita!",
 	"CORS must be properly configured by the provider to allow requests from Open WebUI.": "CORS deve essere configurato correttamente dal fornitore per consentire le richieste da Open WebUI.",
+	"Cost": "Costo",
 	"Could not load release notes.": "",
 	"Could not read file.": "",
 	"CPU": "",

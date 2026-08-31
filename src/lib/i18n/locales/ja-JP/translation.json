@@ -667,6 +667,7 @@
 	"Copy URL": "URLをコピー",
 	"Copying to clipboard was successful!": "クリップボードへのコピーが成功しました！",
 	"CORS must be properly configured by the provider to allow requests from Open WebUI.": "Open WebUIからのリクエストを許可するために、プロバイダーによってCORSが適切に設定されている必要があります。",
+	"Cost": "コスト",
 	"Could not load release notes.": "",
 	"Could not read file.": "ファイルを読み取ることができませんでした",
 	"CPU": "",
