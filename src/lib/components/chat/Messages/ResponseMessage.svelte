@@ -887,10 +887,13 @@
 								/>
 							{/if}
 
-							{#if !message.done && !message.error && (hasResponseContent || !hasVisibleStatus)}
+							<!-- Only when nothing else says a response is still coming. The live
+							     token/time/rate row below says the same thing with numbers, and the
+							     caret on its own line under a reasoning block read as a stray dash. -->
+							{#if !showGenerationStats && !message.done && !message.error && (hasResponseContent || !hasVisibleStatus)}
 								<div class="text-[0.9375rem] leading-relaxed">
 									<span
-										class="inline-block w-[0.125rem] h-3.5 bg-gray-400 dark:bg-gray-500 ml-0.5 animate-pulse align-text-bottom"
+										class="inline-block h-3.5 w-[0.125rem] animate-pulse bg-gray-400 align-text-bottom ml-0.5 dark:bg-gray-500"
 									></span>
 								</div>
 							{/if}

@@ -540,12 +540,16 @@
 			return next;
 		}, 0);
 
-	const getLocalContextUsage = () => {
-		if (!history?.currentId) {
+	// Takes the history as an argument rather than closing over it: a reactive
+	// statement only tracks what it references itself, so reading `history`
+	// inside the function meant the figures never refreshed while a response
+	// streamed in.
+	const getLocalContextUsage = (chatHistory: typeof history) => {
+		if (!chatHistory?.currentId) {
 			return null;
 		}
 
-		const messages = createMessagesList(history, history.currentId);
+		const messages = createMessagesList(chatHistory, chatHistory.currentId);
 		if (!messages.length) {
 			return null;
 		}
@@ -596,7 +600,7 @@
 		}, 1600);
 	};
 
-	$: statusContextUsage = contextUsage ?? getLocalContextUsage();
+	$: statusContextUsage = contextUsage ?? getLocalContextUsage(history);
 	$: contextHasThreshold = Number(statusContextUsage?.threshold) > 0;
 	$: contextPercent = contextHasThreshold
 		? Math.max(0, Math.round(statusContextUsage?.percent ?? 0))
