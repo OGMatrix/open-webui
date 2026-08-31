@@ -4,9 +4,77 @@ const DELIMITER_LIST = [
 	{ left: '\\pu{', right: '}', display: false },
 	{ left: '\\ce{', right: '}', display: false },
 	{ left: '\\(', right: '\\)', display: false },
-	{ left: '\\[', right: '\\]', display: true },
-	{ left: '\\begin{equation}', right: '\\end{equation}', display: true }
+	{ left: '\\[', right: '\\]', display: true }
 ];
+
+// Environments KaTeX can render, read off the installed build. Models emit
+// these bare, without wrapping $$ around them, and until they are matched here
+// the whole block reaches the reader as literal source.
+//
+// Unlike the delimiters above, the wrapper has to survive into the text handed
+// to KaTeX: an alignment row on its own is an error, the same row inside
+// \\begin{align} is not.
+const MATH_ENVIRONMENTS = [
+	'align',
+	'align*',
+	'alignat',
+	'alignat*',
+	'aligned',
+	'alignedat',
+	'array',
+	'Bmatrix',
+	'Bmatrix*',
+	'bmatrix',
+	'bmatrix*',
+	'CD',
+	'cases',
+	'darray',
+	'dcases',
+	'drcases',
+	'equation',
+	'equation*',
+	'gather',
+	'gather*',
+	'gathered',
+	'matrix',
+	'matrix*',
+	'pmatrix',
+	'pmatrix*',
+	'rcases',
+	'smallmatrix',
+	'split',
+	'subarray',
+	'Vmatrix',
+	'Vmatrix*',
+	'vmatrix',
+	'vmatrix*'
+];
+
+// Longest name first, so align* is preferred over align.
+const ENVIRONMENT_RULE = new RegExp(
+	`^\\\\begin\\{(${MATH_ENVIRONMENTS.slice()
+		.sort((a, b) => b.length - a.length)
+		.map((name) => name.replace(/\*/g, '\\*'))
+		.join('|')})\\}([\\s\\S]*?)\\\\end\\{\\1\\}`
+);
+
+/**
+ * Matches a bare math environment, keeping the begin/end wrapper in the text so
+ * KaTeX still sees the environment it needs.
+ */
+export const tokenizeMathEnvironment = (src: string, type: 'inlineKatex' | 'blockKatex') => {
+	const match = src.match(ENVIRONMENT_RULE);
+	if (!match) {
+		return undefined;
+	}
+
+	return {
+		type,
+		raw: match[0],
+		text: match[0],
+		displayMode: true
+	};
+};
 
 // Defines characters that are allowed to immediately precede or follow a math delimiter.
 const ALLOWED_SURROUNDING_CHARS =
@@ -131,11 +199,11 @@ function katexStart(src, displayMode: boolean) {
 			const next = src.charAt(i + 1);
 			// Only consider \ if followed by a valid math delimiter start
 			if (displayMode) {
-				// Display: \[ or \begin{equation}
+				// Display: \[ or a \begin{...} environment
 				if (next !== '[' && next !== 'b') continue;
 			} else {
-				// Inline: \( or \ce{ or \pu{
-				if (next !== '(' && next !== 'c' && next !== 'p') continue;
+				// Inline: \( or \ce{ or \pu{, and environments mid-paragraph
+				if (next !== '(' && next !== 'c' && next !== 'p' && next !== 'b') continue;
 			}
 			if (i === 0 || ALLOWED_SURROUNDING_CHARS_REGEX.test(src.charAt(i - 1))) {
 				return i;
@@ -156,8 +224,16 @@ function katexTokenizer(src, tokens, displayMode: boolean) {
 		}
 	}
 
-	const ruleReg = displayMode ? blockRule : inlineRule;
 	const type = displayMode ? 'blockKatex' : 'inlineKatex';
+
+	// Environments first: their wrapper has to reach KaTeX intact, and the
+	// delimiter rules below would strip it.
+	const environmentToken = tokenizeMathEnvironment(src, type);
+	if (environmentToken) {
+		return environmentToken;
+	}
+
+	const ruleReg = displayMode ? blockRule : inlineRule;
 
 	const match = src.match(ruleReg);
 
