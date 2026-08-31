@@ -32,6 +32,42 @@ describe('getContextWindow', () => {
 		).toBe(40960);
 	});
 
+	it('reads --ctx-size from a llama.cpp router model entry', () => {
+		// Shortened from a live router response.
+		const model = {
+			id: 'qwen3.8-27b-mtp-256k',
+			owned_by: 'llamacpp',
+			status: {
+				value: 'loaded',
+				args: [
+					'llama-server',
+					'--alias',
+					'qwen3.8-27b-mtp-256k',
+					'--batch-size',
+					'4096',
+					'--ctx-size',
+					'262144',
+					'--flash-attn',
+					'on'
+				]
+			}
+		};
+		expect(getContextWindow(model)).toBe(262144);
+	});
+
+	it('accepts the short -c form', () => {
+		expect(getContextWindow({ status: { args: ['llama-server', '-c', '32768'] } })).toBe(32768);
+	});
+
+	it('is unbothered by a trailing --ctx-size with no value', () => {
+		expect(getContextWindow({ status: { args: ['llama-server', '--ctx-size'] } })).toBeNull();
+	});
+
+	it('still lets an explicit setting win over the command line', () => {
+		const model = { status: { args: ['llama-server', '--ctx-size', '262144'] } };
+		expect(getContextWindow(model, { num_ctx: 8192 })).toBe(8192);
+	});
+
 	it('reports nothing when no source states a size', () => {
 		expect(getContextWindow({ id: 'gpt-4o' })).toBeNull();
 		expect(getContextWindow(null)).toBeNull();

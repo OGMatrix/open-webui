@@ -31,6 +31,27 @@ const firstWindow = (...values: unknown[]): number | null => {
 	return null;
 };
 
+/**
+ * A llama.cpp router lists each model with the command line its instance runs,
+ * where the size is the --ctx-size argument. The router's own /props reports
+ * n_ctx 0, so this is the only place the per-model size appears.
+ */
+const fromLlamaCppArgs = (status: unknown): number | null => {
+	const args = (status as Record<string, unknown> | null)?.args;
+	if (!Array.isArray(args)) {
+		return null;
+	}
+	for (let i = 0; i < args.length - 1; i += 1) {
+		if (args[i] === '--ctx-size' || args[i] === '-c') {
+			const window = toWindow(args[i + 1]);
+			if (window) {
+				return window;
+			}
+		}
+	}
+	return null;
+};
+
 /** Ollama reports it under an architecture-prefixed key, e.g. qwen3.context_length. */
 const fromOllamaModelInfo = (modelInfo: unknown): number | null => {
 	if (!modelInfo || typeof modelInfo !== 'object') {
@@ -71,6 +92,7 @@ export const getContextWindow = (
 	}
 
 	return firstWindow(
+		fromLlamaCppArgs(model?.status),
 		model?.context_length,
 		model?.max_context_length,
 		model?.max_model_len,
