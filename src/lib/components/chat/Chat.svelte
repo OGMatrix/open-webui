@@ -63,7 +63,9 @@
 		removeAllDetails,
 		getCodeBlockContents,
 		displayFileHandler,
-		getUsageTokenCount
+		getUsageTokenCount,
+		initMermaid,
+		renderVegaVisualization
 	} from '$lib/utils';
 	import { AudioQueue } from '$lib/utils/audio';
 	import {
@@ -595,6 +597,26 @@
 		onToolCallResolved(res);
 	};
 
+	// The person chose not to answer, which is a different outcome from the
+	// prompt being rejected: the model is told so and told not to re-ask.
+	const declinePendingAskUser = async (messageId, callId) => {
+		if (!$chatId || !messageId || !callId) {
+			return;
+		}
+
+		const res = await resolveChatMessageToolCall(
+			localStorage.token,
+			$chatId,
+			messageId,
+			callId,
+			'decline'
+		).catch(async (error) => {
+			toast.error(`${error}`);
+			await loadChat();
+		});
+		onToolCallResolved(res);
+	};
+
 	$: pendingAskUser = findPendingAskUser(history);
 	$: savedAskUserPrompt = pendingAskUser
 		? {
@@ -605,9 +627,10 @@
 				allowOther: pendingAskUser.args?.allow_other !== false,
 				timeoutMs: null,
 				onConfirm: (value) => {
-					// A resumed prompt has only answer or reject, so declining lands on reject.
+					// Declining is its own outcome, not a rejection: the person answered
+					// the prompt by choosing not to, and the model is told which it was.
 					if (value?.status === 'declined') {
-						void rejectPendingAskUser(
+						void declinePendingAskUser(
 							pendingAskUser.message.id,
 							pendingAskUser.call.call_id || pendingAskUser.call.id
 						);
@@ -1415,6 +1438,22 @@
 					eventConfirmationInputValue = data?.value ?? '';
 					eventConfirmationInputType = data?.input?.type ?? data?.type ?? '';
 					eventConfirmationInputOptions = data?.input?.options ?? data?.options ?? [];
+				} else if (type === 'request:diagram_check') {
+					// The tool asks the browser rather than guessing, because the parser
+					// that will draw the diagram lives here and is the only thing that
+					// can say for certain whether it draws.
+					try {
+						const language = data?.diagram_type;
+						if (language === 'mermaid') {
+							const mermaid = await initMermaid();
+							await mermaid.parse(data?.source ?? '', { suppressErrors: false });
+						} else {
+							await renderVegaVisualization(data?.source ?? '', language);
+						}
+						cb?.({ ok: true });
+					} catch (error) {
+						cb?.({ ok: false, error: error instanceof Error ? error.message : String(error) });
+					}
 				} else if (type === 'request:user_input') {
 					eventCallback = cb;
 					askUserQuestions = data?.questions ?? [];
