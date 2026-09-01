@@ -20,6 +20,7 @@
 	import { toast } from 'svelte-sonner';
 	import Tag from '$lib/components/icons/Tag.svelte';
 	import Label from '$lib/components/icons/Label.svelte';
+	import type { NameParts } from '$lib/utils/modelNames';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
 
@@ -39,6 +40,10 @@
 	export let pinModelHandler: (modelId: string) => void = () => {};
 	export let deleteModelHandler: (model: any) => void = () => {};
 	export let selectionOnly = false;
+	/** The name already split into the part it shares with its neighbours and the rest. */
+	export let nameParts: NameParts | undefined = undefined;
+
+	$: parts = nameParts ?? { head: '', body: item.label ?? '', tail: '' };
 
 	export let onClick: () => void = () => {};
 
@@ -119,8 +124,13 @@
 
 			<div class="flex min-w-0 items-center">
 				<Tooltip content={`${item.label} (${item.value})`} placement="top-start">
+					<!-- The shared part of the name stays readable but steps back, so what
+					     separates this model from the rest is what the eye lands on. -->
 					<div class="line-clamp-1">
-						{item.label}
+						{#if parts.head}<span class="text-gray-400 dark:text-gray-500">{parts.head}</span
+							>{/if}{parts.body}{#if parts.tail}<span class="text-gray-400 dark:text-gray-500"
+								>{parts.tail}</span
+							>{/if}
 					</div>
 				</Tooltip>
 			</div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { emphasizeNames } from '$lib/utils/modelNames';
 	import type { Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
 	import { marked } from 'marked';
@@ -371,6 +372,11 @@
 						}
 					})
 	).filter((item) => includeHidden || !(item.model?.info?.meta?.hidden ?? false));
+
+	// Each name against its own neighbours, so a family's shared opening steps back
+	// while an unrelated model stays whole. Recomputed as the search narrows, which
+	// is when it matters most.
+	$: nameParts = emphasizeNames(filteredItems.map((item) => item.label ?? ''));
 
 	$: sanitizedSearchValue = searchValue.trim();
 	$: downloadTargets =
@@ -1219,6 +1225,7 @@
 										canLoad={supportsLoading(item.model)}
 										isLoading={loadingModelIds.has(item.model?.id)}
 										{deleteModelHandler}
+										nameParts={nameParts[index]}
 										{selectionOnly}
 										{compareEnabled}
 										{selectedValues}
