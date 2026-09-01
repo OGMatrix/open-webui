@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { emphasizeNames } from '$lib/utils/modelNames';
+	import { groupModels } from '$lib/utils/modelGroups';
 	import type { Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
 	import { marked } from 'marked';
@@ -378,6 +379,13 @@
 	// is when it matters most.
 	$: nameParts = emphasizeNames(filteredItems.map((item) => item.label ?? ''));
 
+	// Headings sit in the same fixed-height grid as the models, so the virtual
+	// window keeps working on plain arithmetic. The list is not reordered: the
+	// runs are found where they already are.
+	$: grouped = groupModels(filteredItems, (item) => item.label ?? '');
+	$: listRows = grouped.rows;
+	$: rowIndexOfModel = grouped.rowIndexOfModel;
+
 	$: sanitizedSearchValue = searchValue.trim();
 	$: downloadTargets =
 		!selectionOnly && sanitizedSearchValue && $user?.role === 'admin'
@@ -471,7 +479,9 @@
 		}
 
 		// Set the virtual scroll position so the selected item is rendered and centered
-		const targetScrollTop = Math.max(0, selectedModelIdx * ITEM_HEIGHT - 128 + ITEM_HEIGHT / 2);
+		// Counted in rows, because the headings occupy some of them.
+		const selectedRow = rowIndexOfModel[selectedModelIdx] ?? selectedModelIdx;
+		const targetScrollTop = Math.max(0, selectedRow * ITEM_HEIGHT - 128 + ITEM_HEIGHT / 2);
 		listScrollTop = targetScrollTop;
 
 		await tick();
@@ -1001,7 +1011,7 @@
 
 	$: visibleStart = Math.max(0, Math.floor(listScrollTop / ITEM_HEIGHT) - OVERSCAN);
 	$: visibleEnd = Math.min(
-		filteredItems.length,
+		listRows.length,
 		Math.ceil((listScrollTop + listViewportHeight) / ITEM_HEIGHT) + OVERSCAN
 	);
 </script>
@@ -1212,29 +1222,39 @@
 								}}
 							>
 								<div style="height: {visibleStart * ITEM_HEIGHT}px;" />
-								{#each filteredItems.slice(visibleStart, visibleEnd) as item, i (item.value)}
-									{@const index = visibleStart + i}
-									<ModelItem
-										{selectedModelIdx}
-										{item}
-										{index}
-										value={primaryValue}
-										{pinModelHandler}
-										{unloadModelHandler}
-										{loadModelHandler}
-										canLoad={supportsLoading(item.model)}
-										isLoading={loadingModelIds.has(item.model?.id)}
-										{deleteModelHandler}
-										nameParts={nameParts[index]}
-										{selectionOnly}
-										{compareEnabled}
-										{selectedValues}
-										onClick={() => {
-											selectItem(item, index);
-										}}
-									/>
+								{#each listRows.slice(visibleStart, visibleEnd) as row (row.kind === 'header' ? row.key : row.item.value)}
+									{#if row.kind === 'header'}
+										<div
+											class="flex h-8 items-center px-2 text-[0.6875rem] font-medium tracking-wide text-gray-400 dark:text-gray-500"
+											role="presentation"
+										>
+											<span class="truncate">{row.label}</span>
+										</div>
+									{:else}
+										{@const item = row.item}
+										{@const index = row.modelIndex}
+										<ModelItem
+											{selectedModelIdx}
+											{item}
+											{index}
+											value={primaryValue}
+											{pinModelHandler}
+											{unloadModelHandler}
+											{loadModelHandler}
+											canLoad={supportsLoading(item.model)}
+											isLoading={loadingModelIds.has(item.model?.id)}
+											{deleteModelHandler}
+											nameParts={nameParts[index]}
+											{selectionOnly}
+											{compareEnabled}
+											{selectedValues}
+											onClick={() => {
+												selectItem(item, index);
+											}}
+										/>
+									{/if}
 								{/each}
-								<div style="height: {(filteredItems.length - visibleEnd) * ITEM_HEIGHT}px;" />
+								<div style="height: {(listRows.length - visibleEnd) * ITEM_HEIGHT}px;" />
 							</div>
 						{/if}
 
