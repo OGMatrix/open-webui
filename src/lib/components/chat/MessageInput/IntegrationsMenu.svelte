@@ -209,6 +209,21 @@
 		}, 200);
 	};
 
+	/**
+	 * A row's own appearance carries whether it is on.
+	 *
+	 * Every entry here used to render identically, with the only difference a
+	 * switch the width of a fingernail at the far right of the row. Telling at a
+	 * glance which of a dozen tools were active meant reading the right edge,
+	 * line by line.
+	 */
+	const rowClass = (on: boolean) =>
+		`flex w-full justify-between gap-2 items-center h-[1.6875rem] px-2 text-[0.8125rem] font-normal cursor-pointer rounded-xl transition-colors ${
+			on
+				? 'bg-gray-100/80 text-gray-900 dark:bg-white/[0.07] dark:text-white'
+				: 'text-gray-600 hover:bg-gray-50/40 dark:text-gray-300 dark:hover:bg-gray-800/40'
+		}`;
+
 	const toggleTool = async (toolId: string, e: MouseEvent) => {
 		const tool = tools?.[toolId];
 		if (!tool) return;
@@ -330,7 +345,7 @@
 						{#each toggleFilters.sort( (a, b) => a.name.localeCompare( b.name, undefined, { sensitivity: 'base' } ) ) as filter, filterIdx (filter.id)}
 							<Tooltip content={filter?.description} placement="top-start">
 								<button
-									class="flex w-full justify-between gap-2 items-center h-[1.6875rem] px-2 text-[0.8125rem] font-normal cursor-pointer rounded-xl hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
+									class={rowClass(selectedFilterIds.includes(filter.id))}
 									aria-pressed={selectedFilterIds.includes(filter.id)}
 									on:click={() => {
 										if (selectedFilterIds.includes(filter.id)) {
@@ -341,7 +356,7 @@
 									}}
 								>
 									<div class="flex-1 truncate">
-										<div class="flex flex-1 gap-2 items-center">
+										<div class="flex flex-1 items-center gap-2 overflow-hidden">
 											<div class="shrink-0">
 												{#if filter?.icon}
 													<div class="size-3.5 items-center flex justify-center">
@@ -359,7 +374,12 @@
 												{/if}
 											</div>
 
-											<div class=" truncate">{filter?.name}</div>
+											<div class="min-w-0 truncate">{filter?.name}</div>
+											{#if filter?.description}
+												<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
+													filter?.description
+												</div>
+											{/if}
 										</div>
 									</div>
 
@@ -395,7 +415,7 @@
 					{#if showWebSearchButton}
 						<Tooltip content={$i18n.t('Search the internet')} placement="top-start">
 							<button
-								class="flex w-full justify-between gap-2 items-center h-[1.6875rem] px-2 text-[0.8125rem] font-normal cursor-pointer rounded-xl hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
+								class={rowClass(webSearchEnabled)}
 								aria-pressed={webSearchEnabled}
 								on:click={() => {
 									webSearchEnabled = !webSearchEnabled;
@@ -403,12 +423,17 @@
 								}}
 							>
 								<div class="flex-1 truncate">
-									<div class="flex flex-1 gap-2 items-center">
+									<div class="flex flex-1 items-center gap-2 overflow-hidden">
 										<div class="shrink-0">
 											<GlobeAlt />
 										</div>
 
-										<div class=" truncate">{$i18n.t('Web Search')}</div>
+										<div class="min-w-0 truncate">{$i18n.t('Web Search')}</div>
+										{#if $i18n.t('Search the internet')}
+											<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
+												$i18n.t('Search the internet')
+											</div>
+										{/if}
 									</div>
 								</div>
 
@@ -422,19 +447,24 @@
 					{#if showImageGenerationButton}
 						<Tooltip content={$i18n.t('Generate an image')} placement="top-start">
 							<button
-								class="flex w-full justify-between gap-2 items-center h-[1.6875rem] px-2 text-[0.8125rem] font-normal cursor-pointer rounded-xl hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
+								class={rowClass(imageGenerationEnabled)}
 								aria-pressed={imageGenerationEnabled}
 								on:click={() => {
 									imageGenerationEnabled = !imageGenerationEnabled;
 								}}
 							>
 								<div class="flex-1 truncate">
-									<div class="flex flex-1 gap-2 items-center">
+									<div class="flex flex-1 items-center gap-2 overflow-hidden">
 										<div class="shrink-0">
 											<Photo className="size-3.5" strokeWidth="1.5" />
 										</div>
 
-										<div class=" truncate">{$i18n.t('Image')}</div>
+										<div class="min-w-0 truncate">{$i18n.t('Image')}</div>
+										{#if $i18n.t('Generate an image')}
+											<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
+												$i18n.t('Generate an image')
+											</div>
+										{/if}
 									</div>
 								</div>
 
@@ -448,19 +478,24 @@
 					{#if showCodeInterpreterButton}
 						<Tooltip content={$i18n.t('Execute code for analysis')} placement="top-start">
 							<button
-								class="flex w-full justify-between gap-2 items-center h-[1.6875rem] px-2 text-[0.8125rem] font-normal cursor-pointer rounded-xl hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
+								class={rowClass(codeInterpreterEnabled)}
 								aria-pressed={codeInterpreterEnabled}
 								on:click={() => {
 									codeInterpreterEnabled = !codeInterpreterEnabled;
 								}}
 							>
 								<div class="flex-1 truncate">
-									<div class="flex flex-1 gap-2 items-center">
+									<div class="flex flex-1 items-center gap-2 overflow-hidden">
 										<div class="shrink-0">
 											<Terminal className="size-3.5" strokeWidth="1.75" />
 										</div>
 
-										<div class=" truncate">{$i18n.t('Code Interpreter')}</div>
+										<div class="min-w-0 truncate">{$i18n.t('Code Interpreter')}</div>
+										{#if $i18n.t('Execute code for analysis')}
+											<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
+												$i18n.t('Execute code for analysis')
+											</div>
+										{/if}
 									</div>
 								</div>
 
@@ -499,7 +534,7 @@
 							<div class="flex flex-col gap-0.5">
 								{#each toolIds as toolId}
 									<button
-										class="relative flex w-full justify-between gap-2 items-center h-[1.6875rem] px-2 text-[0.8125rem] font-normal cursor-pointer rounded-xl hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
+										class="relative {rowClass(selectedToolIds.includes(toolId))}"
 										aria-pressed={(tools?.[toolId]?.authenticated ?? true)
 											? selectedToolIds.includes(toolId)
 											: undefined}
@@ -512,14 +547,19 @@
 											<div class="absolute inset-0 opacity-50 rounded-xl cursor-pointer z-10"></div>
 										{/if}
 										<div class="flex-1 truncate">
-											<div class="flex flex-1 gap-2 items-center">
+											<div class="flex flex-1 items-center gap-2 overflow-hidden">
 												<Tooltip content={tools?.[toolId]?.name ?? ''} placement="top">
 													<div class="shrink-0">
 														<Wrench />
 													</div>
 												</Tooltip>
 												<Tooltip content={tools?.[toolId]?.description ?? ''} placement="top-start">
-													<div class=" truncate">{tools?.[toolId]?.name}</div>
+													<div class="min-w-0 truncate">{tools?.[toolId]?.name}</div>
+													{#if tools?.[toolId]?.description}
+														<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
+															tools?.[toolId]?.description
+														</div>
+													{/if}
 												</Tooltip>
 											</div>
 										</div>
@@ -615,14 +655,14 @@
 							<div class="flex flex-col gap-0.5">
 								{#each skillIds as skillId}
 									<button
-										class="relative flex w-full justify-between gap-2 items-center h-[1.6875rem] px-2 text-[0.8125rem] font-normal cursor-pointer rounded-xl hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
+										class="relative {rowClass(selectedSkillIds.includes(skillId))}"
 										aria-pressed={selectedSkillIds.includes(skillId)}
 										on:click={async () => {
 											await toggleSkill(skillId);
 										}}
 									>
 										<div class="flex-1 truncate">
-											<div class="flex flex-1 gap-2 items-center">
+											<div class="flex flex-1 items-center gap-2 overflow-hidden">
 												<Tooltip content={skills?.[skillId]?.name ?? ''} placement="top">
 													<div class="shrink-0">
 														<Cube className="size-3.5" strokeWidth="1.75" />
@@ -632,7 +672,12 @@
 													content={skills?.[skillId]?.description ?? ''}
 													placement="top-start"
 												>
-													<div class=" truncate">{skills?.[skillId]?.name}</div>
+													<div class="min-w-0 truncate">{skills?.[skillId]?.name}</div>
+													{#if skills?.[skillId]?.description}
+														<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
+															skills?.[skillId]?.description
+														</div>
+													{/if}
 												</Tooltip>
 											</div>
 										</div>
