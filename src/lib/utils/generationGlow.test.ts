@@ -10,7 +10,8 @@ import {
 	pushRate,
 	respondsToArrivals,
 	shouldRipple,
-	showsHistory
+	showsHistory,
+	streamingAssistantMessage
 } from './generationGlow';
 
 describe('glowMotion', () => {
@@ -229,5 +230,43 @@ describe('what each style is driven by', () => {
 			expect(typeof respondsToArrivals(style)).toBe('boolean');
 			expect(typeof showsHistory(style)).toBe('boolean');
 		}
+	});
+});
+
+describe('spotting the answer being written', () => {
+	const writing = { role: 'assistant', done: false, content: 'hal' };
+	const finished = { role: 'assistant', done: true, content: 'hallo' };
+	const asked = { role: 'user', done: true, content: 'hi' };
+
+	it('finds an assistant message that is not done yet', () => {
+		expect(streamingAssistantMessage({ currentId: 'b', messages: { a: asked, b: writing } })).toBe(
+			writing
+		);
+	});
+
+	it('reports nothing once the answer is done', () => {
+		expect(
+			streamingAssistantMessage({ currentId: 'b', messages: { a: asked, b: finished } })
+		).toBeNull();
+	});
+
+	it('never mistakes the question for an answer', () => {
+		// Between sending and the first chunk, the newest message is the user's.
+		expect(streamingAssistantMessage({ currentId: 'a', messages: { a: asked } })).toBeNull();
+	});
+
+	it('does not treat a message with no done flag as finished', () => {
+		// The flag is written as false at creation, but absence must not read as
+		// "done" - that would hide the animation for the whole first chunk.
+		const fresh = { role: 'assistant', content: '' };
+		expect(streamingAssistantMessage({ currentId: 'b', messages: { b: fresh } })).toBe(fresh);
+	});
+
+	it('survives an empty or malformed history', () => {
+		expect(streamingAssistantMessage(null)).toBeNull();
+		expect(streamingAssistantMessage(undefined)).toBeNull();
+		expect(streamingAssistantMessage({})).toBeNull();
+		expect(streamingAssistantMessage({ currentId: 'nope', messages: {} })).toBeNull();
+		expect(streamingAssistantMessage({ currentId: null, messages: null })).toBeNull();
 	});
 });

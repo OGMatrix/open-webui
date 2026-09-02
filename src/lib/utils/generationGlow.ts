@@ -189,3 +189,32 @@ export const prefillFraction = (
 	const fraction = percent > 1 ? percent / 100 : percent;
 	return Math.min(1, Math.max(0, fraction));
 };
+
+/**
+ * The assistant message being written right now, or null when none is.
+ *
+ * There is a `generating` flag nearby, and it is the wrong one: it is raised
+ * only on the merge-of-agents path, so on an ordinary answer it stays false
+ * from beginning to end. What actually marks a running answer is an assistant
+ * message that has not been marked done - which is what the rest of the chat
+ * checks, and what this returns.
+ */
+export const streamingAssistantMessage = <T extends { role?: string; done?: boolean }>(
+	history:
+		| {
+				currentId?: string | null;
+				messages?: Record<string, T> | null;
+		  }
+		| null
+		| undefined
+): T | null => {
+	const id = history?.currentId;
+	if (!id) {
+		return null;
+	}
+	const message = history?.messages?.[id];
+	if (!message || message.role !== 'assistant' || message.done === true) {
+		return null;
+	}
+	return message;
+};

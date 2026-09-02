@@ -87,7 +87,7 @@
 	import { getOpenAIModelCapabilities } from '$lib/apis/openai';
 	import GenerationGlow from './MessageInput/GenerationGlow.svelte';
 	import { getGenerationStatsView } from '$lib/utils/generationStats';
-	import type { GlowStyle } from '$lib/utils/generationGlow';
+	import { streamingAssistantMessage, type GlowStyle } from '$lib/utils/generationGlow';
 	import ContextPanel from './MessageInput/ContextPanel.svelte';
 	import ContextIndicator from './MessageInput/ContextIndicator.svelte';
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte';
@@ -195,8 +195,14 @@
 	// The message being written right now, which is the only one whose speed
 	// there is anything to show. Reading history directly keeps this reactive:
 	// a helper would hide the dependency from Svelte and freeze the value.
-	$: streamingMessage =
-		generating && history?.currentId ? history.messages?.[history.currentId] : null;
+	//
+	// Not keyed on `generating`: that flag is only raised on the merge-of-agents
+	// path, so on an ordinary answer it stays false the whole way through. An
+	// assistant message that has not been marked done is what "a model is
+	// writing" actually looks like, and it is what the surrounding code uses.
+	// `history` is untyped here, so the message shape is whatever the chat put
+	// in it; naming that plainly beats a narrower type that would be a fiction.
+	$: streamingMessage = streamingAssistantMessage<any>(history);
 	$: glowView = streamingMessage?.generationStats
 		? getGenerationStatsView(streamingMessage.generationStats)
 		: null;
@@ -2062,7 +2068,7 @@
 							dir={$settings?.chatDirection ?? 'auto'}
 						>
 							<GenerationGlow
-								active={generating}
+								active={streamingMessage !== null}
 								tokensPerSecond={glowView?.tokensPerSecond ?? null}
 								prefilling={glowView?.prefilling ?? false}
 								style={glowStyle}
