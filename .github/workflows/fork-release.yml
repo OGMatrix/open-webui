@@ -40,7 +40,7 @@ on:
         type: boolean
         default: true
       dry_run:
-        description: 'Work out the version and changelog, publish nothing'
+        description: 'Show the version and changelog for live as it stands; change nothing anywhere'
         type: boolean
         default: false
 
@@ -57,7 +57,10 @@ concurrency:
 jobs:
   # ── 1. Bring the fork up to date, if asked ─────────────────────────────────
   sync:
-    if: ${{ inputs.sync_upstream }}
+    # A dry run changes nothing, and merging upstream into `live` would change
+    # something — so the sync sits out, and what gets previewed is `live` as it
+    # stands today rather than as it would be afterwards.
+    if: ${{ inputs.sync_upstream && !inputs.dry_run }}
     uses: ./.github/workflows/fork-sync-upstream.yml
     with:
       upstream_branch: ${{ inputs.upstream_branch }}
