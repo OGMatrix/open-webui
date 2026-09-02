@@ -155,7 +155,8 @@ jobs:
 
       # ── Everything below here only runs when the sync could not complete ──
 
-      - name: Open a pull request instead
+      - name: Hand the merge over
+        id: handover
         if: steps.merge.outputs.merged == 'conflict' || steps.checks.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -202,17 +203,21 @@ jobs:
             echo "Opened by the \`Fork · Sync upstream\` workflow, [run ${RUN_NUMBER}](${RUN_URL})."
           } > "${RUNNER_TEMP}/pr-body.md"
 
+          echo "branch=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
+
           # The branch is pushed already, so the work is safe whatever happens
           # next. Opening the pull request is a convenience, and it is not
           # always permitted — a repository can withhold that from Actions
-          # entirely. Say which it was rather than reporting a guess.
+          # entirely. Which of the two happened is recorded, because the step
+          # that ends the job has to say what is actually waiting and where.
           if gh pr create \
                --base "${BRANCH}" \
                --head "${BRANCH_NAME}" \
                --title "Sync ${REF} into ${BRANCH}" \
                --body-file "${RUNNER_TEMP}/pr-body.md"; then
-            echo "pull request opened"
+            echo "pr=opened" >> "$GITHUB_OUTPUT"
           else
+            echo "pr=refused" >> "$GITHUB_OUTPUT"
             echo "::warning::Could not open a pull request; the branch is pushed either way."
             {
               echo "### Pull request not opened"
@@ -234,6 +239,8 @@ jobs:
           BEHIND: ${{ steps.fetch.outputs.behind }}
           AHEAD: ${{ steps.fetch.outputs.ahead }}
           RESULT: ${{ steps.merge.outputs.merged }}
+          HANDOVER_BRANCH: ${{ steps.handover.outputs.branch }}
+          HANDOVER_PR: ${{ steps.handover.outputs.pr }}
         run: |
           VERSION=$(jq -r '.version' package.json)
           echo "upstream_version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -248,10 +255,25 @@ jobs:
             echo "| Own commits ahead | ${AHEAD} |"
             echo "| Result | ${RESULT:-not reached} |"
             echo "| Version now | \`${VERSION}\` |"
+            if [ -n "${HANDOVER_BRANCH}" ]; then
+              echo "| Waiting on | \`${HANDOVER_BRANCH}\` |"
+              echo "| Pull request | ${HANDOVER_PR} |"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail if the sync did not complete
         if: steps.merge.outputs.merged == 'conflict' || steps.checks.outcome == 'failure'
+        env:
+          HANDOVER_BRANCH: ${{ steps.handover.outputs.branch }}
+          HANDOVER_PR: ${{ steps.handover.outputs.pr }}
         run: |
-          echo "::error::Upstream was not merged into ${BRANCH}; a pull request was opened instead."
+          # Whatever this says is the last thing anyone reads about the run, so
+          # it has to be what happened. Claiming a pull request that was refused
+          # sends people looking for something that is not there.
+          if [ "${HANDOVER_PR}" = 'opened' ]; then
+            WHERE="a pull request from ${HANDOVER_BRANCH} is waiting"
+          else
+            WHERE="the merge is on ${HANDOVER_BRANCH}, with no pull request — open one by hand"
+          fi
+          echo "::error::Upstream was not merged into ${BRANCH}; ${WHERE}."
           exit 1
