@@ -130,7 +130,11 @@ jobs:
           echo "merged=conflict" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node
-        if: steps.merge.outputs.merged == 'true' && inputs.run_checks
+        # Compared against both readings: dispatched through the API a boolean
+        # input arrives as a string, and "false" is true to an expression.
+        if: >-
+          ${{ steps.merge.outputs.merged == 'true'
+              && (inputs.run_checks == true || inputs.run_checks == 'true') }}
         uses: actions/setup-node@v5
         with:
           # package.json asks for >=18.13.0 <=22.x.x.
@@ -139,7 +143,11 @@ jobs:
 
       - name: Run the frontend tests
         id: checks
-        if: steps.merge.outputs.merged == 'true' && inputs.run_checks
+        # Compared against both readings: dispatched through the API a boolean
+        # input arrives as a string, and "false" is true to an expression.
+        if: >-
+          ${{ steps.merge.outputs.merged == 'true'
+              && (inputs.run_checks == true || inputs.run_checks == 'true') }}
         # A failure here is a result to act on, not a reason to stop the job:
         # the pull-request fallback below still has to run.
         continue-on-error: true
