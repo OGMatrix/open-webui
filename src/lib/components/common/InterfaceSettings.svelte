@@ -127,6 +127,8 @@
 	let generationGlow: GlowStyle = 'sweep';
 	let generationGlowSpeed = 1;
 	let generationGlowIntensity = 1;
+	/** How far its light reaches past the frame. */
+	let generationGlowSpill = 1;
 	/** null follows the theme; a number pins the palette to that hue. */
 	let generationGlowHue: number | null = null;
 	/** Film grain, laid over whichever style is running. */
@@ -337,6 +339,7 @@
 			typeof currentSettings?.generationGlowHue === 'number'
 				? currentSettings.generationGlowHue
 				: null;
+		generationGlowSpill = currentSettings?.generationGlowSpill ?? 1;
 		generationGlowGrain = currentSettings?.generationGlowGrain ?? false;
 		highContrastMode = currentSettings?.highContrastMode ?? false;
 
@@ -629,6 +632,7 @@
 				bind:style={generationGlow}
 				bind:speed={generationGlowSpeed}
 				bind:intensity={generationGlowIntensity}
+				bind:spill={generationGlowSpill}
 				bind:hue={generationGlowHue}
 				bind:grain={generationGlowGrain}
 			/>

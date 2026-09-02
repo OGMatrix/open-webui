@@ -57,6 +57,8 @@ export type GlowMotion = {
 	opacity: number;
 	/** Extra blur radius in pixels for the outer bloom. */
 	bloomPx: number;
+	/** How far light reaches past the frame, in pixels. 0 when switched off. */
+	spillPx: number;
 };
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
@@ -70,10 +72,16 @@ const clamp = (value: number, low: number, high: number) => Math.min(high, Math.
  */
 export const glowMotion = (
 	tokensPerSecond: number | null | undefined,
-	options: { prefilling?: boolean; speedScale?: number; intensity?: number } = {}
+	options: {
+		prefilling?: boolean;
+		speedScale?: number;
+		intensity?: number;
+		spill?: number;
+	} = {}
 ): GlowMotion => {
 	const speedScale = clamp(options.speedScale ?? 1, 0.25, 3);
 	const intensity = clamp(options.intensity ?? 1, 0, 2);
+	const spill = clamp(options.spill ?? 1, 0, 2);
 
 	let energy: number;
 	if (options.prefilling) {
@@ -96,7 +104,15 @@ export const glowMotion = (
 		energy,
 		durationSeconds,
 		opacity: clamp((0.35 + energy * 0.45) * intensity, 0, 1),
-		bloomPx: Math.round(clamp((6 + energy * 14) * intensity, 0, 40))
+		bloomPx: Math.round(clamp((6 + energy * 14) * intensity, 0, 40)),
+		/*
+		 * How far the light reaches is the setting's business alone, not the
+		 * rate's. A reach that grew and shrank with every reading would have the
+		 * browser redraw a wide blur several times a second, and a frame whose
+		 * size breathes reads as unsteady rather than as fast. Speed is already
+		 * being said, by the band travelling round the edge.
+		 */
+		spillPx: intensity === 0 ? 0 : Math.round(clamp(spill * 22, 0, 60))
 	};
 };
 
@@ -105,6 +121,7 @@ export const glowVariables = (motion: GlowMotion): Record<string, string> => ({
 	'--glow-duration': `${motion.durationSeconds.toFixed(2)}s`,
 	'--glow-opacity': motion.opacity.toFixed(3),
 	'--glow-bloom': `${motion.bloomPx}px`,
+	'--glow-spill': `${motion.spillPx}px`,
 	'--glow-energy': motion.energy.toFixed(3)
 });
 

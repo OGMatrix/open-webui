@@ -25,6 +25,8 @@
 	export let speed = 1;
 	/** Scales presence, 0 to 2. */
 	export let intensity = 1;
+	/** How far light reaches past the frame, 0 to 2. */
+	export let spill = 1;
 	/** Hue in degrees to build the palette from, or null to follow the theme. */
 	export let hue: number | null = null;
 	/** Lay film grain over whatever else is running. */
@@ -105,7 +107,12 @@
 	$: bars = showsHistory(style) ? meterBars(rateHistory) : [];
 	$: progress = prefilling ? prefillFraction(prefill) : null;
 
-	$: motion = glowMotion(tokensPerSecond, { prefilling, speedScale: speed, intensity });
+	$: motion = glowMotion(tokensPerSecond, {
+		prefilling,
+		speedScale: speed,
+		intensity,
+		spill
+	});
 
 	$: variables = [
 		glowStyleAttribute(motion),
@@ -196,6 +203,15 @@
 		style={variables}
 		aria-hidden="true"
 	>
+		{#if motion.spillPx > 0 && style !== 'off'}
+			<!--
+				Light leaving the frame. Carries the same gradient on the same clock
+				as the edge, so what spreads onto the page is the band itself rather
+				than a second effect keeping loose company with it.
+			-->
+			<div class="glow-spill"><span class="glow-spill-ring"></span></div>
+		{/if}
+
 		{#if igniting}
 			<div class="glow-flash"></div>
 		{/if}
@@ -282,9 +298,10 @@
 	 * each other. That leaves the edge alone and follows whatever radius the
 	 * frame has, which a border cannot do without owning the element.
 	 *
-	 * Both layers are masked. The halo is a blurred copy of the ring, not a
-	 * blurred copy of the whole shape - blurring a filled rectangle gives a
-	 * smear across the field rather than light coming off its edge.
+	 * Both layers are masked, which also bounds what the blur below can do: a
+	 * mask is applied after a filter, so the second layer's blur is cut straight
+	 * back to the band it came from. That makes it an edge softener, not a
+	 * halo - reaching past the frame is `.glow-spill`, further down.
 	 */
 	.generation-glow::before,
 	.generation-glow::after {
@@ -303,7 +320,7 @@
 		mask-composite: exclude;
 	}
 
-	/* The halo, sitting behind the ring so the edge stays the sharpest thing. */
+	/* A wider, softer copy under the sharp ring, to take the hardness off it. */
 	.generation-glow::after {
 		padding: 2.5px;
 		filter: blur(var(--glow-bloom, 10px));
@@ -311,9 +328,61 @@
 		z-index: -1;
 	}
 
+	/*
+	 * Light leaving the box.
+	 *
+	 * The blur is on the wrapper and the ring shape on the child, and that split
+	 * is the whole thing: mask and blur one element and the mask, applied last,
+	 * clips the blur back to the band - which is why the layer above widens the
+	 * edge instead of lighting anything past it. Blurred here with nothing to
+	 * clip it, the light is free to fall off outside the frame.
+	 */
+	.glow-spill {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		pointer-events: none;
+		/* Behind the ring and its softener; the edge stays the sharpest thing. */
+		z-index: -2;
+		filter: blur(var(--glow-spill, 0px));
+		/*
+		 * Dimmer than the edge it comes from, the way light thins as it travels.
+		 * Lower than this and the difference from having it off is hard to see on
+		 * a dark ground, where the whole effect is quietest.
+		 *
+		 * No will-change: the blur radius is set once from the setting and then
+		 * holds. What changes underneath is the gradient's angle, which the
+		 * browser is already repainting for the ring above.
+		 */
+		opacity: 0.8;
+	}
+
+	.glow-spill-ring {
+		position: absolute;
+		/*
+		 * Sits just outside the frame, so the fall-off is weighted outwards
+		 * rather than washing evenly across the text underneath. The inherited
+		 * radius lands on a slightly larger box and leaves the corners a shade
+		 * tight, which this much blur hides - and which is cheaper than carrying
+		 * a second radius that has to be kept in step with the field's own.
+		 */
+		inset: calc(var(--glow-spill, 0px) * -0.22);
+		border-radius: inherit;
+		padding: 3px;
+		-webkit-mask:
+			linear-gradient(#000 0 0) content-box,
+			linear-gradient(#000 0 0);
+		mask:
+			linear-gradient(#000 0 0) content-box,
+			linear-gradient(#000 0 0);
+		-webkit-mask-composite: xor;
+		mask-composite: exclude;
+	}
+
 	/* ── sweep: a light travelling around the frame ─────────────────────── */
 	.glow-sweep::before,
-	.glow-sweep::after {
+	.glow-sweep::after,
+	.glow-sweep .glow-spill-ring {
 		background: conic-gradient(
 			from var(--glow-angle),
 			transparent 0deg,
@@ -327,7 +396,8 @@
 
 	/* ── pulse: the whole frame breathing ───────────────────────────────── */
 	.glow-pulse::before,
-	.glow-pulse::after {
+	.glow-pulse::after,
+	.glow-pulse .glow-spill-ring {
 		background: linear-gradient(90deg, var(--glow-a), var(--glow-b), var(--glow-a));
 		animation: glow-breathe var(--glow-duration, 3s) ease-in-out infinite;
 	}
@@ -335,8 +405,10 @@
 	/* ── aurora and nebula: the ring, plus light inside the field ───────── */
 	.glow-aurora::before,
 	.glow-aurora::after,
+	.glow-aurora .glow-spill-ring,
 	.glow-nebula::before,
-	.glow-nebula::after {
+	.glow-nebula::after,
+	.glow-nebula .glow-spill-ring {
 		background: conic-gradient(
 			from var(--glow-angle),
 			transparent 0deg,
@@ -350,7 +422,8 @@
 
 	/* Nebula keeps its edge quiet; the interior is what it is for. */
 	.glow-nebula::before,
-	.glow-nebula::after {
+	.glow-nebula::after,
+	.glow-nebula .glow-spill-ring {
 		opacity: 0.45;
 	}
 
@@ -505,7 +578,8 @@
 	 * counts its way through, the frame can say so instead of spinning.
 	 */
 	.glow-reading::before,
-	.glow-reading::after {
+	.glow-reading::after,
+	.glow-reading .glow-spill-ring {
 		background: conic-gradient(
 			/* Same origin as the travelling band, so the handoff has nowhere to jump. */ from 0deg,
 			var(--glow-a) 0deg,
@@ -526,7 +600,8 @@
 	}
 
 	.glow-ripple::before,
-	.glow-ripple::after {
+	.glow-ripple::after,
+	.glow-ripple .glow-spill-ring {
 		background: linear-gradient(90deg, var(--glow-a), var(--glow-b), var(--glow-a));
 		animation: glow-breathe calc(var(--glow-duration, 3s) * 2) ease-in-out infinite;
 	}
@@ -591,8 +666,17 @@
 		transition: height 240ms ease-out;
 	}
 
-	.glow-histogram::before,
-	.glow-histogram::after {
+	/*
+	 * The meter's own edge.
+	 *
+	 * This read `.glow-histogram` and so addressed the bar strip's pseudo-
+	 * elements, which carry no content and are never generated - leaving meter
+	 * as the one style whose ring was never lit. The strip was renamed out from
+	 * under this rule; the rule was not renamed with it.
+	 */
+	.glow-meter::before,
+	.glow-meter::after,
+	.glow-meter .glow-spill-ring {
 		background: linear-gradient(90deg, var(--glow-a), var(--glow-b), var(--glow-a));
 	}
 
@@ -685,6 +769,7 @@
 	@media (prefers-reduced-motion: reduce) {
 		.generation-glow::before,
 		.generation-glow::after,
+		.glow-spill-ring,
 		.glow-blob,
 		.glow-grain,
 		.glow-ring {
@@ -706,7 +791,8 @@
 		}
 
 		.generation-glow::before,
-		.generation-glow::after {
+		.generation-glow::after,
+		.glow-spill-ring {
 			background: linear-gradient(90deg, var(--glow-a), var(--glow-b));
 		}
 	}
@@ -718,7 +804,8 @@
 	 */
 	@supports not (background: conic-gradient(from 0deg, red, blue)) {
 		.generation-glow::before,
-		.generation-glow::after {
+		.generation-glow::after,
+		.glow-spill-ring {
 			background: linear-gradient(90deg, var(--glow-a), var(--glow-b), var(--glow-a));
 			animation: glow-breathe var(--glow-duration, 3s) ease-in-out infinite;
 		}

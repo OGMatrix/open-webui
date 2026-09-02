@@ -16,6 +16,7 @@
 	export let style: GlowStyle = 'sweep';
 	export let speed = 1;
 	export let intensity = 1;
+	export let spill = 1;
 	export let hue: number | null = null;
 	export let grain = false;
 
@@ -126,32 +127,40 @@
 		The real component, on real numbers from a simulated run. Anything else
 		here would be a drawing of the feature rather than the feature, and the
 		two would drift apart the first time either changed.
-	-->
-	<div
-		class="relative flex w-full flex-col rounded-3xl border border-gray-100/30 bg-white/5 px-0.5 shadow-lg backdrop-blur-sm dark:border-gray-850/30 dark:bg-gray-500/5"
-	>
-		<GenerationGlow
-			active={true}
-			tokensPerSecond={frame.tokensPerSecond}
-			prefilling={frame.prefilling}
-			prefill={frame.prefill}
-			tokens={frame.tokens}
-			{style}
-			{speed}
-			{intensity}
-			{hue}
-			{grain}
-		/>
 
-		<div class="relative z-10 flex items-center justify-between gap-3 px-4 py-3.5">
-			<span class="truncate text-sm text-gray-400 dark:text-gray-500">
-				{$i18n.t('Send a Message')}
-			</span>
-			<span
-				class="shrink-0 font-mono text-[0.625rem] tracking-tight text-gray-400 tabular-nums dark:text-gray-500"
-			>
-				{phaseLine}
-			</span>
+		Held off the sides on purpose. This pane scrolls, and a box that scrolls
+		in one axis clips in the other, so a preview sitting flush against its
+		edge would have the outer glow cut off left and right - showing something
+		the chat does not do, in the one place meant to show what the chat does.
+	-->
+	<div class="px-6">
+		<div
+			class="relative flex w-full flex-col rounded-3xl border border-gray-100/30 bg-white/5 px-0.5 shadow-lg backdrop-blur-sm dark:border-gray-850/30 dark:bg-gray-500/5"
+		>
+			<GenerationGlow
+				active={true}
+				tokensPerSecond={frame.tokensPerSecond}
+				prefilling={frame.prefilling}
+				prefill={frame.prefill}
+				tokens={frame.tokens}
+				{style}
+				{speed}
+				{intensity}
+				{spill}
+				{hue}
+				{grain}
+			/>
+
+			<div class="relative z-10 flex items-center justify-between gap-3 px-4 py-3.5">
+				<span class="truncate text-sm text-gray-400 dark:text-gray-500">
+					{$i18n.t('Send a Message')}
+				</span>
+				<span
+					class="shrink-0 font-mono text-[0.625rem] tracking-tight text-gray-400 tabular-nums dark:text-gray-500"
+				>
+					{phaseLine}
+				</span>
+			</div>
 		</div>
 	</div>
 
@@ -218,6 +227,27 @@
 						step="0.05"
 						bind:value={intensity}
 						on:change={() => saveSettings({ generationGlowIntensity: intensity })}
+					/>
+				</div>
+			</div>
+
+			<div>
+				<div class={settingRowClass}>
+					<label class={settingLabelClass} for="glow-spill">{$i18n.t('Outer Glow')}</label>
+					<div class={settingControlClass}>
+						<span class={actionButtonClass}>{spill === 0 ? $i18n.t('Off') : spill}</span>
+					</div>
+				</div>
+				<div class="flex items-center px-1 pt-1">
+					<input
+						id="glow-spill"
+						class="w-full"
+						type="range"
+						min="0"
+						max="2"
+						step="0.05"
+						bind:value={spill}
+						on:change={() => saveSettings({ generationGlowSpill: spill })}
 					/>
 				</div>
 			</div>

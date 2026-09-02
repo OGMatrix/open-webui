@@ -210,6 +210,7 @@
 	$: glowStyle = ($settings?.generationGlow ?? 'sweep') as GlowStyle;
 	$: glowSpeed = $settings?.generationGlowSpeed ?? 1;
 	$: glowIntensity = $settings?.generationGlowIntensity ?? 1;
+	$: glowSpill = $settings?.generationGlowSpill ?? 1;
 	$: glowGrain = $settings?.generationGlowGrain ?? false;
 	$: glowHue =
 		typeof $settings?.generationGlowHue === 'number' ? $settings.generationGlowHue : null;
@@ -2074,6 +2075,7 @@
 								style={glowStyle}
 								speed={glowSpeed}
 								intensity={glowIntensity}
+								spill={glowSpill}
 								hue={glowHue}
 								grain={glowGrain}
 								tokens={glowView?.tokens ?? 0}

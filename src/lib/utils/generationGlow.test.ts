@@ -86,6 +86,31 @@ describe('glowMotion', () => {
 	it('keeps opacity inside what a colour can take', () => {
 		expect(glowMotion(120, { intensity: 2 }).opacity).toBeLessThanOrEqual(1);
 	});
+
+	it('lets the spill setting say how far the light reaches', () => {
+		expect(glowMotion(30, { spill: 0 }).spillPx).toBe(0);
+		expect(glowMotion(30, { spill: 2 }).spillPx).toBeGreaterThan(
+			glowMotion(30, { spill: 1 }).spillPx
+		);
+	});
+
+	it('reaches the same distance however fast the model is answering', () => {
+		// A reach that moved with the rate would redraw a wide blur several times
+		// a second, and would read as an unsteady frame rather than a fast one.
+		expect(glowMotion(3).spillPx).toBe(glowMotion(120).spillPx);
+		expect(glowMotion(null, { prefilling: true }).spillPx).toBe(glowMotion(60).spillPx);
+	});
+
+	it('has nothing to spill when nothing would be seen', () => {
+		// The layer is skipped on a zero reach, so this is what keeps a wide blur
+		// off the compositor when the effect is turned all the way down.
+		expect(glowMotion(30, { intensity: 0 }).spillPx).toBe(0);
+	});
+
+	it('clamps an absurd spill setting rather than blurring the page', () => {
+		expect(glowMotion(30, { spill: 99 }).spillPx).toBeLessThanOrEqual(60);
+		expect(glowMotion(30, { spill: -4 }).spillPx).toBe(0);
+	});
 });
 
 describe('the variables handed to CSS', () => {
@@ -95,7 +120,8 @@ describe('the variables handed to CSS', () => {
 			'--glow-bloom',
 			'--glow-duration',
 			'--glow-energy',
-			'--glow-opacity'
+			'--glow-opacity',
+			'--glow-spill'
 		]);
 	});
 
@@ -103,13 +129,14 @@ describe('the variables handed to CSS', () => {
 		const vars = glowVariables(glowMotion(30));
 		expect(vars['--glow-duration']).toMatch(/^\d+\.\d{2}s$/);
 		expect(vars['--glow-bloom']).toMatch(/^\d+px$/);
+		expect(vars['--glow-spill']).toMatch(/^\d+px$/);
 		expect(Number(vars['--glow-opacity'])).toBeGreaterThan(0);
 	});
 
 	it('serialises to something a style attribute takes', () => {
 		const attribute = glowStyleAttribute(glowMotion(30));
 		expect(attribute).toContain('--glow-duration:');
-		expect(attribute.split(';')).toHaveLength(4);
+		expect(attribute.split(';')).toHaveLength(5);
 	});
 });
 

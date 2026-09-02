@@ -282,6 +282,8 @@ type Settings = {
 	generationGlowSpeed?: number;
 	/** Scales its presence, 0 to 2. */
 	generationGlowIntensity?: number;
+	/** How far its light reaches past the frame, 0 to 2. */
+	generationGlowSpill?: number;
 	/** Hue in degrees, or absent to follow the theme. */
 	generationGlowHue?: number | null;
 	title?: TitleSettings;
