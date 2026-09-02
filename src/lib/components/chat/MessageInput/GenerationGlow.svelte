@@ -115,7 +115,71 @@
 		.filter(Boolean)
 		.join('; ');
 
-	$: visible = active && (style !== 'off' || grain);
+	$: wanted = active && (style !== 'off' || grain);
+
+	/**
+	 * The frame outlives the answer by a moment.
+	 *
+	 * Removing it the instant a generation ends makes the light vanish rather
+	 * than fade, which reads as a glitch. It stays mounted through a short
+	 * leaving state so it can go out the way it came in.
+	 */
+	const LEAVE_MS = 620;
+	/** Long enough to cover the switch from filling to travelling. */
+	const IGNITE_MS = 700;
+
+	let visible = false;
+	let leaving = false;
+	let igniting = false;
+	let wasPrefilling = false;
+	let leaveTimer: ReturnType<typeof setTimeout> | null = null;
+	let igniteTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Depends on `wanted` alone, so assigning `visible` below cannot re-enter it.
+	const onWantedChange = (next: boolean) => {
+		if (next) {
+			if (leaveTimer) clearTimeout(leaveTimer);
+			leaveTimer = null;
+			leaving = false;
+			visible = true;
+			return;
+		}
+		if (!visible || leaving) return;
+		leaving = true;
+		leaveTimer = setTimeout(() => {
+			visible = false;
+			leaving = false;
+			leaveTimer = null;
+		}, LEAVE_MS);
+	};
+
+	$: onWantedChange(wanted);
+
+	/**
+	 * The moment the prompt is read and the answer starts.
+	 *
+	 * Without something to cover it, the ring jumps from a fill to a travelling
+	 * band. A brief bloom sits over the change, so what reads is a frame
+	 * catching light rather than one style being swapped for another.
+	 */
+	const onPrefillChange = (now: boolean) => {
+		if (wasPrefilling && !now && wanted) {
+			igniting = true;
+			if (igniteTimer) clearTimeout(igniteTimer);
+			igniteTimer = setTimeout(() => {
+				igniting = false;
+				igniteTimer = null;
+			}, IGNITE_MS);
+		}
+		wasPrefilling = now;
+	};
+
+	$: onPrefillChange(prefilling);
+
+	onDestroy(() => {
+		if (leaveTimer) clearTimeout(leaveTimer);
+		if (igniteTimer) clearTimeout(igniteTimer);
+	});
 </script>
 
 {#if visible}
@@ -128,9 +192,13 @@
 	<div
 		class="generation-glow glow-{style}"
 		class:glow-reading={progress !== null}
+		class:glow-leaving={leaving}
 		style={variables}
 		aria-hidden="true"
 	>
+		{#if igniting}
+			<div class="glow-flash"></div>
+		{/if}
 		{#if hasInterior(style)}
 			<!--
 				Three lights, blurred far past their own size and drifting on
@@ -439,7 +507,7 @@
 	.glow-reading::before,
 	.glow-reading::after {
 		background: conic-gradient(
-			from -90deg,
+			/* Same origin as the travelling band, so the handoff has nowhere to jump. */ from 0deg,
 			var(--glow-a) 0deg,
 			var(--glow-b) calc(var(--glow-progress, 0) * 360deg),
 			transparent calc(var(--glow-progress, 0) * 360deg)
@@ -528,6 +596,71 @@
 		background: linear-gradient(90deg, var(--glow-a), var(--glow-b), var(--glow-a));
 	}
 
+	/*
+	 * Coming and going.
+	 *
+	 * The root carries the opacity every style is scaled by, so the fade has to
+	 * animate to that value rather than to one; a keyframe reading the same
+	 * custom property lands exactly where the running state expects it.
+	 */
+	.generation-glow {
+		animation: glow-enter 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+
+	.glow-leaving {
+		animation: glow-leave var(--glow-leave, 620ms) cubic-bezier(0.4, 0, 1, 1) forwards;
+	}
+
+	@keyframes glow-enter {
+		from {
+			opacity: 0;
+			filter: blur(2px);
+		}
+		to {
+			opacity: var(--glow-opacity, 0.6);
+			filter: none;
+		}
+	}
+
+	@keyframes glow-leave {
+		from {
+			opacity: var(--glow-opacity, 0.6);
+		}
+		to {
+			opacity: 0;
+		}
+	}
+
+	/*
+	 * The handoff from reading to writing. A ring of light swells past the edge
+	 * once and fades, which is enough to carry the eye over the change.
+	 */
+	.glow-flash {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		pointer-events: none;
+		border: 1.5px solid var(--glow-b);
+		animation: glow-ignite 700ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	}
+
+	@keyframes glow-ignite {
+		0% {
+			transform: scale(0.985);
+			opacity: 0;
+			box-shadow: 0 0 0 0 transparent;
+		}
+		22% {
+			opacity: 0.9;
+			box-shadow: 0 0 22px 4px var(--glow-b);
+		}
+		100% {
+			transform: scale(1.045);
+			opacity: 0;
+			box-shadow: 0 0 34px 0 transparent;
+		}
+	}
+
 	@keyframes glow-turn {
 		to {
 			--glow-angle: 360deg;
@@ -556,6 +689,15 @@
 		.glow-grain,
 		.glow-ring {
 			animation: none;
+		}
+
+		/* Fading is still motion, but it is the kind that does not travel. */
+		.generation-glow {
+			animation: glow-enter 480ms linear both;
+		}
+
+		.glow-flash {
+			display: none;
 		}
 
 		/* A ring that cannot expand should not sit there as a static outline. */

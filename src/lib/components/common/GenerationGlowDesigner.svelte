@@ -112,11 +112,16 @@
 		saveSettings({ generationGlow: next });
 	};
 
+	// Taken from the page this lives in rather than invented again: a panel that
+	// styles itself is a panel that looks bolted on.
 	const settingRowClass = 'flex items-center justify-between gap-2.5';
 	const settingLabelClass = 'min-w-0 text-xs text-gray-600 dark:text-gray-400';
+	const settingControlClass = 'flex shrink-0 items-center justify-end gap-1.5';
+	const actionButtonClass =
+		'text-xs text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-500 dark:hover:text-white';
 </script>
 
-<div class="rounded-2xl bg-gray-50/70 p-3 dark:bg-white/[0.03]">
+<div class="flex flex-col gap-2.5">
 	<!--
 		The real component, on real numbers from a simulated run. Anything else
 		here would be a drawing of the feature rather than the feature, and the
@@ -151,7 +156,7 @@
 	</div>
 
 	<!-- Styles as a row of chips: the whole set visible at once, one click apart. -->
-	<div class="mt-3 flex flex-wrap gap-1.5" style={swatchVars}>
+	<div class="flex flex-wrap gap-1.5" style={swatchVars}>
 		{#each GLOW_STYLES as option (option)}
 			<button
 				type="button"
@@ -172,10 +177,15 @@
 	</div>
 
 	{#if style !== 'off' || grain}
-		<div class="mt-3 space-y-2.5">
-			<div class={settingRowClass}>
-				<label class={settingLabelClass} for="glow-speed">{$i18n.t('Animation Speed')}</label>
-				<div class="flex w-40 shrink-0 items-center gap-2">
+		<div class="flex flex-col gap-2.5">
+			<div>
+				<div class={settingRowClass}>
+					<label class={settingLabelClass} for="glow-speed">{$i18n.t('Animation Speed')}</label>
+					<div class={settingControlClass}>
+						<span class={actionButtonClass}>{speed}x</span>
+					</div>
+				</div>
+				<div class="flex items-center px-1 pt-1">
 					<input
 						id="glow-speed"
 						class="w-full"
@@ -186,15 +196,19 @@
 						bind:value={speed}
 						on:change={() => saveSettings({ generationGlowSpeed: speed })}
 					/>
-					<span class="w-9 text-right text-xs text-gray-500 tabular-nums">{speed}x</span>
 				</div>
 			</div>
 
-			<div class={settingRowClass}>
-				<label class={settingLabelClass} for="glow-intensity">
-					{$i18n.t('Animation Intensity')}
-				</label>
-				<div class="flex w-40 shrink-0 items-center gap-2">
+			<div>
+				<div class={settingRowClass}>
+					<label class={settingLabelClass} for="glow-intensity">
+						{$i18n.t('Animation Intensity')}
+					</label>
+					<div class={settingControlClass}>
+						<span class={actionButtonClass}>{intensity}</span>
+					</div>
+				</div>
+				<div class="flex items-center px-1 pt-1">
 					<input
 						id="glow-intensity"
 						class="w-full"
@@ -205,13 +219,31 @@
 						bind:value={intensity}
 						on:change={() => saveSettings({ generationGlowIntensity: intensity })}
 					/>
-					<span class="w-9 text-right text-xs text-gray-500 tabular-nums">{intensity}</span>
 				</div>
 			</div>
 
-			<div class={settingRowClass}>
-				<label class={settingLabelClass} for="glow-hue">{$i18n.t('Animation Colour')}</label>
-				<div class="flex w-40 shrink-0 items-center gap-2">
+			<div>
+				<div class={settingRowClass}>
+					<label class={settingLabelClass} for="glow-hue">{$i18n.t('Animation Colour')}</label>
+					<div class={settingControlClass}>
+						<!--
+							Unset is not a reset: following the theme is a choice, and the
+							button says which of the two is in force.
+						-->
+						<button
+							type="button"
+							class={actionButtonClass}
+							aria-pressed={hue === null}
+							on:click={() => {
+								hue = null;
+								saveSettings({ generationGlowHue: null });
+							}}
+						>
+							{hue === null ? $i18n.t('Auto') : `${hue}°`}
+						</button>
+					</div>
+				</div>
+				<div class="flex items-center px-1 pt-1">
 					<!-- The track is the choice: a grey slider for a colour is a riddle. -->
 					<input
 						id="glow-hue"
@@ -224,29 +256,12 @@
 						on:input={(event) => (hue = Number(event.currentTarget.value))}
 						on:change={() => saveSettings({ generationGlowHue: hue })}
 					/>
-					<!--
-						Not a reset: unset means the palette follows the theme, which is a
-						choice of its own and worth naming as one.
-					-->
-					<button
-						type="button"
-						aria-pressed={hue === null}
-						class="shrink-0 rounded-full px-1.5 py-0.5 text-[0.6875rem] transition {hue === null
-							? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-							: 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}"
-						on:click={() => {
-							hue = null;
-							saveSettings({ generationGlowHue: null });
-						}}
-					>
-						{$i18n.t('Auto')}
-					</button>
 				</div>
 			</div>
 
 			<div class={settingRowClass}>
 				<div id="glow-grain-label" class={settingLabelClass}>{$i18n.t('Film Grain')}</div>
-				<div class="flex shrink-0 items-center">
+				<div class={settingControlClass}>
 					<Switch
 						ariaLabelledbyId="glow-grain-label"
 						tooltip={true}
