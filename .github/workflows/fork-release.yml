@@ -1,0 +1,281 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Fork · Release
+#
+# One button, in order: merge upstream, work out the next version, write the
+# changelog, build and publish the image, then tag and cut the GitHub release.
+#
+# The image is built *before* anything is tagged. A release pointing at an
+# image that failed to build is worse than no release, so nothing is written to
+# the repository until there is a published image to point it at.
+#
+# Versions are the upstream version plus a fork counter — 0.11.3-ogm.1 — and
+# the counter is read back out of the existing tags. package.json is left
+# alone on purpose: writing a fork version into the file upstream also edits
+# would put a conflict in the way of every single upstream merge.
+#
+# Values from outside are handed to the shell through `env:` rather than pasted
+# in by the expression engine. Release notes are made of commit subjects, and a
+# subject with an apostrophe in it would otherwise end the quoting.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Fork · Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      sync_upstream:
+        description: 'Merge upstream first'
+        type: boolean
+        default: true
+      upstream_branch:
+        description: 'Upstream branch to merge from'
+        type: choice
+        options: [dev, main]
+        default: dev
+      version:
+        description: 'Version to release (blank = next counter on the current upstream version)'
+        type: string
+        default: ''
+      latest:
+        description: 'Publish the image as :latest too'
+        type: boolean
+        default: true
+      dry_run:
+        description: 'Work out the version and changelog, publish nothing'
+        type: boolean
+        default: false
+
+# The reusable workflows called below are capped by what is granted here.
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+jobs:
+  # ── 1. Bring the fork up to date, if asked ─────────────────────────────────
+  sync:
+    if: ${{ inputs.sync_upstream }}
+    uses: ./.github/workflows/fork-sync-upstream.yml
+    with:
+      upstream_branch: ${{ inputs.upstream_branch }}
+      run_checks: true
+    secrets: inherit
+
+  # ── 2. Decide what this release is called and what is in it ────────────────
+  prepare:
+    needs: sync
+    # `sync` is skipped when the merge was not wanted; that is not a failure.
+    if: ${{ always() && !cancelled() && (needs.sync.result == 'success' || needs.sync.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
+      base: ${{ steps.version.outputs.base }}
+      notes: ${{ steps.notes.outputs.notes }}
+
+    steps:
+      - name: Check out the fork
+        uses: actions/checkout@v5
+        with:
+          ref: live
+          # Tags and full history: the version counter and the changelog are
+          # both read out of them.
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        env:
+          UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
+        run: |
+          # The changelog tells our commits from upstream's by asking which are
+          # reachable from upstream, so upstream has to be here to ask.
+          git remote add upstream https://github.com/open-webui/open-webui.git 2>/dev/null || true
+          git fetch upstream --quiet "${UPSTREAM_BRANCH}"
+
+      - name: Work out the version
+        id: version
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          BASE=$(jq -r '.version' package.json)
+
+          if [ -n "${REQUESTED}" ]; then
+            VERSION="${REQUESTED}"
+            # It becomes a git tag and an image tag, so it has to be usable as
+            # both, and it is typed by hand.
+            case "${VERSION}" in
+              *[!A-Za-z0-9._-]*) echo "::error::not a usable version: ${VERSION}"; exit 1 ;;
+            esac
+          else
+            VERSION=$(python scripts/fork-release.py version)
+          fi
+
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            echo "::error::tag v${VERSION} already exists"
+            exit 1
+          fi
+
+          {
+            echo "version=${VERSION}"
+            echo "base=${BASE}"
+            echo "sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+          echo "releasing ${VERSION}, built on upstream ${BASE}"
+
+      - name: Write the changelog entry
+        id: notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
+        run: |
+          python scripts/fork-release.py notes \
+            --version "${VERSION}" \
+            --upstream "upstream/${UPSTREAM_BRANCH}" > "${RUNNER_TEMP}/notes.md"
+
+          {
+            echo "notes<<FORK_RELEASE_NOTES"
+            cat "${RUNNER_TEMP}/notes.md"
+            echo "FORK_RELEASE_NOTES"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Preview
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          {
+            [ "${DRY_RUN}" = 'true' ] && echo "> Dry run — nothing was published." && echo
+            cat "${RUNNER_TEMP}/notes.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── 3. Build and publish the image, before anything is written down ────────
+  image:
+    needs: prepare
+    if: ${{ !inputs.dry_run }}
+    uses: ./.github/workflows/fork-docker.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      latest: ${{ inputs.latest }}
+    secrets: inherit
+
+  # ── 4. Only now: changelog, tag, release ──────────────────────────────────
+  release:
+    needs: [prepare, image]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the fork
+        uses: actions/checkout@v5
+        with:
+          ref: live
+          fetch-depth: 0
+
+      - name: Identify the committer
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Insert the entry into CHANGELOG-FORK.md
+        env:
+          NOTES: ${{ needs.prepare.outputs.notes }}
+        run: |
+          python - <<'PY'
+          import os
+
+          MARKER = "<!-- fork-release: new entries are inserted directly below this line -->"
+          PATH = "CHANGELOG-FORK.md"
+
+          with open(PATH, encoding="utf-8") as handle:
+              text = handle.read()
+          if MARKER not in text:
+              raise SystemExit(f"{PATH} has lost its insertion marker")
+
+          head, tail = text.split(MARKER, 1)
+          entry = os.environ["NOTES"].strip()
+          with open(PATH, "w", encoding="utf-8", newline="\n") as handle:
+              handle.write(f"{head}{MARKER}\n\n{entry}\n{tail.lstrip()}")
+          print(f"inserted {len(entry)} characters")
+          PY
+
+      - name: Commit, tag and push
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          git add CHANGELOG-FORK.md
+          git commit -m "chore(release): ${VERSION}"
+          git tag -a "v${VERSION}" -m "Fork release ${VERSION}"
+          git push origin HEAD:live
+          git push origin "refs/tags/v${VERSION}"
+
+      - name: Assemble the release notes
+        env:
+          NOTES: ${{ needs.prepare.outputs.notes }}
+          IMAGE: ${{ needs.image.outputs.image }}
+          IMAGE_DIGEST: ${{ needs.image.outputs.digest }}
+          BUILT_FROM: ${{ needs.prepare.outputs.sha }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          BASE: ${{ needs.prepare.outputs.base }}
+        run: |
+          {
+            printf '%s\n\n' "${NOTES}"
+
+            echo '## Container image'
+            echo
+            echo '```bash'
+            echo "docker pull ${IMAGE}"
+            echo '```'
+            echo
+            echo "Built from \`${BUILT_FROM}\` for \`linux/amd64\`, digest \`${IMAGE_DIGEST}\`."
+            echo
+            echo 'In TrueNAS: Apps → Discover Apps → Custom App, image repository'
+            echo "\`${IMAGE%:*}\`, tag \`${VERSION}\`. Container port 8080, and"
+            echo "persist \`/app/backend/data\` to a dataset."
+            echo
+
+            echo '## Notice'
+            echo
+            echo 'This is an **unofficial fork** of Open WebUI. It is not affiliated'
+            echo 'with, endorsed by, or maintained by the official Open WebUI team.'
+            echo 'Report anything you find here to this repository, not upstream.'
+            echo
+            echo "Built on Open WebUI \`${BASE}\`. Copyright (c) 2023- Open WebUI Inc."
+            echo '[Created by Timothy Jaeryang Baek]. Distributed under the Open WebUI'
+            echo "License; \`LICENSE\`, \`LICENSE_HISTORY\` and \`LICENSE_NOTICE\` travel with"
+            echo "the source and ship inside the image under \`/app\`, and \`NOTICE-FORK.md\`"
+            echo 'records what this fork changes. Open WebUI branding is left exactly as'
+            echo 'upstream ships it.'
+          } > "${RUNNER_TEMP}/release-notes.md"
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          LATEST: ${{ inputs.latest }}
+        run: |
+          gh release create "v${VERSION}" \
+            --title "${VERSION}" \
+            --notes-file "${RUNNER_TEMP}/release-notes.md" \
+            --latest="${LATEST}"
+
+      - name: Report
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          BASE: ${{ needs.prepare.outputs.base }}
+          IMAGE: ${{ needs.image.outputs.image }}
+          RELEASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/v${{ needs.prepare.outputs.version }}
+        run: |
+          {
+            echo "### Released"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Version | \`${VERSION}\` |"
+            echo "| Upstream base | \`${BASE}\` |"
+            echo "| Image | \`${IMAGE}\` |"
+            echo "| Release | ${RELEASE_URL} |"
+          } >> "$GITHUB_STEP_SUMMARY"

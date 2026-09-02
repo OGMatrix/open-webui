@@ -1,0 +1,208 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Fork · Docker image
+#
+# Builds this fork and publishes it to the GitHub Container Registry, ready to
+# be pulled by a TrueNAS custom app. One variant, linux/amd64, because TrueNAS
+# SCALE runs on x86-64 only — upstream's five-variant, two-architecture matrix
+# would be ten builds for one usable image.
+#
+# Runs on its own from the Actions tab, and is also called by "Fork · Release".
+#
+# Action versions match .github/workflows/docker.yaml, which is known to build
+# this Dockerfile; only official GitHub and Docker actions are used, so nothing
+# third-party sits in the chain that builds and publishes the image.
+#
+# The package is created private on the first push. Make it public once, under
+# the repository's Packages tab, and TrueNAS can then pull it without
+# credentials.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Fork · Docker image
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag or SHA to build'
+        type: string
+        default: live
+      version:
+        description: 'Image tag, e.g. 0.11.3-ogm.1'
+        type: string
+        required: true
+      latest:
+        description: 'Also publish as :latest'
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      version:
+        type: string
+        required: true
+      latest:
+        type: boolean
+        default: true
+    outputs:
+      image:
+        description: 'Fully qualified image reference that was pushed'
+        value: ${{ jobs.build.outputs.image }}
+      digest:
+        description: 'Digest of the pushed image'
+        value: ${{ jobs.build.outputs.digest }}
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: fork-docker-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      image: ${{ steps.names.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Check out the sources to build
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Work out names
+        id: names
+        env:
+          VERSION: ${{ inputs.version }}
+          LATEST: ${{ inputs.latest }}
+        run: |
+          # A tag has to be something a registry will take, and this one comes
+          # from a workflow input.
+          case "${VERSION}" in
+            *[!A-Za-z0-9._-]*|'') echo "::error::not a usable image tag: ${VERSION}"; exit 1 ;;
+          esac
+
+          # GHCR only accepts a lowercase path.
+          IMAGE="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          {
+            echo "image_base=${IMAGE}"
+            echo "image=${IMAGE}:${VERSION}"
+            echo "sha=$(git rev-parse HEAD)"
+            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "tags<<TAGS"
+            echo "${IMAGE}:${VERSION}"
+            [ "${LATEST}" = 'true' ] && echo "${IMAGE}:latest"
+            echo "TAGS"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Confirm the licence texts will be in the image
+        run: |
+          # Clause 2 of the Open WebUI License asks a redistribution in binary
+          # form to carry the copyright notice, the conditions and the
+          # disclaimer. The Dockerfile copies these into /app; if one ever goes
+          # missing, stop here rather than publish without it.
+          missing=0
+          for f in LICENSE LICENSE_HISTORY LICENSE_NOTICE NOTICE-FORK.md; do
+            [ -f "$f" ] || { echo "::error::${f} is missing"; missing=1; }
+          done
+          grep -q 'NOTICE-FORK.md' Dockerfile || {
+            echo "::error::the Dockerfile no longer copies the licence texts into the image"
+            missing=1
+          }
+          exit $missing
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare the CI Dockerfile
+        run: |
+          # The frontend build needs more heap than a runner's node default
+          # allows. Same treatment as upstream's own docker workflow.
+          awk '
+            /^FROM --platform=\$BUILDPLATFORM node:/ {
+              print
+              print "ENV NODE_OPTIONS=\"--max-old-space-size=12288\""
+              next
+            }
+            { print }
+          ' Dockerfile > "${RUNNER_TEMP}/Dockerfile"
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ runner.temp }}/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.names.outputs.tags }}
+          # Stated plainly, on the artefact itself: this is a fork, and it is
+          # nobody's official build. Clause 3 of the licence forbids using the
+          # upstream name to endorse a derived work, so the labels say what
+          # this is and who is behind it, and claim nothing further.
+          labels: |
+            org.opencontainers.image.title=Open WebUI (unofficial fork)
+            org.opencontainers.image.description=Unofficial fork of Open WebUI. Not affiliated with, endorsed by, or maintained by the Open WebUI team. Licence texts and NOTICE-FORK.md ship inside the image under /app.
+            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.revision=${{ steps.names.outputs.sha }}
+            org.opencontainers.image.created=${{ steps.names.outputs.created }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/live/NOTICE-FORK.md
+            org.opencontainers.image.vendor=${{ github.repository_owner }} (unofficial fork)
+            org.opencontainers.image.licenses=LicenseRef-Open-WebUI
+          cache-from: type=registry,ref=${{ steps.names.outputs.image_base }}:cache-amd64
+          cache-to: type=registry,ref=${{ steps.names.outputs.image_base }}:cache-amd64,mode=max
+          # A bill of materials and a provenance record, so what went into the
+          # image and where it came from can be checked rather than taken on
+          # trust.
+          sbom: true
+          provenance: mode=max
+          build-args: |
+            BUILD_HASH=${{ steps.names.outputs.sha }}
+
+      - name: Report
+        env:
+          IMAGE: ${{ steps.names.outputs.image }}
+          IMAGE_BASE: ${{ steps.names.outputs.image_base }}
+          VERSION: ${{ inputs.version }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "### Image published"
+            echo
+            echo '```'
+            echo "${IMAGE}"
+            echo "digest: ${DIGEST}"
+            echo '```'
+            echo
+            echo "#### Using it in TrueNAS"
+            echo
+            echo "Apps → Discover Apps → Custom App. Image repository"
+            echo "\`${IMAGE_BASE}\`, tag \`${VERSION}\`. Pin the version rather"
+            echo "than using \`latest\`, so a later release cannot restart the"
+            echo "app onto a build nobody has looked at."
+            echo
+            echo "Container port 8080, and persist \`/app/backend/data\` to a"
+            echo "dataset — chats and settings live there, and otherwise only"
+            echo "inside the container."
+            echo
+            echo "If the package is still private, store the credentials once"
+            echo "under Apps → Discover Apps → Manage Container Images → Pull"
+            echo "Image (host \`ghcr.io\`, your GitHub username, a token with"
+            echo "\`read:packages\`). Making the package public avoids this."
+          } >> "$GITHUB_STEP_SUMMARY"

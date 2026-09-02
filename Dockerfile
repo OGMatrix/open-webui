@@ -187,6 +187,13 @@ COPY --chown=$UID:$GID --from=build /app/build /app/build
 COPY --chown=$UID:$GID --from=build /app/CHANGELOG.md /app/CHANGELOG.md
 COPY --chown=$UID:$GID --from=build /app/package.json /app/package.json
 
+# The licence texts travel with the binary. Clause 2 of the Open WebUI License
+# requires a redistribution in binary form to reproduce the copyright notice,
+# the conditions and the disclaimer in the materials it ships with, and an
+# image is exactly such a distribution. NOTICE-FORK.md says, inside the image
+# itself, that this build is an unofficial fork.
+COPY --chown=$UID:$GID --from=build /app/LICENSE /app/LICENSE_HISTORY /app/LICENSE_NOTICE /app/NOTICE-FORK.md /app/
+
 # copy backend files
 COPY --chown=$UID:$GID ./backend .
 

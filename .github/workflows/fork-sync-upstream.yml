@@ -1,0 +1,240 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Fork · Sync upstream
+#
+# Merges open-webui/open-webui into this fork's `live` branch, keeping our own
+# commits. Merge, never rebase: `live` is pushed and deployed from, so
+# rewriting its history would force every clone to reset.
+#
+# Nothing broken is ever pushed to `live`. A merge that conflicts, or one that
+# lands but fails the tests, is handed over as a pull request instead, and the
+# job fails so it cannot be mistaken for a clean sync.
+#
+# Runs on its own from the Actions tab, and is also called by "Fork · Release".
+#
+# Values that come from outside are passed to the shell through `env:` rather
+# than pasted into the script by the expression engine. A subject line with an
+# apostrophe in it would otherwise end the quoting and run whatever followed.
+#
+# Note: if `live` is protected, GITHUB_TOKEN may not be allowed to push to it.
+# Either exempt this workflow in the branch protection rule, or replace
+# `${{ github.token }}` below with a personal access token in a secret.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Fork · Sync upstream
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_branch:
+        description: 'Upstream branch to merge from'
+        type: choice
+        options: [dev, main]
+        default: dev
+      run_checks:
+        description: 'Run the frontend tests before pushing'
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      upstream_branch:
+        type: string
+        default: dev
+      run_checks:
+        type: boolean
+        default: true
+    outputs:
+      merged:
+        description: 'true when new upstream commits landed on live'
+        value: ${{ jobs.sync.outputs.merged }}
+      upstream_version:
+        description: 'The upstream version live now sits on'
+        value: ${{ jobs.sync.outputs.upstream_version }}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  # Never two merges into the same branch at once.
+  group: fork-sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_URL: https://github.com/open-webui/open-webui.git
+  BRANCH: live
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      merged: ${{ steps.merge.outputs.merged }}
+      upstream_version: ${{ steps.report.outputs.upstream_version }}
+
+    steps:
+      - name: Check out the fork
+        uses: actions/checkout@v5
+        with:
+          ref: live
+          # The merge needs real history, not a shallow clone.
+          fetch-depth: 0
+
+      - name: Identify the committer
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Fetch upstream
+        id: fetch
+        env:
+          UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
+        run: |
+          case "${UPSTREAM_BRANCH}" in
+            dev|main) ;;
+            *) echo "::error::refusing to sync from '${UPSTREAM_BRANCH}'"; exit 1 ;;
+          esac
+
+          git remote add upstream "${UPSTREAM_URL}" 2>/dev/null || \
+            git remote set-url upstream "${UPSTREAM_URL}"
+          git fetch upstream --quiet "${UPSTREAM_BRANCH}"
+
+          REF="upstream/${UPSTREAM_BRANCH}"
+          {
+            echo "ref=${REF}"
+            echo "behind=$(git rev-list --count "HEAD..${REF}")"
+            echo "ahead=$(git rev-list --count "${REF}..HEAD")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Merge upstream
+        id: merge
+        env:
+          REF: ${{ steps.fetch.outputs.ref }}
+          BEHIND: ${{ steps.fetch.outputs.behind }}
+        run: |
+          if [ "${BEHIND}" = '0' ]; then
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+            echo "already up to date with ${REF}"
+            exit 0
+          fi
+
+          if git merge --no-ff --no-edit \
+               -m "chore: merge ${REF} into ${BRANCH}" "${REF}"; then
+            echo "merged=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Conflicts cannot be resolved unattended, and guessing at them is
+          # how a fork quietly loses its own work. Record which files clashed,
+          # then hand the whole thing over as a pull request.
+          git diff --name-only --diff-filter=U > "${RUNNER_TEMP}/conflicts.txt" || true
+          git merge --abort || true
+          echo "merged=conflict" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: steps.merge.outputs.merged == 'true' && inputs.run_checks
+        uses: actions/setup-node@v5
+        with:
+          # package.json asks for >=18.13.0 <=22.x.x.
+          node-version: 22
+          cache: npm
+
+      - name: Run the frontend tests
+        id: checks
+        if: steps.merge.outputs.merged == 'true' && inputs.run_checks
+        # A failure here is a result to act on, not a reason to stop the job:
+        # the pull-request fallback below still has to run.
+        continue-on-error: true
+        run: |
+          npm ci
+          npx vitest run
+
+      - name: Push the merge
+        if: steps.merge.outputs.merged == 'true' && steps.checks.outcome != 'failure'
+        run: |
+          git push origin "HEAD:${BRANCH}"
+          echo "pushed to ${BRANCH}"
+
+      # ── Everything below here only runs when the sync could not complete ──
+
+      - name: Open a pull request instead
+        if: steps.merge.outputs.merged == 'conflict' || steps.checks.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ steps.fetch.outputs.ref }}
+          RESULT: ${{ steps.merge.outputs.merged }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          BRANCH_NAME="upstream-sync/${RUN_NUMBER}"
+
+          if [ "${RESULT}" = 'conflict' ]; then
+            REASON="the merge conflicts"
+            # A branch at the upstream ref: GitHub shows the conflict against
+            # live, and the merge itself is then done locally where someone can
+            # see what they are choosing.
+            git push origin "${REF}:refs/heads/${BRANCH_NAME}" --force
+            {
+              echo 'Files that clashed:'
+              echo
+              echo '```'
+              cat "${RUNNER_TEMP}/conflicts.txt"
+              echo '```'
+            } > "${RUNNER_TEMP}/detail.md"
+          else
+            REASON="the tests fail after merging"
+            git push origin "HEAD:refs/heads/${BRANCH_NAME}" --force
+            printf '%s\n' \
+              "The merge applied cleanly, but \`npx vitest run\` failed on the" \
+              "result, so it was not pushed to \`${BRANCH}\`." \
+              > "${RUNNER_TEMP}/detail.md"
+          fi
+
+          {
+            echo "Automatic sync stopped because ${REASON}."
+            echo
+            cat "${RUNNER_TEMP}/detail.md"
+            echo
+            echo 'Resolve it locally, which keeps the fork commits intact:'
+            echo
+            echo '```bash'
+            echo './scripts/sync-upstream.sh'
+            echo '```'
+            echo
+            echo "Opened by the \`Fork · Sync upstream\` workflow, [run ${RUN_NUMBER}](${RUN_URL})."
+          } > "${RUNNER_TEMP}/pr-body.md"
+
+          gh pr create \
+            --base "${BRANCH}" \
+            --head "${BRANCH_NAME}" \
+            --title "Sync ${REF} into ${BRANCH}" \
+            --body-file "${RUNNER_TEMP}/pr-body.md" \
+            || echo "a pull request for this branch already exists"
+
+      - name: Report
+        id: report
+        if: always()
+        env:
+          REF: ${{ steps.fetch.outputs.ref }}
+          BEHIND: ${{ steps.fetch.outputs.behind }}
+          AHEAD: ${{ steps.fetch.outputs.ahead }}
+          RESULT: ${{ steps.merge.outputs.merged }}
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          echo "upstream_version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Upstream sync"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Upstream branch | \`${REF}\` |"
+            echo "| Commits behind before | ${BEHIND} |"
+            echo "| Own commits ahead | ${AHEAD} |"
+            echo "| Result | ${RESULT:-not reached} |"
+            echo "| Version now | \`${VERSION}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if the sync did not complete
+        if: steps.merge.outputs.merged == 'conflict' || steps.checks.outcome == 'failure'
+        run: |
+          echo "::error::Upstream was not merged into ${BRANCH}; a pull request was opened instead."
+          exit 1
