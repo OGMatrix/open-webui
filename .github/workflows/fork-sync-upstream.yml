@@ -202,12 +202,29 @@ jobs:
             echo "Opened by the \`Fork · Sync upstream\` workflow, [run ${RUN_NUMBER}](${RUN_URL})."
           } > "${RUNNER_TEMP}/pr-body.md"
 
-          gh pr create \
-            --base "${BRANCH}" \
-            --head "${BRANCH_NAME}" \
-            --title "Sync ${REF} into ${BRANCH}" \
-            --body-file "${RUNNER_TEMP}/pr-body.md" \
-            || echo "a pull request for this branch already exists"
+          # The branch is pushed already, so the work is safe whatever happens
+          # next. Opening the pull request is a convenience, and it is not
+          # always permitted — a repository can withhold that from Actions
+          # entirely. Say which it was rather than reporting a guess.
+          if gh pr create \
+               --base "${BRANCH}" \
+               --head "${BRANCH_NAME}" \
+               --title "Sync ${REF} into ${BRANCH}" \
+               --body-file "${RUNNER_TEMP}/pr-body.md"; then
+            echo "pull request opened"
+          else
+            echo "::warning::Could not open a pull request; the branch is pushed either way."
+            {
+              echo "### Pull request not opened"
+              echo
+              echo "The merge is on \`${BRANCH_NAME}\`, so nothing is lost. Open it by hand:"
+              echo "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${BRANCH}...${BRANCH_NAME}"
+              echo
+              echo "If the reason was that Actions may not create pull requests, turn on"
+              echo "Settings → Actions → General → *Allow GitHub Actions to create and"
+              echo "approve pull requests*."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Report
         id: report
