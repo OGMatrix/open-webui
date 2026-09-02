@@ -87,8 +87,29 @@ jobs:
       sha: ${{ steps.version.outputs.sha }}
       base: ${{ steps.version.outputs.base }}
       notes: ${{ steps.notes.outputs.notes }}
+      publish: ${{ steps.mode.outputs.publish }}
 
     steps:
+      - name: Decide whether this run publishes
+        id: mode
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          # Settled here, in a shell, and passed on as a word.
+          #
+          # Deciding it in an expression did not work: a boolean input arrives
+          # from the API as a string, the coercion rules around that are not
+          # obvious, and a condition that reads wrong makes a job skip — which
+          # a run reports as success. In a shell "false" is just a string, and
+          # comparing it is the whole of the logic.
+          if [ "${DRY_RUN}" = 'true' ]; then
+            echo "publish=no" >> "$GITHUB_OUTPUT"
+            echo "dry run: nothing will be published"
+          else
+            echo "publish=yes" >> "$GITHUB_OUTPUT"
+            echo "this run publishes"
+          fi
+
       - name: Check out the fork
         uses: actions/checkout@v5
         with:
@@ -164,7 +185,11 @@ jobs:
   # ── 3. Build and publish the image, before anything is written down ────────
   image:
     needs: prepare
-    if: ${{ inputs.dry_run != true && inputs.dry_run != 'true' }}
+    # `!cancelled()` keeps this out of the skip that propagates down a needs
+    # chain, so the success of the job before it has to be asked for outright.
+    if: >-
+      ${{ !cancelled() && needs.prepare.result == 'success'
+          && needs.prepare.outputs.publish == 'yes' }}
     uses: ./.github/workflows/fork-docker.yml
     with:
       ref: ${{ needs.prepare.outputs.sha }}
@@ -178,7 +203,9 @@ jobs:
   # ── 4. Only now: changelog, tag, release ──────────────────────────────────
   release:
     needs: [prepare, image]
-    if: ${{ inputs.dry_run != true && inputs.dry_run != 'true' }}
+    if: >-
+      ${{ !cancelled() && needs.image.result == 'success'
+          && needs.prepare.outputs.publish == 'yes' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -303,7 +330,7 @@ jobs:
     steps:
       - name: Check that the release actually happened
         env:
-          DRY_RUN: ${{ inputs.dry_run }}
+          PUBLISH: ${{ needs.prepare.outputs.publish }}
           PREPARE: ${{ needs.prepare.result }}
           IMAGE: ${{ needs.image.result }}
           RELEASE: ${{ needs.release.result }}
@@ -312,7 +339,7 @@ jobs:
           # nothing: a condition misread its own input and every publishing
           # job skipped itself. A skip is invisible in the run's own verdict,
           # so something has to look at the result and object.
-          if [ "${DRY_RUN}" = 'true' ]; then
+          if [ "${PUBLISH}" != 'yes' ]; then
             echo "dry run: nothing was meant to be published"
             exit 0
           fi
