@@ -622,6 +622,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "Opret forbindelse til dine egne OpenAPI kompatible eksterne værktøjsservere.",
 	"Connected": "",
 	"Connected ({{type}})": "",
+	"Connected, but the server offers no tools": "Forbundet, men serveren tilbyder ingen værktøjer",
+	"Connected, tools found: {{count}}": "Forbundet, fundne værktøjer: {{count}}",
 	"Connection failed": "Forbindelse mislykkedes",
 	"Connection lost. Reconnecting...": "",
 	"Connection successful": "Forbindelse lykkedes",

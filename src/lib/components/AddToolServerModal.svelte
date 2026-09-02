@@ -6,7 +6,9 @@
 
 	import { toast } from 'svelte-sonner';
 	import { getContext, onMount } from 'svelte';
-	const i18n = getContext('i18n');
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
+	const i18n: Writable<i18nType> = getContext('i18n');
 
 	import Modal from '$lib/components/common/Modal.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
@@ -86,6 +88,27 @@
 		oauthAuthTypes.includes(auth_type)
 			? $i18n.t('OAuth discovery successful')
 			: $i18n.t('Connection successful');
+
+	/**
+	 * "Connection successful" answers a question nobody asked: a server that
+	 * answers but exposes nothing is the failure people actually hit, and it
+	 * used to look exactly like success.
+	 */
+	const toolCountMessage = (res: any) => {
+		const count = Array.isArray(res?.specs) ? res.specs.length : null;
+		if (count === null) {
+			return verifySuccessMessage();
+		}
+		return count === 0
+			? $i18n.t('Connected, but the server offers no tools')
+			: $i18n.t('Connected, tools found: {{count}}', { count });
+	};
+
+	/** The reason the server gave, or a plain fallback when it gave none. */
+	const failureMessage = (err: unknown) => {
+		const reason = typeof err === 'string' ? err.trim() : '';
+		return reason ? `${$i18n.t('Connection failed')}: ${reason}` : $i18n.t('Connection failed');
+	};
 
 	const authorizeOAuthHandler = () => {
 		if (!id) {
@@ -194,7 +217,7 @@
 				auth_type === 'bearer' ? key : localStorage.token,
 				path.includes('://') ? path : `${url}${path.startsWith('/') ? '' : '/'}${path}`
 			).catch((err) => {
-				toast.error($i18n.t('Connection failed'));
+				toast.error(failureMessage(err));
 			});
 
 			if (res) {
@@ -226,11 +249,11 @@
 						: {})
 				}
 			}).catch((err) => {
-				toast.error($i18n.t('Connection failed'));
+				toast.error(failureMessage(err));
 			});
 
 			if (res) {
-				toast.success(verifySuccessMessage());
+				toast.success(toolCountMessage(res));
 				console.debug('Connection successful', res);
 			}
 		}

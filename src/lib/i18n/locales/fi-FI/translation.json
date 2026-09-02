@@ -622,6 +622,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "Yhdistä omat ulkopuoliset OpenAPI yhteensopivat työkalu palvelimet.",
 	"Connected": "Yhdistetty",
 	"Connected ({{type}})": "Yhdistetty ({{type}})",
+	"Connected, but the server offers no tools": "Yhdistetty, mutta palvelin ei tarjoa työkaluja",
+	"Connected, tools found: {{count}}": "Yhdistetty, löytyneet työkalut: {{count}}",
 	"Connection failed": "Yhteys epäonnistui",
 	"Connection lost. Reconnecting...": "Yhteys katkaistu. Yhdistetään uudelleen...",
 	"Connection successful": "Yhteys onnistui",

@@ -622,6 +622,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "Anslut till dina egna OpenAPI-kompatibla externa verktygsservrar.",
 	"Connected": "",
 	"Connected ({{type}})": "Ansluten ({{type}})",
+	"Connected, but the server offers no tools": "Ansluten, men servern erbjuder inga verktyg",
+	"Connected, tools found: {{count}}": "Ansluten, hittade verktyg: {{count}}",
 	"Connection failed": "Anslutning misslyckades",
 	"Connection lost. Reconnecting...": "Anslutningen bröts. Ansluter igen...",
 	"Connection successful": "Anslutning lyckades",

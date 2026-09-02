@@ -622,6 +622,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "Csatlakozzon saját, OpenAPI-kompatibilis külső eszközszervereihez.",
 	"Connected": "Csatlakoztatva",
 	"Connected ({{type}})": "Csatlakoztatva ({{type}})",
+	"Connected, but the server offers no tools": "Csatlakozva, de a kiszolgáló nem kínál eszközöket",
+	"Connected, tools found: {{count}}": "Csatlakozva, talált eszközök: {{count}}",
 	"Connection failed": "Kapcsolat sikertelen",
 	"Connection lost. Reconnecting...": "A kapcsolat megszakadt. Újracsatlakozás...",
 	"Connection successful": "Kapcsolat sikeres",

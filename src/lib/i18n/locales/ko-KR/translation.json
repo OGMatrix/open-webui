@@ -615,6 +615,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "OpenAPI 호환 외부 도구 서버에 연결합니다.",
 	"Connected": "",
 	"Connected ({{type}})": "{{type}}에 연결됨",
+	"Connected, but the server offers no tools": "연결되었지만 서버가 도구를 제공하지 않습니다",
+	"Connected, tools found: {{count}}": "연결됨, 찾은 도구: {{count}}",
 	"Connection failed": "연결 실패",
 	"Connection lost. Reconnecting...": "연결이 끊겼습니다. 재연결 중...",
 	"Connection successful": "연결 성공",

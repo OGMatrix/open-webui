@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import hashlib
 import base64
 import copy
 import inspect
@@ -2311,16 +2312,97 @@ def strip_skill_mentions(messages: list[dict]) -> None:
                         part['text'] = SKILL_MENTION_STRIP_RE.sub(label, text).strip()
 
 
+# How long a server's tool list is trusted before it is fetched again. Tool
+# lists change when someone edits the server, not between two messages.
+MCP_SPEC_CACHE_TTL = 300
+
+# (server id, user id, server fingerprint) -> (expires at, specs). The
+# fingerprint is part of the key on purpose: editing the connection changes it,
+# so a stale list cannot survive a configuration change.
+_mcp_spec_cache: dict[tuple[str, str, str], tuple[float, list[dict]]] = {}
+
+
+def clear_mcp_spec_cache(server_id: str | None = None) -> int:
+    """Forgets cached tool lists, for one server or all of them."""
+    global _mcp_spec_cache
+    if server_id is None:
+        count = len(_mcp_spec_cache)
+        _mcp_spec_cache = {}
+        return count
+
+    stale = [key for key in _mcp_spec_cache if key[0] == server_id]
+    for key in stale:
+        del _mcp_spec_cache[key]
+    return len(stale)
+
+
+def _mcp_server_fingerprint(connection: dict, headers: dict | None) -> str:
+    """Identifies the configuration a cached tool list was read under."""
+    material = JSONCodec.dumps(
+        {
+            'url': connection.get('url', ''),
+            'config': connection.get('config', {}),
+            'auth_type': connection.get('auth_type', ''),
+            # Headers carry the identity the server answers for, and a server may
+            # hand different callers different tools.
+            'headers': sorted((headers or {}).items()),
+        },
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(material.encode('utf-8')).hexdigest()
+
+
+class LazyMCPClient:
+    """Opens the connection the first time a tool is actually called.
+
+    Nearly every turn that has an MCP server enabled never calls one of its
+    tools, and the handshake for those turns bought nothing while being paid on
+    every single message. The connection is still created and torn down inside
+    the one request task, which is what the anyio cancel scopes require.
+    """
+
+    def __init__(self, url: str, headers: dict | None):
+        self._url = url
+        self._headers = headers
+        self._client: MCPClient | None = None
+        self._lock = asyncio.Lock()
+
+    async def _ensure(self) -> MCPClient:
+        async with self._lock:
+            if self._client is None:
+                client = MCPClient()
+                await client.connect(url=self._url, headers=self._headers)
+                self._client = client
+        return self._client
+
+    async def list_tool_specs(self) -> Optional[list]:
+        client = await self._ensure()
+        return await client.list_tool_specs()
+
+    async def call_tool(self, function_name: str, function_args: dict):
+        client = await self._ensure()
+        return await client.call_tool(function_name, function_args=function_args)
+
+    async def disconnect(self):
+        # Never connected means nothing to tear down, which is the common case.
+        if self._client is not None:
+            client, self._client = self._client, None
+            await client.disconnect()
+
+
 async def connect_mcp_server(
     request,
     server_id: str,
     user,
     metadata: dict,
     extra_params: dict,
-) -> tuple[MCPClient, list[dict]] | None:
-    """Resolve an MCP server connection, authenticate, and return (client, tool_specs).
+) -> tuple[LazyMCPClient, list[dict]] | None:
+    """Resolve an MCP server connection and return (client, tool_specs).
 
-    Returns None if the server is not found or access is denied.
+    The tool list comes from a short-lived cache, and the client only dials the
+    server once a tool is called. Returns None if the server is not found or
+    access is denied.
     """
     mcp_server_connection = None
     for server_connection in await Config.get('tool_server.connections', []):
@@ -2345,11 +2427,12 @@ async def connect_mcp_server(
         extra_params=extra_params,
     )
 
-    client = MCPClient()
-    await client.connect(
-        url=mcp_server_connection.get('url', ''),
-        headers=headers if headers else None,
-    )
+    client = LazyMCPClient(mcp_server_connection.get('url', ''), headers if headers else None)
+
+    cache_key = (server_id, str(user.id), _mcp_server_fingerprint(mcp_server_connection, headers))
+    cached = _mcp_spec_cache.get(cache_key)
+    if cached and cached[0] > time.monotonic():
+        return client, cached[1]
 
     function_name_filter_list = mcp_server_connection.get('config', {}).get('function_name_filter_list', '')
     if isinstance(function_name_filter_list, str):
@@ -2359,6 +2442,7 @@ async def connect_mcp_server(
     if function_name_filter_list:
         tool_specs = [spec for spec in tool_specs if is_string_allowed(spec['name'], function_name_filter_list)]
 
+    _mcp_spec_cache[cache_key] = (time.monotonic() + MCP_SPEC_CACHE_TTL, tool_specs)
     return client, tool_specs
 
 

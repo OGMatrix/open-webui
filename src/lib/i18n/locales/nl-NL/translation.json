@@ -622,6 +622,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "Verbind met je eigen OpenAPI-compatibele externe gereedschapservers",
 	"Connected": "",
 	"Connected ({{type}})": "Verbonden ({{type}})",
+	"Connected, but the server offers no tools": "Verbonden, maar de server biedt geen tools",
+	"Connected, tools found: {{count}}": "Verbonden, gevonden tools: {{count}}",
 	"Connection failed": "Connectie mislukt",
 	"Connection lost. Reconnecting...": "Verbinding verbroken. Opnieuw verbinden...",
 	"Connection successful": "Connectie succesvol",

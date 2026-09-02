@@ -614,6 +614,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "独自のOpenAPI互換外部ツールサーバーに接続します。",
 	"Connected": "",
 	"Connected ({{type}})": "",
+	"Connected, but the server offers no tools": "接続しましたが、サーバーはツールを提供していません",
+	"Connected, tools found: {{count}}": "接続しました。見つかったツール: {{count}}",
 	"Connection failed": "接続に失敗しました",
 	"Connection lost. Reconnecting...": "",
 	"Connection successful": "接続に成功しました",

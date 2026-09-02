@@ -630,6 +630,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "Ligar ao seu próprio servidor de ferramentas externo compatível com a OpenAI.",
 	"Connected": "",
 	"Connected ({{type}})": "",
+	"Connected, but the server offers no tools": "Ligado, mas o servidor não oferece ferramentas",
+	"Connected, tools found: {{count}}": "Ligado, ferramentas encontradas: {{count}}",
 	"Connection failed": "Ligação falhou",
 	"Connection lost. Reconnecting...": "",
 	"Connection successful": "Ligação bem sucedida",

@@ -545,6 +545,26 @@ async def refresh_terminal_server_terminals(
         raise HTTPException(status_code=400, detail='Failed to refresh terminals')
 
 
+class ToolServerRefreshForm(BaseModel):
+    """Which server to forget; omitted means all of them."""
+
+    server_id: Optional[str] = None
+
+
+@router.post('/tool_servers/refresh')
+async def refresh_tool_server_cache(form_data: ToolServerRefreshForm, user=Depends(get_admin_user)):
+    """Drops the cached MCP tool lists so the next message reads them again.
+
+    Tool lists are held for a few minutes because they change when someone edits
+    a server, not between two messages. This is the way to say that a server
+    changed right now.
+    """
+    from open_webui.utils.middleware import clear_mcp_spec_cache
+
+    cleared = clear_mcp_spec_cache(form_data.server_id)
+    return {'status': True, 'cleared': cleared}
+
+
 @router.post('/tool_servers/verify')
 async def verify_tool_servers_config(request: Request, form_data: ToolServerConnection, user=Depends(get_admin_user)):
     """
@@ -628,9 +648,13 @@ async def verify_tool_servers_config(request: Request, form_data: ToolServerConn
                     }
                 except Exception as e:
                     log.debug('Failed to create MCP client: %s', e)
+                    # The reason is what makes this fixable: a refused
+                    # connection, a rejected key and a wrong path all used to
+                    # arrive as the same four words.
+                    reason = str(e).strip() or type(e).__name__
                     raise HTTPException(
                         status_code=400,
-                        detail=f'Failed to create MCP client',
+                        detail=f'Could not reach the MCP server: {reason}'[:500],
                     )
                 finally:
                     if client:

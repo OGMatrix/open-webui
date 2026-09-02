@@ -622,6 +622,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "连接到符合 OpenAPI 规范的外部工具服务器",
 	"Connected": "已连接",
 	"Connected ({{type}})": "已连接（{{type}}）",
+	"Connected, but the server offers no tools": "已连接，但该服务器未提供任何工具",
+	"Connected, tools found: {{count}}": "已连接，找到工具：{{count}}",
 	"Connection failed": "连接失败",
 	"Connection lost. Reconnecting...": "连接已断开，正在重新连接……",
 	"Connection successful": "连接成功",

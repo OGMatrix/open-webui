@@ -638,6 +638,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "Připojte se k vlastním externím serverům nástrojů kompatibilním s OpenAPI.",
 	"Connected": "",
 	"Connected ({{type}})": "",
+	"Connected, but the server offers no tools": "Připojeno, ale server nenabízí žádné nástroje",
+	"Connected, tools found: {{count}}": "Připojeno, nalezené nástroje: {{count}}",
 	"Connection failed": "Připojení se nezdařilo",
 	"Connection lost. Reconnecting...": "",
 	"Connection successful": "Připojení úspěšné",

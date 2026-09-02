@@ -630,6 +630,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "Connecta als teus propis servidors d'eines externs compatibles amb OpenAPI",
 	"Connected": "Connectat",
 	"Connected ({{type}})": "Connectat ({{type}})",
+	"Connected, but the server offers no tools": "Connectat, però el servidor no ofereix cap eina",
+	"Connected, tools found: {{count}}": "Connectat, eines trobades: {{count}}",
 	"Connection failed": "La connexió ha fallat",
 	"Connection lost. Reconnecting...": "Connexió perduda. Reconnectant...",
 	"Connection successful": "Connexió correcta",

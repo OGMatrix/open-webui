@@ -622,6 +622,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "Kendi OpenAPI uyumlu harici araç sunucularınıza bağlanın.",
 	"Connected": "",
 	"Connected ({{type}})": "Bağlandı ({{type}})",
+	"Connected, but the server offers no tools": "Bağlandı, ancak sunucu hiçbir araç sunmuyor",
+	"Connected, tools found: {{count}}": "Bağlandı, bulunan araçlar: {{count}}",
 	"Connection failed": "Bağlantı başarısız",
 	"Connection lost. Reconnecting...": "Bağlantı kesildi. Yeniden bağlanılıyor...",
 	"Connection successful": "Bağlantı başarılı",

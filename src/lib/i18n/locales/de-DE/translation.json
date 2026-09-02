@@ -622,6 +622,8 @@
 	"Connect to your own OpenAPI compatible external tool servers.": "Verbinden Sie Ihre eigenen OpenAPI-kompatiblen externen Tool-Server.",
 	"Connected": "Verbunden",
 	"Connected ({{type}})": "Verbunden ({{type}})",
+	"Connected, but the server offers no tools": "Verbunden, aber der Server bietet keine Werkzeuge",
+	"Connected, tools found: {{count}}": "Verbunden, Werkzeuge gefunden: {{count}}",
 	"Connection failed": "Verbindung fehlgeschlagen",
 	"Connection lost. Reconnecting...": "Verbindung unterbrochen. Wird wiederhergestellt...",
 	"Connection successful": "Verbindung erfolgreich",
