@@ -261,3 +261,88 @@ describe('readReasoningLevel', () => {
 		expect(readReasoningLevel(null, effort)).toBeNull();
 	});
 });
+
+/** The levels a real Qwen chat template names, read off a live llama.cpp router. */
+const QWEN_LEVELS = ['xhigh', 'medium', 'low'];
+const routed = { id: 'qwen3.8-27b-mtp-256k', owned_by: 'llamacpp' };
+
+describe('levels the provider reports for one model', () => {
+	it('offers exactly what the model names, with off in front', () => {
+		expect(getReasoningMode(routed, { thinking: true, levels: QWEN_LEVELS })).toEqual({
+			transport: 'llamacpp_effort',
+			levels: ['off', 'xhigh', 'medium', 'low']
+		});
+	});
+
+	it('keeps the order the model gave rather than imposing one', () => {
+		expect(getReasoningMode(routed, { thinking: true, levels: ['low', 'high'] })?.levels).toEqual([
+			'off',
+			'low',
+			'high'
+		]);
+	});
+
+	it('drops a word this build has no level for', () => {
+		expect(
+			getReasoningMode(routed, { thinking: true, levels: ['low', 'ludicrous', 'high'] })?.levels
+		).toEqual(['off', 'low', 'high']);
+	});
+
+	it('falls back to the plain switch when nothing usable was reported', () => {
+		const mode = getReasoningMode(routed, { thinking: true, levels: ['ludicrous'] });
+		expect(mode).toEqual({ transport: 'chat_template', levels: ['off', 'high'] });
+	});
+
+	it('stays silent when the provider reported no thinking at all', () => {
+		expect(getReasoningMode(routed, { thinking: false, levels: QWEN_LEVELS })).toBeNull();
+	});
+});
+
+describe('applying a level llama.cpp reported', () => {
+	const mode = getReasoningMode(routed, { thinking: true, levels: QWEN_LEVELS });
+
+	it('sends a graded level as the effort', () => {
+		expect(applyReasoningLevel({}, mode, 'medium')).toEqual({ reasoning_effort: 'medium' });
+	});
+
+	it('switches off through the template, since the effort word would be refused', () => {
+		const params = applyReasoningLevel({}, mode, 'off');
+		expect(params.reasoning_effort).toBeUndefined();
+		expect(params.custom_params.chat_template_kwargs.enable_thinking).toBe(false);
+	});
+
+	it('leaves nothing behind when moving between off and a level', () => {
+		const off = applyReasoningLevel({}, mode, 'off');
+		const graded = applyReasoningLevel(off, mode, 'low');
+		expect(graded.reasoning_effort).toBe('low');
+		expect(graded.custom_params).toBeUndefined();
+
+		const backOff = applyReasoningLevel(graded, mode, 'off');
+		expect(backOff.reasoning_effort).toBeUndefined();
+		expect(backOff.custom_params.chat_template_kwargs.enable_thinking).toBe(false);
+	});
+
+	it('clears both keys when the level is unset', () => {
+		const cleared = applyReasoningLevel(applyReasoningLevel({}, mode, 'medium'), mode, null);
+		expect(cleared.reasoning_effort).toBeUndefined();
+		expect(cleared.custom_params).toBeUndefined();
+	});
+
+	it('keeps unrelated params untouched', () => {
+		expect(applyReasoningLevel({ temperature: 0.7 }, mode, 'low').temperature).toBe(0.7);
+	});
+
+	it('reads back every level it wrote', () => {
+		for (const level of ['off', 'xhigh', 'medium', 'low'] as const) {
+			expect(readReasoningLevel(applyReasoningLevel({}, mode, level), mode)).toBe(level);
+		}
+	});
+
+	it('reports unset as unset, so the model default applies', () => {
+		expect(readReasoningLevel({}, mode)).toBeNull();
+	});
+
+	it('ignores an effort left behind by a model that accepted it', () => {
+		expect(readReasoningLevel({ reasoning_effort: 'minimal' }, mode)).toBeNull();
+	});
+});

@@ -251,6 +251,16 @@
 			if (typeof capabilities?.context_length === 'number') {
 				hints.contextLength = capabilities.context_length;
 			}
+			// The exact levels this model's chat template accepts, where the
+			// serving process could read them off it.
+			if (Array.isArray(capabilities?.reasoning_levels)) {
+				hints.levels = capabilities.reasoning_levels.filter(
+					(level: unknown): level is string => typeof level === 'string'
+				);
+			}
+			if (typeof capabilities?.reasoning_default === 'string') {
+				hints.defaultLevel = capabilities.reasoning_default;
+			}
 		}
 
 		reasoningHintCache.set(id, hints);

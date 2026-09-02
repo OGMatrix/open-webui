@@ -26,7 +26,12 @@ export const REASONING_LEVELS = [
 
 export type ReasoningLevel = (typeof REASONING_LEVELS)[number];
 
-export type ReasoningTransport = 'reasoning_effort' | 'ollama_think' | 'chat_template';
+export type ReasoningTransport =
+	| 'reasoning_effort'
+	| 'ollama_think'
+	| 'chat_template'
+	/** llama.cpp: the template switches thinking off, reasoning_effort grades it. */
+	| 'llamacpp_effort';
 
 export type ReasoningMode = {
 	transport: ReasoningTransport;
@@ -60,6 +65,16 @@ export type ReasoningHints = {
 	thinking?: boolean;
 	/** Context window the serving process reported, where it states one. */
 	contextLength?: number;
+	/**
+	 * The exact effort levels this model accepts, in the order it names them.
+	 *
+	 * A llama.cpp chat template that takes an effort has to reject the words it
+	 * does not know, so it carries its own list; the backend reads it from the
+	 * template rather than anyone guessing from the model's name.
+	 */
+	levels?: string[];
+	/** The level the model falls back to when none is set. */
+	defaultLevel?: string;
 };
 
 const EFFORT_LEVELS: ReasoningLevel[] = ['minimal', 'low', 'medium', 'high'];
@@ -154,6 +169,21 @@ export const getReasoningMode = (
 		return stated;
 	}
 
+	// Levels the serving process reported for this model beat every guess below:
+	// they come from the template that will actually reject anything else.
+	const reported = (hints?.levels ?? []).filter((level): level is ReasoningLevel =>
+		(REASONING_LEVELS as readonly string[]).includes(level)
+	);
+	if (reported.length > 0) {
+		// Thinking is switched off through the template, not through an effort
+		// word the template would refuse, so "off" leads and the rest follow in
+		// the order the model named them.
+		return {
+			transport: 'llamacpp_effort',
+			levels: ['off', ...reported.filter((level) => level !== 'off')]
+		};
+	}
+
 	for (const { pattern, levels } of EFFORT_PATTERNS) {
 		if (pattern.test(haystack)) {
 			// Ollama carries the same choice on its own parameter.
@@ -211,6 +241,14 @@ export const readReasoningLevel = (
 		return REASONING_LEVELS.includes(effort) ? effort : null;
 	}
 
+	if (mode.transport === 'llamacpp_effort') {
+		if (params.custom_params?.chat_template_kwargs?.enable_thinking === false) {
+			return 'off';
+		}
+		const effort = params.reasoning_effort;
+		return mode.levels.includes(effort) ? effort : null;
+	}
+
 	if (mode.transport === 'ollama_think') {
 		const think = params.think;
 		if (think === true) return 'high';
@@ -260,7 +298,17 @@ export const applyReasoningLevel = (
 		return next;
 	}
 
-	if (mode.transport === 'reasoning_effort') {
+	if (mode.transport === 'llamacpp_effort') {
+		if (level === 'off') {
+			// The effort word would be rejected; the template is what switches it off.
+			customParams.chat_template_kwargs = {
+				...(customParams.chat_template_kwargs ?? {}),
+				enable_thinking: false
+			};
+		} else {
+			next.reasoning_effort = level;
+		}
+	} else if (mode.transport === 'reasoning_effort') {
 		next.reasoning_effort = level;
 	} else if (mode.transport === 'ollama_think') {
 		if (level === 'off') {

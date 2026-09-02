@@ -284,12 +284,41 @@ MODEL_CAPABILITY_ENDPOINTS = {
 }
 
 
-def derive_llamacpp_capabilities(props: dict) -> dict:
-    """Read what llama.cpp's /props says about the loaded model.
+# A chat template that accepts an effort has to reject the words it does not
+# know, and that membership test is the model's own list of levels. Reading it
+# beats guessing from the model's name, which is the only other option.
+_EFFORT_CHOICES = re.compile(
+    r'(?:resolved_)?reasoning_effort\s+(?:not\s+)?in\s*[\(\[]([^)\]]*)[\)\]]',
+    re.IGNORECASE,
+)
+_EFFORT_DEFAULT = re.compile(
+    r'reasoning_effort\s*\|\s*default\(\s*[\'"]([^\'"]+)[\'"]',
+    re.IGNORECASE,
+)
+_QUOTED_WORD = re.compile(r'[\'"]([^\'"]+)[\'"]')
 
-    Thinking is a chat template feature there. A template that hardcodes
-    <think> always reasons and has nothing to toggle, so only templates that
-    take an `enable_thinking` argument are reported as controllable.
+
+def read_template_efforts(template: str) -> list[str] | None:
+    """The effort levels a chat template says it accepts, in its own order."""
+    if not isinstance(template, str) or not template:
+        return None
+    match = _EFFORT_CHOICES.search(template)
+    if not match:
+        return None
+    levels = [value.strip() for value in _QUOTED_WORD.findall(match.group(1)) if value.strip()]
+    return levels or None
+
+
+def derive_llamacpp_capabilities(props: dict) -> dict:
+    """Read what llama.cpp's /props says about a model.
+
+    Thinking is a chat template feature there. Recent builds summarise the
+    template in `chat_template_caps`, which states outright whether it takes a
+    reasoning effort; older ones only carry the template itself, where an
+    `enable_thinking` argument is the sign that thinking can be switched at all.
+
+    The levels are read from the template rather than guessed from the model
+    name: a template that accepts an effort lists the words it accepts.
     """
     template = props.get('chat_template')
     if not isinstance(template, str):
@@ -297,7 +326,19 @@ def derive_llamacpp_capabilities(props: dict) -> dict:
         templates = props.get('chat_templates') or props.get('chat_template_tool_use')
         template = templates if isinstance(templates, str) else ''
 
-    capabilities = {'reasoning': 'enable_thinking' in template}
+    caps = props.get('chat_template_caps')
+    caps = caps if isinstance(caps, dict) else {}
+
+    supports_effort = bool(caps.get('supports_reasoning_effort'))
+    capabilities = {'reasoning': supports_effort or 'enable_thinking' in template}
+
+    if capabilities['reasoning']:
+        levels = read_template_efforts(template)
+        if levels:
+            capabilities['reasoning_levels'] = levels
+            default = _EFFORT_DEFAULT.search(template)
+            if default:
+                capabilities['reasoning_default'] = default.group(1)
 
     # The size the server was actually started with, which is the number that
     # matters. It beats the model's trained length from /v1/models.
@@ -1069,8 +1110,16 @@ async def get_model_capabilities(request: Request, form_data: ModelCapabilitiesF
     response = None
     try:
         session = await get_session()
+        # A llama.cpp router serves several models and answers /props about the
+        # one it is asked for; without a name it describes only itself, and
+        # reports no template at all. A single-model server ignores the
+        # parameter, so it is safe to always send.
+        probe_url = f'{root_url}{path}'
+        if provider == 'llama.cpp':
+            probe_url = f'{probe_url}?model={quote(model.get("id") or model_id, safe="")}'
+
         response = await session.get(
-            f'{root_url}{path}',
+            probe_url,
             headers=headers,
             cookies=cookies,
             ssl=AIOHTTP_CLIENT_SESSION_SSL,
