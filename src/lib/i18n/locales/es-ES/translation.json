@@ -2794,6 +2794,8 @@
 	"These settings are read from environment variables and cannot be edited here while {{ENV_VAR}} is disabled.": "",
 	"Thinking": "Razonamiento",
 	"Thinking effort": "Esfuerzo de razonamiento",
+	"Thinking effort: {{level}}": "Esfuerzo de razonamiento: {{level}}",
+	"Thinking effort: {{level}} (default)": "Esfuerzo de razonamiento: {{level}} (predeterminado)",
 	"thinking, output_config": "",
 	"Thinking...": "Pensando...",
 	"This action cannot be undone. Do you wish to continue?": "Esta acción no se puede deshacer. ¿Desea continuar?",

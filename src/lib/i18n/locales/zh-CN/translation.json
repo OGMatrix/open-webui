@@ -2780,6 +2780,8 @@
 	"These settings are read from environment variables and cannot be edited here while {{ENV_VAR}} is disabled.": "这些设置从环境变量读取，在 {{ENV_VAR}} 禁用时无法在此处编辑。",
 	"Thinking": "思考",
 	"Thinking effort": "思考强度",
+	"Thinking effort: {{level}}": "思考强度：{{level}}",
+	"Thinking effort: {{level}} (default)": "思考强度：{{level}}（默认）",
 	"thinking, output_config": "thinking, output_config",
 	"Thinking...": "正在思考……",
 	"This action cannot be undone. Do you wish to continue?": "此操作无法撤销。确定要继续吗？",

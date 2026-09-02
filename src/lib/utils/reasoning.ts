@@ -262,6 +262,56 @@ export const readReasoningLevel = (
 	return null;
 };
 
+export type ReasoningSource = 'chat' | 'user' | 'model';
+
+export type ResolvedReasoning = {
+	/** The level that will actually be used for the next message. */
+	level: ReasoningLevel | null;
+	/** Where that level came from. */
+	source: ReasoningSource;
+};
+
+/**
+ * Works out the level a message will actually be sent with.
+ *
+ * Three things can decide it, in this order: what this chat was set to, what
+ * the user set as their default, and what the model itself falls back to. A
+ * chat that has been given a level keeps it - that is the whole point of
+ * setting one - while a fresh chat starts from a default rather than from
+ * nothing, so the control is never blank about something that is in fact
+ * decided.
+ *
+ * Only levels this model offers are considered: a default carried over from a
+ * different model would be refused by the provider.
+ */
+export const resolveReasoningLevel = (
+	params: Record<string, any> | null | undefined,
+	mode: ReasoningMode | null,
+	hints: ReasoningHints | null = null,
+	userParams: Record<string, any> | null | undefined = null
+): ResolvedReasoning => {
+	if (!mode) {
+		return { level: null, source: 'model' };
+	}
+
+	const chosen = readReasoningLevel(params, mode);
+	if (chosen !== null) {
+		return { level: chosen, source: 'chat' };
+	}
+
+	const preferred = readReasoningLevel(userParams, mode);
+	if (preferred !== null) {
+		return { level: preferred, source: 'user' };
+	}
+
+	const reported = hints?.defaultLevel;
+	if (typeof reported === 'string' && mode.levels.includes(reported as ReasoningLevel)) {
+		return { level: reported as ReasoningLevel, source: 'model' };
+	}
+
+	return { level: null, source: 'model' };
+};
+
 /**
  * Writes the level onto a chat's params, clearing the keys the other
  * transports use so switching models cannot leave a stale one behind.

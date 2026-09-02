@@ -2780,6 +2780,8 @@
 	"These settings are read from environment variables and cannot be edited here while {{ENV_VAR}} is disabled.": "",
 	"Thinking": "Nadenken",
 	"Thinking effort": "Denkinspanning",
+	"Thinking effort: {{level}}": "Denkinspanning: {{level}}",
+	"Thinking effort: {{level}} (default)": "Denkinspanning: {{level}} (standaard)",
 	"thinking, output_config": "",
 	"Thinking...": "Aan het nadenken...",
 	"This action cannot be undone. Do you wish to continue?": "Deze actie kan niet ongedaan worden gemaakt. Wil je doorgaan?",

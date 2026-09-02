@@ -2780,6 +2780,8 @@
 	"These settings are read from environment variables and cannot be edited here while {{ENV_VAR}} is disabled.": "Diese Einstellungen werden aus Umgebungsvariablen gelesen und können hier nicht bearbeitet werden, solange {{ENV_VAR}} deaktiviert ist.",
 	"Thinking": "Nachdenken",
 	"Thinking effort": "Denkaufwand",
+	"Thinking effort: {{level}}": "Denkaufwand: {{level}}",
+	"Thinking effort: {{level}} (default)": "Denkaufwand: {{level}} (Standard)",
 	"thinking, output_config": "thinking, output_config",
 	"Thinking...": "Denke nach...",
 	"This action cannot be undone. Do you wish to continue?": "Diese Aktion kann nicht rückgängig gemacht werden. Möchten Sie fortfahren?",

@@ -2769,6 +2769,8 @@
 	"These settings are read from environment variables and cannot be edited here while {{ENV_VAR}} is disabled.": "",
 	"Thinking": "사고",
 	"Thinking effort": "사고 강도",
+	"Thinking effort: {{level}}": "사고 수준: {{level}}",
+	"Thinking effort: {{level}} (default)": "사고 수준: {{level}}(기본값)",
 	"thinking, output_config": "",
 	"Thinking...": "생각 중...",
 	"This action cannot be undone. Do you wish to continue?": "이 행동은 되돌릴 수 없습니다. 계속 하시겠습니까?",

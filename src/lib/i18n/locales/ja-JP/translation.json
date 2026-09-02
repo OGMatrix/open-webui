@@ -2766,6 +2766,8 @@
 	"These settings are read from environment variables and cannot be edited here while {{ENV_VAR}} is disabled.": "",
 	"Thinking": "思考",
 	"Thinking effort": "思考の深さ",
+	"Thinking effort: {{level}}": "思考の深さ: {{level}}",
+	"Thinking effort: {{level}} (default)": "思考の深さ: {{level}}（既定）",
 	"thinking, output_config": "",
 	"Thinking...": "思考中...",
 	"This action cannot be undone. Do you wish to continue?": "このアクションは取り消し不可です。続けますか？",

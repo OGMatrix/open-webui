@@ -80,6 +80,7 @@
 		applyReasoningLevel,
 		getReasoningMode,
 		readReasoningLevel,
+		resolveReasoningLevel,
 		type ReasoningHints
 	} from '$lib/utils/reasoning';
 	import { getOllamaModelInfo } from '$lib/apis/ollama';
@@ -272,6 +273,14 @@
 	$: loadReasoningHints(activeReasoningModel);
 	$: reasoningMode = getReasoningMode(activeReasoningModel, reasoningHints);
 	$: reasoningLevel = readReasoningLevel(params, reasoningMode);
+	// What a message would actually be sent with: this chat's setting if it has
+	// one, otherwise the user's default, otherwise the model's own.
+	$: reasoningResolved = resolveReasoningLevel(
+		params,
+		reasoningMode,
+		reasoningHints,
+		$settings?.params
+	);
 	export let codeInterpreterEnabled = false;
 	export let toolApprovalMode = 'full';
 	export let onToolApprovalModeChange: Function = () => {};
@@ -2581,6 +2590,8 @@
 												<ReasoningEffortMenu
 													mode={reasoningMode}
 													level={reasoningLevel}
+													effective={reasoningResolved.level}
+													inherited={reasoningResolved.source !== 'chat'}
 													onSelect={(next) => {
 														params = applyReasoningLevel(params, reasoningMode, next);
 													}}

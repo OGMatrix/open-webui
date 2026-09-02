@@ -2808,6 +2808,8 @@
 	"These settings are read from environment variables and cannot be edited here while {{ENV_VAR}} is disabled.": "",
 	"Thinking": "Рассуждение",
 	"Thinking effort": "Усилие на рассуждение",
+	"Thinking effort: {{level}}": "Усилие на рассуждение: {{level}}",
+	"Thinking effort: {{level}} (default)": "Усилие на рассуждение: {{level}} (по умолчанию)",
 	"thinking, output_config": "",
 	"Thinking...": "Думаю...",
 	"This action cannot be undone. Do you wish to continue?": "Это действие нельзя отменить. Вы хотите продолжить?",

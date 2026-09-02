@@ -2808,6 +2808,8 @@
 	"These settings are read from environment variables and cannot be edited here while {{ENV_VAR}} is disabled.": "",
 	"Thinking": "Міркування",
 	"Thinking effort": "Зусилля на міркування",
+	"Thinking effort: {{level}}": "Зусилля на міркування: {{level}}",
+	"Thinking effort: {{level}} (default)": "Зусилля на міркування: {{level}} (за умовчанням)",
 	"thinking, output_config": "",
 	"Thinking...": "Думаю...",
 	"This action cannot be undone. Do you wish to continue?": "Цю дію не можна скасувати. Ви бажаєте продовжити?",

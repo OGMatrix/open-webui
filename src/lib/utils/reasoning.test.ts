@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	resolveReasoningLevel,
 	applyReasoningLevel,
 	getReasoningMode,
 	readReasoningLevel,
@@ -344,5 +345,70 @@ describe('applying a level llama.cpp reported', () => {
 
 	it('ignores an effort left behind by a model that accepted it', () => {
 		expect(readReasoningLevel({ reasoning_effort: 'minimal' }, mode)).toBeNull();
+	});
+});
+
+describe('which level actually applies', () => {
+	const mode = getReasoningMode(routed, { thinking: true, levels: QWEN_LEVELS });
+	const hints = { thinking: true, levels: QWEN_LEVELS, defaultLevel: 'xhigh' };
+
+	it('starts a fresh chat on the level the model reports', () => {
+		expect(resolveReasoningLevel({}, mode, hints)).toEqual({ level: 'xhigh', source: 'model' });
+	});
+
+	it('lets the user default beat the model default', () => {
+		const userParams = applyReasoningLevel({}, mode, 'low');
+		expect(resolveReasoningLevel({}, mode, hints, userParams)).toEqual({
+			level: 'low',
+			source: 'user'
+		});
+	});
+
+	it('lets this chat beat both, which is the point of setting it', () => {
+		const chatParams = applyReasoningLevel({}, mode, 'medium');
+		const userParams = applyReasoningLevel({}, mode, 'low');
+		expect(resolveReasoningLevel(chatParams, mode, hints, userParams)).toEqual({
+			level: 'medium',
+			source: 'chat'
+		});
+	});
+
+	it('keeps an explicit off rather than falling back to a default', () => {
+		// Switching thinking off is a decision, not an absence of one.
+		const chatParams = applyReasoningLevel({}, mode, 'off');
+		expect(resolveReasoningLevel(chatParams, mode, hints)).toEqual({
+			level: 'off',
+			source: 'chat'
+		});
+	});
+
+	it('ignores a default this model does not offer', () => {
+		// Carried over from another model, the provider would refuse it.
+		expect(resolveReasoningLevel({}, mode, { ...hints, defaultLevel: 'minimal' })).toEqual({
+			level: null,
+			source: 'model'
+		});
+	});
+
+	it('reports nothing when the model does not think at all', () => {
+		expect(resolveReasoningLevel({ reasoning_effort: 'low' }, null, hints)).toEqual({
+			level: null,
+			source: 'model'
+		});
+	});
+
+	it('survives a model that reported no default', () => {
+		expect(resolveReasoningLevel({}, mode, { thinking: true, levels: QWEN_LEVELS })).toEqual({
+			level: null,
+			source: 'model'
+		});
+	});
+
+	it('does not read a user default the current model would refuse', () => {
+		// The user set gpt-5's "minimal"; this model has never heard of it.
+		expect(resolveReasoningLevel({}, mode, hints, { reasoning_effort: 'minimal' })).toEqual({
+			level: 'xhigh',
+			source: 'model'
+		});
 	});
 });

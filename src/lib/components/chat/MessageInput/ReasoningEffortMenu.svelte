@@ -13,7 +13,12 @@
 	const i18n = getContext<Writable<i18nType>>('i18n');
 
 	export let mode: ReasoningMode | null = null;
+	/** What this chat was explicitly set to, or null when it follows a default. */
 	export let level: ReasoningLevel | null = null;
+	/** The level a message would actually be sent with, default included. */
+	export let effective: ReasoningLevel | null = null;
+	/** True while that level comes from a default rather than from this chat. */
+	export let inherited = false;
 	export let onSelect: (level: ReasoningLevel | null) => void = () => {};
 
 	let show = false;
@@ -21,7 +26,7 @@
 	// Models whose thinking is a plain switch get a toggle, not a menu with two
 	// entries in it.
 	$: isSwitch = (mode?.levels?.length ?? 0) === 2 && (mode?.levels ?? []).includes('off');
-	$: switchedOn = isSwitch && level !== null && level !== 'off';
+	$: switchedOn = isSwitch && effective !== null && effective !== 'off';
 
 	const LABELS: Record<ReasoningLevel, string> = {
 		off: 'Off',
@@ -35,14 +40,18 @@
 
 	const labelFor = (value: ReasoningLevel) => $i18n.t(LABELS[value]);
 
-	$: active = level !== null;
+	$: active = effective !== null && effective !== 'off';
 
 	// Icon-only pills, so the current choice belongs in the tooltip.
 	$: switchTooltip = `${$i18n.t('Thinking')}: ${switchedOn ? $i18n.t('On') : $i18n.t('Off')}`;
+	// Whole sentences rather than assembled fragments: a translator needs to see
+	// the shape of the line, and "default" alone carries no case or gender.
 	$: menuTooltip =
-		level === null
+		effective === null
 			? `${$i18n.t('Thinking effort')}: ${$i18n.t('Model default')}`
-			: `${$i18n.t('Thinking effort')}: ${labelFor(level)}`;
+			: inherited
+				? $i18n.t('Thinking effort: {{level}} (default)', { level: labelFor(effective) })
+				: $i18n.t('Thinking effort: {{level}}', { level: labelFor(effective) });
 
 	const pillClass = (on: boolean) =>
 		`group flex max-w-full items-center gap-1.5 overflow-hidden rounded-full p-[0.375rem] text-sm transition-colors duration-300 focus:outline-hidden ${
@@ -106,7 +115,14 @@
 								<Check className="size-3.5" strokeWidth="2.5" />
 							{/if}
 						</div>
-						<div class="flex items-center">{$i18n.t('Model default')}</div>
+						<div class="flex items-center gap-1.5">
+							<span>{$i18n.t('Model default')}</span>
+							{#if inherited && effective !== null}
+								<!-- Naming it turns "whatever the model does" into something
+								     that can be compared with the entries above. -->
+								<span class="text-gray-400 dark:text-gray-500">{labelFor(effective)}</span>
+							{/if}
+						</div>
 					</button>
 				</DropdownMenu>
 			</div>

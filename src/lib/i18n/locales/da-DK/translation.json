@@ -2780,6 +2780,8 @@
 	"These settings are read from environment variables and cannot be edited here while {{ENV_VAR}} is disabled.": "",
 	"Thinking": "Tænkning",
 	"Thinking effort": "Tankeindsats",
+	"Thinking effort: {{level}}": "Tankeindsats: {{level}}",
+	"Thinking effort: {{level}} (default)": "Tankeindsats: {{level}} (standard)",
 	"thinking, output_config": "",
 	"Thinking...": "Tænker...",
 	"This action cannot be undone. Do you wish to continue?": "Denne handling kan ikke fortrydes. Vil du fortsætte?",

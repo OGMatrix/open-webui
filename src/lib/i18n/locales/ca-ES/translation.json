@@ -2794,6 +2794,8 @@
 	"These settings are read from environment variables and cannot be edited here while {{ENV_VAR}} is disabled.": "Aquests paràmetres es llegeixen des de variables d'entorn i no es poden editar aquí mentre {{ENV_VAR}} estigui desactivat.",
 	"Thinking": "Raonament",
 	"Thinking effort": "Esforç de raonament",
+	"Thinking effort: {{level}}": "Esforç de raonament: {{level}}",
+	"Thinking effort: {{level}} (default)": "Esforç de raonament: {{level}} (per defecte)",
 	"thinking, output_config": "pensant, output_config",
 	"Thinking...": "Pensant...",
 	"This action cannot be undone. Do you wish to continue?": "Aquesta acció no es pot desfer. Vols continuar?",

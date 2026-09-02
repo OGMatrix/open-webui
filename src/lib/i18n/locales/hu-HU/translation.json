@@ -2780,6 +2780,8 @@
 	"These settings are read from environment variables and cannot be edited here while {{ENV_VAR}} is disabled.": "",
 	"Thinking": "Gondolkodás",
 	"Thinking effort": "Gondolkodási ráfordítás",
+	"Thinking effort: {{level}}": "Gondolkodási erőfeszítés: {{level}}",
+	"Thinking effort: {{level}} (default)": "Gondolkodási erőfeszítés: {{level}} (alapértelmezett)",
 	"thinking, output_config": "thinking, output_config",
 	"Thinking...": "Gondolkodik...",
 	"This action cannot be undone. Do you wish to continue?": "Ez a művelet nem vonható vissza. Szeretné folytatni?",
