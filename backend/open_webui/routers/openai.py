@@ -1065,6 +1065,31 @@ async def get_models(request: Request, url_idx: int | None = None, user=Depends(
     return models
 
 
+# What each model reported, once it has reported anything.
+#
+# A llama.cpp model can only describe itself while it is loaded, and a router
+# unloads models as it pleases. A chat template does not change under a running
+# server, so an answer once given stays true, and asking again after the model
+# has gone quiet would otherwise lose it.
+_capability_memory: dict[tuple[int, str], dict] = {}
+
+
+def remember_capabilities(url_idx: int, model_id: str, capabilities: dict) -> dict:
+    """Keeps a non-empty answer, and hands back the best one known."""
+    key = (url_idx, model_id)
+    if capabilities:
+        _capability_memory[key] = capabilities
+        return capabilities
+    return _capability_memory.get(key, {})
+
+
+def forget_capabilities() -> int:
+    """Drops everything remembered, for when a provider was reconfigured."""
+    count = len(_capability_memory)
+    _capability_memory.clear()
+    return count
+
+
 class ModelCapabilitiesForm(BaseModel):
     model: str
 
@@ -1126,18 +1151,20 @@ async def get_model_capabilities(request: Request, form_data: ModelCapabilitiesF
             timeout=get_client_timeout(),
         )
         if not response.ok:
-            return {'capabilities': {}}
+            # A router answers 500 while a model is unloaded; that says nothing
+            # new about the model, so anything known already stands.
+            return {'capabilities': remember_capabilities(url_idx, model_id, {})}
 
         payload = await response.json(loads=JSONCodec.loads)
     except Exception as e:
-        # A provider that is down or does not serve this path is not an error
-        # here; the client simply learns nothing.
+        # A provider that is down, busy loading, or not serving this path is not
+        # an error here; anything learned earlier still stands.
         log.debug('capability probe failed for %s: %s', model_id, e)
-        return {'capabilities': {}}
+        return {'capabilities': remember_capabilities(url_idx, model_id, {})}
     finally:
         await cleanup_response(response)
 
-    return {'capabilities': derive_provider_capabilities(provider, payload)}
+    return {'capabilities': remember_capabilities(url_idx, model_id, derive_provider_capabilities(provider, payload))}
 
 
 class ProviderModelOperationForm(BaseModel):

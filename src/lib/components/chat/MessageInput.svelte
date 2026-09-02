@@ -218,22 +218,47 @@
 	// is left to the name patterns.
 	const REASONING_PROBE_PROVIDERS = new Set(['llama.cpp']);
 	const reasoningHintCache = new Map<string, ReasoningHints>();
+	/** When a model that told us nothing may be asked again. */
+	const reasoningHintRetryAt = new Map<string, number>();
 	let reasoningHints: ReasoningHints | null = null;
 
+	/** A provider that has not loaded a model cannot describe it yet. */
+	const REASONING_PROBE_RETRY_MS = 20_000;
+
 	const loadReasoningHints = async (
-		model: { id?: string; owned_by?: string; provider?: string } | null | undefined
+		model:
+			| { id?: string; owned_by?: string; provider?: string; status?: { value?: string } }
+			| null
+			| undefined
 	) => {
 		const id = model?.id;
 		reasoningHints = id ? (reasoningHintCache.get(id) ?? null) : null;
 
 		const askable =
 			model?.owned_by === 'ollama' || REASONING_PROBE_PROVIDERS.has(model?.provider ?? '');
-		if (!id || !askable || reasoningHintCache.has(id)) {
+		if (!id || !askable) {
 			return;
 		}
 
-		// Cache before awaiting so a burst of model switches cannot pile up calls.
-		reasoningHintCache.set(id, {});
+		// A llama.cpp router answers about a model by loading it. Selecting one in
+		// the picker must not start that, so an unloaded model is left alone until
+		// something else has a reason to load it.
+		if (model?.status?.value === 'unloaded') {
+			return;
+		}
+
+		// An answer worth having is kept for good: a chat template does not change
+		// under a running server. An empty one only means "could not say yet".
+		const known = reasoningHintCache.get(id);
+		if (known && Object.keys(known).length > 0) {
+			return;
+		}
+		if ((reasoningHintRetryAt.get(id) ?? 0) > Date.now()) {
+			return;
+		}
+
+		// Held off before awaiting so a burst of model switches cannot pile up calls.
+		reasoningHintRetryAt.set(id, Date.now() + REASONING_PROBE_RETRY_MS);
 
 		let hints: ReasoningHints = {};
 		if (model?.owned_by === 'ollama') {
@@ -264,7 +289,10 @@
 			}
 		}
 
-		reasoningHintCache.set(id, hints);
+		if (Object.keys(hints).length > 0) {
+			reasoningHintCache.set(id, hints);
+			reasoningHintRetryAt.delete(id);
+		}
 		if (activeReasoningModel?.id === id) {
 			reasoningHints = hints;
 		}
