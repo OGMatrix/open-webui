@@ -2391,6 +2391,36 @@ class LazyMCPClient:
             await client.disconnect()
 
 
+# Named SSE events that report a tool starting or finishing. Hermes Agent is the
+# one that emits these today; the shape is verified against a live 0.20.6 server.
+PROVIDER_TOOL_PROGRESS_EVENTS = {'hermes.tool.progress'}
+
+
+def normalize_tool_progress(payload: dict) -> dict | None:
+    """Turns a provider's tool-progress frame into what the chat can render.
+
+    Hermes sends the tool name along with an emoji and a sentence describing
+    what it is doing with it, which is far better than anything that could be
+    invented here: "web_search" is what ran, the label is what it ran for.
+    """
+    name = payload.get('tool') or payload.get('name')
+    status = payload.get('status')
+    if not isinstance(name, str) or not name or status not in ('running', 'completed', 'failed'):
+        return None
+
+    progress = {'name': name, 'status': status}
+    for key in ('emoji', 'label'):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            progress[key] = value
+
+    call_id = payload.get('toolCallId') or payload.get('tool_call_id')
+    if isinstance(call_id, str) and call_id:
+        progress['call_id'] = call_id
+
+    return progress
+
+
 async def connect_mcp_server(
     request,
     server_id: str,
@@ -4883,12 +4913,21 @@ async def streaming_chat_response_handler(response, ctx):
 
                     filter_extra_params = {'__body__': form_data, **extra_params} if filter_functions else None
 
+                    # An SSE frame may name its event on a line of its own. Only the
+                    # data line was ever read, so a provider reporting something
+                    # that is not a completion chunk had no way to say so.
+                    sse_event_name = None
+
                     async for line in response.body_iterator:
                         line = line.decode('utf-8', 'replace') if isinstance(line, bytes) else line
                         data = line
 
                         # Skip empty lines
                         if not data or data.isspace():
+                            continue
+
+                        if data.startswith('event:'):
+                            sse_event_name = data[6:].strip()
                             continue
 
                         # "data:" is the prefix for each event
@@ -4919,8 +4958,17 @@ async def streaming_chat_response_handler(response, ctx):
                         # Remove the "data:" prefix
                         data = data[5:].strip()
 
+                        # The name belongs to this one frame and nothing after it.
+                        frame_event, sse_event_name = sse_event_name, None
+
                         try:
                             data = JSONCodec.loads(data)
+
+                            if frame_event in PROVIDER_TOOL_PROGRESS_EVENTS and isinstance(data, dict):
+                                progress = normalize_tool_progress(data)
+                                if progress:
+                                    await event_emitter({'type': 'chat:tool:progress', 'data': progress})
+                                continue
 
                             if filter_functions:
                                 data, _ = await process_filter_functions(

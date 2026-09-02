@@ -1270,6 +1270,30 @@
 					} else {
 						message.statusHistory = [data];
 					}
+				} else if (type === 'chat:tool:progress') {
+					// A tool the provider is running on its own side. It arrives twice,
+					// once starting and once finished, so the same entry is updated in
+					// place rather than the list growing a second copy of every tool.
+					const entry = {
+						action: 'tool_progress',
+						call_id: data?.call_id ?? null,
+						description: [data?.emoji, data?.label ?? data?.name].filter(Boolean).join(' '),
+						done: data?.status !== 'running'
+					};
+
+					const history = message.statusHistory ?? [];
+					const existing = entry.call_id
+						? history.findIndex(
+								(item: any) => item?.action === 'tool_progress' && item?.call_id === entry.call_id
+							)
+						: -1;
+
+					if (existing >= 0) {
+						history[existing] = { ...history[existing], ...entry };
+						message.statusHistory = history;
+					} else {
+						message.statusHistory = [...history, entry];
+					}
 				} else if (type === 'context_compaction') {
 					handleContextCompactionStatus(data);
 				} else if (type === 'chat:active') {

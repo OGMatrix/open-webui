@@ -278,6 +278,9 @@ def get_model_management_root_url(url: str, provider: str) -> str:
 # something machine-readable are listed; the rest advertise nothing.
 MODEL_CAPABILITY_ENDPOINTS = {
     'llama.cpp': '/props',
+    # Hermes serves its capability document under /v1, so the path is relative
+    # to the configured base URL rather than to the host root.
+    'hermes': '/capabilities',
 }
 
 
@@ -306,9 +309,52 @@ def derive_llamacpp_capabilities(props: dict) -> dict:
     return capabilities
 
 
+def derive_hermes_capabilities(document: dict) -> dict:
+    """Read what a Hermes Agent server says it can do.
+
+    Unlike llama.cpp's /props, this describes the server rather than a loaded
+    model: Hermes is an agent, and the interesting facts are that it runs the
+    tools itself and that it reports their progress while it does.
+
+    Verified against a live 0.20.6 server; every field is read defensively
+    because the document has grown between releases.
+    """
+    if document.get('object') != 'hermes.api_server.capabilities':
+        return {}
+
+    features = document.get('features') or {}
+    runtime = document.get('runtime') or {}
+
+    capabilities = {
+        'agent': True,
+        # Tools execute on the Hermes host. Worth surfacing: the toolsets the
+        # agent brings are not the ones configured here.
+        'server_side_tools': runtime.get('tool_execution') == 'server',
+        'tool_progress': bool(features.get('tool_progress_events')),
+    }
+
+    description = runtime.get('description')
+    if isinstance(description, str) and description:
+        capabilities['runtime_description'] = description
+
+    for header_key, feature_key in (
+        ('session_header', 'session_continuity_header'),
+        ('session_key_header', 'session_key_header'),
+    ):
+        value = features.get(feature_key)
+        if isinstance(value, str) and value:
+            capabilities[header_key] = value
+
+    return capabilities
+
+
 def derive_provider_capabilities(provider: str, payload: dict) -> dict:
-    if provider == 'llama.cpp' and isinstance(payload, dict):
+    if not isinstance(payload, dict):
+        return {}
+    if provider == 'llama.cpp':
         return derive_llamacpp_capabilities(payload)
+    if provider == 'hermes':
+        return derive_hermes_capabilities(payload)
     return {}
 
 
