@@ -222,6 +222,8 @@
 				'animation',
 				'aurora',
 				'glow',
+				'grain',
+				'nebula',
 				'input animation',
 				'inputanimation',
 				'always on web search',

@@ -8,8 +8,18 @@
  * through a long prompt should not look the same.
  */
 
-export const GLOW_STYLES = ['off', 'sweep', 'pulse', 'aurora'] as const;
+export const GLOW_STYLES = ['off', 'sweep', 'pulse', 'aurora', 'nebula'] as const;
 export type GlowStyle = (typeof GLOW_STYLES)[number];
+
+/**
+ * Styles that light the field itself, not only its edge.
+ *
+ * These carry drifting blobs behind the text, so they cost more than a ring and
+ * are only built when one is actually chosen.
+ */
+const INTERIOR_STYLES = new Set<GlowStyle>(['aurora', 'nebula']);
+
+export const hasInterior = (style: GlowStyle): boolean => INTERIOR_STYLES.has(style);
 
 /**
  * The range worth distinguishing, in tokens per second.

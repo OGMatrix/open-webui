@@ -127,6 +127,8 @@
 	let generationGlowIntensity = 1;
 	/** null follows the theme; a number pins the palette to that hue. */
 	let generationGlowHue: number | null = null;
+	/** Film grain, laid over whichever style is running. */
+	let generationGlowGrain = false;
 
 	const settingRowClass = 'flex items-center justify-between gap-2.5';
 	const settingLabelClass = 'min-w-0 text-xs text-gray-600 dark:text-gray-400';
@@ -333,6 +335,7 @@
 			typeof currentSettings?.generationGlowHue === 'number'
 				? currentSettings.generationGlowHue
 				: null;
+		generationGlowGrain = currentSettings?.generationGlowGrain ?? false;
 		highContrastMode = currentSettings?.highContrastMode ?? false;
 
 		detectArtifacts = currentSettings?.detectArtifacts ?? true;
@@ -623,6 +626,7 @@
 					<option value="sweep">{$i18n.t('Sweep')}</option>
 					<option value="pulse">{$i18n.t('Pulse')}</option>
 					<option value="aurora">{$i18n.t('Aurora')}</option>
+					<option value="nebula">{$i18n.t('Nebula')}</option>
 				</select>
 			</div>
 		</div>
@@ -680,6 +684,26 @@
 					</span>
 				</div>
 			</div>
+		</div>
+
+		<div>
+			<div class={settingRowClass}>
+				<div id="generation-glow-grain-label" class={settingLabelClass}>
+					{$i18n.t('Film Grain')}
+				</div>
+
+				<div class={settingControlClass}>
+					<Switch
+						ariaLabelledbyId="generation-glow-grain-label"
+						tooltip={true}
+						bind:state={generationGlowGrain}
+						on:change={() => saveSettings({ generationGlowGrain })}
+					/>
+				</div>
+			</div>
+			<p class={settingDescriptionClass}>
+				{$i18n.t('A fine moving texture over the animation.')}
+			</p>
 		</div>
 
 		<div>

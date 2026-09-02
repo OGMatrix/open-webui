@@ -275,7 +275,9 @@ type Settings = {
 	notificationEnabled?: boolean;
 	highContrastMode?: boolean;
 	/** The animated frame on the input while a model answers. */
-	generationGlow?: 'off' | 'sweep' | 'pulse' | 'aurora';
+	generationGlow?: 'off' | 'sweep' | 'pulse' | 'aurora' | 'nebula';
+	/** Film grain over whichever style is running. */
+	generationGlowGrain?: boolean;
 	/** Multiplies its pace, 0.25 to 3. */
 	generationGlowSpeed?: number;
 	/** Scales its presence, 0 to 2. */

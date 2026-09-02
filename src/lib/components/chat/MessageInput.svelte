@@ -204,6 +204,7 @@
 	$: glowStyle = ($settings?.generationGlow ?? 'sweep') as GlowStyle;
 	$: glowSpeed = $settings?.generationGlowSpeed ?? 1;
 	$: glowIntensity = $settings?.generationGlowIntensity ?? 1;
+	$: glowGrain = $settings?.generationGlowGrain ?? false;
 	$: glowHue =
 		typeof $settings?.generationGlowHue === 'number' ? $settings.generationGlowHue : null;
 	$: canToggleTemporary =
@@ -2068,6 +2069,7 @@
 								speed={glowSpeed}
 								intensity={glowIntensity}
 								hue={glowHue}
+								grain={glowGrain}
 							/>
 
 							{#if atSelectedModel !== undefined}

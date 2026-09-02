@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { glowMotion, glowStyleAttribute, glowVariables } from './generationGlow';
+import {
+	GLOW_STYLES,
+	glowMotion,
+	glowStyleAttribute,
+	glowVariables,
+	hasInterior
+} from './generationGlow';
 
 describe('glowMotion', () => {
 	it('moves faster the faster the model answers', () => {
@@ -97,5 +103,26 @@ describe('the variables handed to CSS', () => {
 		const attribute = glowStyleAttribute(glowMotion(30));
 		expect(attribute).toContain('--glow-duration:');
 		expect(attribute.split(';')).toHaveLength(4);
+	});
+});
+
+describe('which styles light the field itself', () => {
+	it('knows the two that do', () => {
+		expect(hasInterior('aurora')).toBe(true);
+		expect(hasInterior('nebula')).toBe(true);
+	});
+
+	it('leaves the edge-only ones alone', () => {
+		// Building drifting blobs for a style that never shows them is work for
+		// nothing, on every frame.
+		expect(hasInterior('sweep')).toBe(false);
+		expect(hasInterior('pulse')).toBe(false);
+		expect(hasInterior('off')).toBe(false);
+	});
+
+	it('has an answer for every style that exists', () => {
+		for (const style of GLOW_STYLES) {
+			expect(typeof hasInterior(style)).toBe('boolean');
+		}
 	});
 });
