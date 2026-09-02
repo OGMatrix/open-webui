@@ -85,6 +85,9 @@
 	} from '$lib/utils/reasoning';
 	import { getOllamaModelInfo } from '$lib/apis/ollama';
 	import { getOpenAIModelCapabilities } from '$lib/apis/openai';
+	import GenerationGlow from './MessageInput/GenerationGlow.svelte';
+	import { getGenerationStatsView } from '$lib/utils/generationStats';
+	import type { GlowStyle } from '$lib/utils/generationGlow';
 	import ContextPanel from './MessageInput/ContextPanel.svelte';
 	import ContextIndicator from './MessageInput/ContextIndicator.svelte';
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte';
@@ -188,6 +191,21 @@
 			(history.currentId && history.messages[history.currentId]?.done != true) ||
 			generating);
 	$: canCompact = !!history?.currentId;
+
+	// The message being written right now, which is the only one whose speed
+	// there is anything to show. Reading history directly keeps this reactive:
+	// a helper would hide the dependency from Svelte and freeze the value.
+	$: streamingMessage =
+		generating && history?.currentId ? history.messages?.[history.currentId] : null;
+	$: glowView = streamingMessage?.generationStats
+		? getGenerationStatsView(streamingMessage.generationStats)
+		: null;
+
+	$: glowStyle = ($settings?.generationGlow ?? 'sweep') as GlowStyle;
+	$: glowSpeed = $settings?.generationGlowSpeed ?? 1;
+	$: glowIntensity = $settings?.generationGlowIntensity ?? 1;
+	$: glowHue =
+		typeof $settings?.generationGlowHue === 'number' ? $settings.generationGlowHue : null;
 	$: canToggleTemporary =
 		!embedded &&
 		!chatId &&
@@ -2042,6 +2060,16 @@
 								: ''}  transition px-0.5 bg-white/5 dark:bg-gray-500/5 backdrop-blur-sm dark:text-gray-100"
 							dir={$settings?.chatDirection ?? 'auto'}
 						>
+							<GenerationGlow
+								active={generating}
+								tokensPerSecond={glowView?.tokensPerSecond ?? null}
+								prefilling={glowView?.prefilling ?? false}
+								style={glowStyle}
+								speed={glowSpeed}
+								intensity={glowIntensity}
+								hue={glowHue}
+							/>
+
 							{#if atSelectedModel !== undefined}
 								<div class="px-2.5 pt-2.5 text-left w-full flex flex-col z-10">
 									<div class="flex items-center justify-between w-full">

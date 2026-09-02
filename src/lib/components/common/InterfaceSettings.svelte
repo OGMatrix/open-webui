@@ -120,6 +120,14 @@
 	let fontFamilyInput = '';
 	let showTextScaleSlider = false;
 	let showFontFamilyInput = false;
+	// The animated frame on the input while a model is answering. Off is a real
+	// choice: it is motion next to a text field, which not everybody wants.
+	let generationGlow = 'sweep';
+	let generationGlowSpeed = 1;
+	let generationGlowIntensity = 1;
+	/** null follows the theme; a number pins the palette to that hue. */
+	let generationGlowHue: number | null = null;
+
 	const settingRowClass = 'flex items-center justify-between gap-2.5';
 	const settingLabelClass = 'min-w-0 text-xs text-gray-600 dark:text-gray-400';
 	const settingControlClass = 'flex shrink-0 items-center justify-end gap-1.5';
@@ -318,6 +326,13 @@
 		autoTags = currentSettings?.autoTags ?? true;
 		autoFollowUps = currentSettings?.autoFollowUps ?? true;
 
+		generationGlow = currentSettings?.generationGlow ?? 'sweep';
+		generationGlowSpeed = currentSettings?.generationGlowSpeed ?? 1;
+		generationGlowIntensity = currentSettings?.generationGlowIntensity ?? 1;
+		generationGlowHue =
+			typeof currentSettings?.generationGlowHue === 'number'
+				? currentSettings.generationGlowHue
+				: null;
 		highContrastMode = currentSettings?.highContrastMode ?? false;
 
 		detectArtifacts = currentSettings?.detectArtifacts ?? true;
@@ -589,6 +604,119 @@
 			{$i18n.t('Use a local font family for the app interface.')}
 		</p>
 	</div>
+
+	<div>
+		<div class={settingRowClass}>
+			<div id="generation-glow-label" class={settingLabelClass}>
+				{$i18n.t('Input Animation While Answering')}
+			</div>
+
+			<div class={settingControlClass}>
+				<select
+					id="generation-glow-select"
+					aria-labelledby="generation-glow-label"
+					class="rounded-lg bg-transparent text-xs text-gray-700 outline-hidden dark:text-gray-300"
+					bind:value={generationGlow}
+					on:change={() => saveSettings({ generationGlow })}
+				>
+					<option value="off">{$i18n.t('Off')}</option>
+					<option value="sweep">{$i18n.t('Sweep')}</option>
+					<option value="pulse">{$i18n.t('Pulse')}</option>
+					<option value="aurora">{$i18n.t('Aurora')}</option>
+				</select>
+			</div>
+		</div>
+		<p class={settingDescriptionClass}>
+			{$i18n.t('The frame follows how fast the model is answering.')}
+		</p>
+	</div>
+
+	{#if generationGlow !== 'off'}
+		<div>
+			<div class={settingRowClass}>
+				<div id="generation-glow-speed-label" class={settingLabelClass}>
+					{$i18n.t('Animation Speed')}
+				</div>
+
+				<div class="{settingControlClass} w-40">
+					<input
+						class="w-full"
+						type="range"
+						min="0.25"
+						max="3"
+						step="0.05"
+						bind:value={generationGlowSpeed}
+						on:change={() => saveSettings({ generationGlowSpeed })}
+						aria-labelledby="generation-glow-speed-label"
+						aria-valuetext={`${generationGlowSpeed}x`}
+					/>
+					<span class="w-10 shrink-0 text-right text-xs tabular-nums text-gray-500">
+						{generationGlowSpeed}x
+					</span>
+				</div>
+			</div>
+		</div>
+
+		<div>
+			<div class={settingRowClass}>
+				<div id="generation-glow-intensity-label" class={settingLabelClass}>
+					{$i18n.t('Animation Intensity')}
+				</div>
+
+				<div class="{settingControlClass} w-40">
+					<input
+						class="w-full"
+						type="range"
+						min="0"
+						max="2"
+						step="0.05"
+						bind:value={generationGlowIntensity}
+						on:change={() => saveSettings({ generationGlowIntensity })}
+						aria-labelledby="generation-glow-intensity-label"
+						aria-valuetext={`${generationGlowIntensity}`}
+					/>
+					<span class="w-10 shrink-0 text-right text-xs tabular-nums text-gray-500">
+						{generationGlowIntensity}
+					</span>
+				</div>
+			</div>
+		</div>
+
+		<div>
+			<div class={settingRowClass}>
+				<div id="generation-glow-hue-label" class={settingLabelClass}>
+					{$i18n.t('Animation Colour')}
+				</div>
+
+				<div class="{settingControlClass} w-40">
+					<input
+						class="glow-hue w-full"
+						type="range"
+						min="0"
+						max="360"
+						step="1"
+						value={generationGlowHue ?? 250}
+						on:input={(event) => {
+							generationGlowHue = Number(event.currentTarget.value);
+						}}
+						on:change={() => saveSettings({ generationGlowHue })}
+						aria-labelledby="generation-glow-hue-label"
+						aria-valuetext={`${generationGlowHue ?? 250}`}
+					/>
+					<button
+						type="button"
+						class="w-10 shrink-0 text-right text-xs text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+						on:click={() => {
+							generationGlowHue = null;
+							saveSettings({ generationGlowHue: null });
+						}}
+					>
+						{$i18n.t('Reset')}
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<div>
 		<div class={settingRowClass}>

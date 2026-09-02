@@ -274,6 +274,14 @@ type Settings = {
 	showUsername?: boolean;
 	notificationEnabled?: boolean;
 	highContrastMode?: boolean;
+	/** The animated frame on the input while a model answers. */
+	generationGlow?: 'off' | 'sweep' | 'pulse' | 'aurora';
+	/** Multiplies its pace, 0.25 to 3. */
+	generationGlowSpeed?: number;
+	/** Scales its presence, 0 to 2. */
+	generationGlowIntensity?: number;
+	/** Hue in degrees, or absent to follow the theme. */
+	generationGlowHue?: number | null;
 	title?: TitleSettings;
 	showChatTitleInTab?: boolean;
 	splitLargeDeltas?: boolean;
