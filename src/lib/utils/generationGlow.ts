@@ -8,7 +8,15 @@
  * through a long prompt should not look the same.
  */
 
-export const GLOW_STYLES = ['off', 'sweep', 'pulse', 'aurora', 'nebula'] as const;
+export const GLOW_STYLES = [
+	'off',
+	'sweep',
+	'pulse',
+	'aurora',
+	'nebula',
+	'ripple',
+	'meter'
+] as const;
 export type GlowStyle = (typeof GLOW_STYLES)[number];
 
 /**
@@ -18,6 +26,14 @@ export type GlowStyle = (typeof GLOW_STYLES)[number];
  * are only built when one is actually chosen.
  */
 const INTERIOR_STYLES = new Set<GlowStyle>(['aurora', 'nebula']);
+
+/** Styles that answer to each arrival of text rather than to a smoothed rate. */
+const ARRIVAL_STYLES = new Set<GlowStyle>(['ripple']);
+
+export const respondsToArrivals = (style: GlowStyle): boolean => ARRIVAL_STYLES.has(style);
+
+/** Styles that draw the recent history of the rate rather than its present value. */
+export const showsHistory = (style: GlowStyle): boolean => style === 'meter';
 
 export const hasInterior = (style: GlowStyle): boolean => INTERIOR_STYLES.has(style);
 
@@ -97,3 +113,79 @@ export const glowStyleAttribute = (motion: GlowMotion): string =>
 	Object.entries(glowVariables(motion))
 		.map(([name, value]) => `${name}: ${value}`)
 		.join('; ');
+
+/**
+ * Whether enough has passed to emit another ripple.
+ *
+ * Tokens arrive many times a second, and a ring for every one of them would be
+ * a strobe rather than a rhythm. Rings are spaced far enough apart to be told
+ * apart, so a fast model rings steadily rather than blurring into a haze.
+ */
+export const RIPPLE_MIN_GAP_MS = 110;
+
+export const shouldRipple = (lastAt: number, now: number, minGapMs = RIPPLE_MIN_GAP_MS): boolean =>
+	now - lastAt >= minGapMs;
+
+/** How many samples of the rate the meter keeps. */
+export const METER_SAMPLES = 32;
+
+/**
+ * Adds one reading to the rolling history, dropping the oldest.
+ *
+ * A reading that could not be taken is kept as a zero rather than skipped: a
+ * stall is part of the shape of a generation, and closing the gap would hide
+ * exactly the moment worth seeing.
+ */
+export const pushRate = (
+	history: number[],
+	rate: number | null | undefined,
+	max = METER_SAMPLES
+): number[] => {
+	const value = typeof rate === 'number' && Number.isFinite(rate) && rate > 0 ? rate : 0;
+	const next = [...history, value];
+	return next.length > max ? next.slice(next.length - max) : next;
+};
+
+/**
+ * Bar heights from 0 to 1 for the meter, scaled to the tallest reading seen.
+ *
+ * Scaling to the window's own peak rather than to a fixed ceiling keeps the
+ * shape legible whether a model runs at four tokens a second or at ninety;
+ * what is being shown is how steady it is, not how it compares to some other
+ * model.
+ */
+export const meterBars = (history: number[], count = METER_SAMPLES): number[] => {
+	const window = history.slice(-count);
+	if (window.length === 0) {
+		return [];
+	}
+
+	const peak = Math.max(...window);
+	if (peak <= 0) {
+		return window.map(() => 0);
+	}
+
+	// A floor keeps a bar visible at a rate too low to draw otherwise, so the
+	// meter reads as quiet rather than as broken.
+	return window.map((value) => Math.max(0.06, Math.min(1, value / peak)));
+};
+
+/**
+ * How much of the frame the prompt has been read through, 0 to 1.
+ *
+ * The wait before the first token is the least explained part of a generation,
+ * and on a long prompt it is also the longest. Where a provider reports its
+ * progress, the frame can fill with it instead of spinning through it.
+ */
+export const prefillFraction = (
+	prefill: { percent?: number } | null | undefined
+): number | null => {
+	const percent = prefill?.percent;
+	if (typeof percent !== 'number' || !Number.isFinite(percent)) {
+		return null;
+	}
+	// Providers report this as a percentage in some builds and a fraction in
+	// others; both mean the same thing and both have to land in 0..1.
+	const fraction = percent > 1 ? percent / 100 : percent;
+	return Math.min(1, Math.max(0, fraction));
+};

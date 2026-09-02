@@ -4,7 +4,13 @@ import {
 	glowMotion,
 	glowStyleAttribute,
 	glowVariables,
-	hasInterior
+	hasInterior,
+	meterBars,
+	prefillFraction,
+	pushRate,
+	respondsToArrivals,
+	shouldRipple,
+	showsHistory
 } from './generationGlow';
 
 describe('glowMotion', () => {
@@ -123,6 +129,105 @@ describe('which styles light the field itself', () => {
 	it('has an answer for every style that exists', () => {
 		for (const style of GLOW_STYLES) {
 			expect(typeof hasInterior(style)).toBe('boolean');
+		}
+	});
+});
+
+describe('ripples, one per arrival of text', () => {
+	it('spaces rings far enough apart to be told apart', () => {
+		// Tokens arrive many times a second; a ring for each would be a strobe.
+		expect(shouldRipple(1000, 1000)).toBe(false);
+		expect(shouldRipple(1000, 1050)).toBe(false);
+		expect(shouldRipple(1000, 1200)).toBe(true);
+	});
+
+	it('lets the gap be tuned', () => {
+		expect(shouldRipple(0, 50, 40)).toBe(true);
+		expect(shouldRipple(0, 50, 400)).toBe(false);
+	});
+
+	it('rings on the first arrival, with no previous one to wait for', () => {
+		expect(shouldRipple(0, Date.now())).toBe(true);
+	});
+});
+
+describe('the rate history behind the meter', () => {
+	it('keeps the newest readings and drops the oldest', () => {
+		let history: number[] = [];
+		for (let i = 1; i <= 40; i += 1) history = pushRate(history, i, 8);
+		expect(history).toEqual([33, 34, 35, 36, 37, 38, 39, 40]);
+	});
+
+	it('records a stall as a zero rather than skipping it', () => {
+		// Closing the gap would hide exactly the moment worth seeing.
+		expect(pushRate([10, 12], null)).toEqual([10, 12, 0]);
+		expect(pushRate([10], NaN)).toEqual([10, 0]);
+		expect(pushRate([10], -4)).toEqual([10, 0]);
+	});
+
+	it('scales the bars to the window it is showing', () => {
+		// The same shape, ten times faster, has to look the same.
+		expect(meterBars([2, 4, 8])).toEqual(meterBars([20, 40, 80]));
+	});
+
+	it('puts the tallest reading at the top', () => {
+		const bars = meterBars([5, 20, 10]);
+		expect(bars[1]).toBe(1);
+		expect(bars[0]).toBeLessThan(bars[1]);
+	});
+
+	it('keeps a quiet stretch visible instead of blank', () => {
+		const bars = meterBars([100, 1, 1]);
+		expect(bars[1]).toBeGreaterThan(0);
+	});
+
+	it('survives a history that is empty or all stalled', () => {
+		expect(meterBars([])).toEqual([]);
+		expect(meterBars([0, 0, 0])).toEqual([0, 0, 0]);
+	});
+
+	it('shows only as many bars as asked for', () => {
+		expect(meterBars([1, 2, 3, 4, 5], 3)).toHaveLength(3);
+	});
+});
+
+describe('the prompt-reading fill', () => {
+	it('reads a percentage', () => {
+		expect(prefillFraction({ percent: 42 })).toBeCloseTo(0.42, 5);
+	});
+
+	it('reads a fraction just as well', () => {
+		// Providers disagree about which they report; both mean the same thing.
+		expect(prefillFraction({ percent: 0.42 })).toBeCloseTo(0.42, 5);
+	});
+
+	it('never leaves the frame', () => {
+		expect(prefillFraction({ percent: 140 })).toBe(1);
+		expect(prefillFraction({ percent: -5 })).toBe(0);
+	});
+
+	it('says nothing when the provider reported nothing', () => {
+		expect(prefillFraction(null)).toBeNull();
+		expect(prefillFraction({})).toBeNull();
+		expect(prefillFraction({ percent: NaN })).toBeNull();
+	});
+});
+
+describe('what each style is driven by', () => {
+	it('knows which one answers to arrivals', () => {
+		expect(respondsToArrivals('ripple')).toBe(true);
+		expect(respondsToArrivals('sweep')).toBe(false);
+	});
+
+	it('knows which one draws the history', () => {
+		expect(showsHistory('meter')).toBe(true);
+		expect(showsHistory('nebula')).toBe(false);
+	});
+
+	it('has an answer for every style', () => {
+		for (const style of GLOW_STYLES) {
+			expect(typeof respondsToArrivals(style)).toBe('boolean');
+			expect(typeof showsHistory(style)).toBe('boolean');
 		}
 	});
 });

@@ -2070,6 +2070,8 @@
 								intensity={glowIntensity}
 								hue={glowHue}
 								grain={glowGrain}
+								tokens={glowView?.tokens ?? 0}
+								prefill={glowView?.prefill ?? null}
 							/>
 
 							{#if atSelectedModel !== undefined}

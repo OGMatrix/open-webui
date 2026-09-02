@@ -224,6 +224,8 @@
 				'glow',
 				'grain',
 				'nebula',
+				'ripple',
+				'meter',
 				'input animation',
 				'inputanimation',
 				'always on web search',

@@ -1,8 +1,15 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import {
 		glowStyleAttribute,
 		glowMotion,
 		hasInterior,
+		meterBars,
+		prefillFraction,
+		pushRate,
+		respondsToArrivals,
+		shouldRipple,
+		showsHistory,
 		type GlowStyle
 	} from '$lib/utils/generationGlow';
 
@@ -22,10 +29,89 @@
 	export let hue: number | null = null;
 	/** Lay film grain over whatever else is running. */
 	export let grain = false;
+	/** Running token count, which is how the frame knows text has arrived. */
+	export let tokens = 0;
+	/** Prompt-reading progress, where the provider reports any. */
+	export let prefill: { percent?: number } | null = null;
+
+	/** Rings currently expanding, oldest first. */
+	let ripples: { id: number }[] = [];
+	let rippleId = 0;
+	let lastRippleAt = 0;
+	let lastTokens = 0;
+	let rippleTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/** Recent readings of the rate, for the meter. */
+	let rateHistory: number[] = [];
+	let meterTimer: ReturnType<typeof setInterval> | null = null;
+
+	/**
+	 * A ring for every arrival of text, spaced so they can be told apart.
+	 *
+	 * At most a handful live at once: a ring that has faded is still an element
+	 * the browser composites, and a fast model would otherwise leave hundreds.
+	 */
+	const emitRipple = () => {
+		const now = Date.now();
+		if (!shouldRipple(lastRippleAt, now)) {
+			return;
+		}
+		lastRippleAt = now;
+		rippleId += 1;
+		ripples = [...ripples, { id: rippleId }].slice(-4);
+
+		if (rippleTimer) clearTimeout(rippleTimer);
+		rippleTimer = setTimeout(() => {
+			ripples = [];
+			rippleTimer = null;
+		}, 1400);
+	};
+
+	$: if (active && respondsToArrivals(style) && tokens > lastTokens) {
+		lastTokens = tokens;
+		emitRipple();
+	}
+
+	// A generation that ended leaves nothing behind for the next one to inherit.
+	$: if (!active) {
+		lastTokens = 0;
+		ripples = [];
+		rateHistory = [];
+	}
+
+	/**
+	 * The meter samples on its own clock rather than on arrivals.
+	 *
+	 * Bars have to be evenly spaced in time to mean anything: sampling whenever
+	 * text happened to arrive would draw a picture of the chunking, not of the
+	 * speed.
+	 */
+	$: if (active && showsHistory(style)) {
+		if (!meterTimer) {
+			meterTimer = setInterval(() => {
+				rateHistory = pushRate(rateHistory, tokensPerSecond);
+			}, 260);
+		}
+	} else if (meterTimer) {
+		clearInterval(meterTimer);
+		meterTimer = null;
+	}
+
+	onDestroy(() => {
+		if (meterTimer) clearInterval(meterTimer);
+		if (rippleTimer) clearTimeout(rippleTimer);
+	});
+
+	$: bars = showsHistory(style) ? meterBars(rateHistory) : [];
+	$: progress = prefilling ? prefillFraction(prefill) : null;
 
 	$: motion = glowMotion(tokensPerSecond, { prefilling, speedScale: speed, intensity });
 
-	$: variables = [glowStyleAttribute(motion), hue === null ? '' : `--glow-hue: ${hue}`]
+	$: variables = [
+		glowStyleAttribute(motion),
+		hue === null ? '' : `--glow-hue: ${hue}`,
+		progress === null ? '' : `--glow-progress: ${progress.toFixed(4)}`
+	]
 		.filter(Boolean)
 		.join('; ');
 
@@ -39,7 +125,12 @@
 		animations keep running on the compositor instead of being restarted
 		whenever the measured rate moves.
 	-->
-	<div class="generation-glow glow-{style}" style={variables} aria-hidden="true">
+	<div
+		class="generation-glow glow-{style}"
+		class:glow-reading={progress !== null}
+		style={variables}
+		aria-hidden="true"
+	>
 		{#if hasInterior(style)}
 			<!--
 				Three lights, blurred far past their own size and drifting on
@@ -50,6 +141,31 @@
 				<span class="glow-blob glow-blob-a"></span>
 				<span class="glow-blob glow-blob-b"></span>
 				<span class="glow-blob glow-blob-c"></span>
+			</div>
+		{/if}
+
+		{#if respondsToArrivals(style)}
+			<!--
+				One ring per arrival of text, expanding from the edge. This is the
+				only layer driven by the writing itself rather than by an average
+				of it, so a model that stops for a moment visibly stops.
+			-->
+			<div class="glow-ripples">
+				{#each ripples as ring (ring.id)}
+					<span class="glow-ring"></span>
+				{/each}
+			</div>
+		{/if}
+
+		{#if showsHistory(style) && bars.length > 0}
+			<!--
+				The last few seconds of the rate, along the bottom edge. Not just
+				how fast the model is now, but whether it has been steady.
+			-->
+			<div class="glow-histogram">
+				{#each bars as height, index (index)}
+					<span class="glow-bar" style="--bar: {height.toFixed(3)}"></span>
+				{/each}
 			</div>
 		{/if}
 
@@ -314,6 +430,104 @@
 		}
 	}
 
+	/*
+	 * While the prompt is being read, the ring stops travelling and fills to how
+	 * far through it is. The wait before the first token is the least explained
+	 * part of a generation and, on a long prompt, the longest; where a provider
+	 * counts its way through, the frame can say so instead of spinning.
+	 */
+	.glow-reading::before,
+	.glow-reading::after {
+		background: conic-gradient(
+			from -90deg,
+			var(--glow-a) 0deg,
+			var(--glow-b) calc(var(--glow-progress, 0) * 360deg),
+			transparent calc(var(--glow-progress, 0) * 360deg)
+		);
+		animation: none;
+		/* The fill catches up smoothly rather than stepping between reports. */
+		transition: background 300ms linear;
+	}
+
+	/* ── ripple: a ring for every arrival of text ───────────────────────── */
+	.glow-ripples {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		overflow: hidden;
+	}
+
+	.glow-ripple::before,
+	.glow-ripple::after {
+		background: linear-gradient(90deg, var(--glow-a), var(--glow-b), var(--glow-a));
+		animation: glow-breathe calc(var(--glow-duration, 3s) * 2) ease-in-out infinite;
+	}
+
+	.glow-ring {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		border: 1.5px solid var(--glow-b);
+		opacity: 0;
+		/* Rings expand and fade; overlapping ones are the point, not a fault. */
+		animation: glow-ring-out 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+		will-change: transform, opacity;
+	}
+
+	@keyframes glow-ring-out {
+		0% {
+			transform: scale(0.94);
+			opacity: 0.75;
+		}
+		100% {
+			transform: scale(1.06);
+			opacity: 0;
+		}
+	}
+
+	/*
+	 * meter: the last few seconds of the rate.
+	 *
+	 * The bar strip is called histogram, not meter: the root element already
+	 * carries glow-meter for the chosen style, and a layer sharing that name
+	 * had the strip's own layout land on the root as well.
+	 */
+	.glow-histogram {
+		position: absolute;
+		right: 1.25rem;
+		bottom: 0;
+		left: 1.25rem;
+		display: flex;
+		align-items: flex-end;
+		gap: 2px;
+		/*
+		 * A definite height, not a percentage: a percentage inside a flex
+		 * container is resolved against a height the container does not have
+		 * until its own children are laid out, and the bars came out a pixel tall.
+		 */
+		height: 20px;
+		border-radius: inherit;
+		/* Fades out towards the top so bars grow out of the edge, not off a shelf. */
+		-webkit-mask: linear-gradient(to top, #000 10%, transparent 95%);
+		mask: linear-gradient(to top, #000 10%, transparent 95%);
+	}
+
+	.glow-bar {
+		flex: 1 1 0;
+		min-width: 0;
+		/* Measured off the same definite height the container was given. */
+		height: calc(var(--bar, 0) * 20px);
+		border-radius: 2px 2px 0 0;
+		background: linear-gradient(to top, var(--glow-a), var(--glow-b));
+		/* Each new reading rises into place instead of appearing at its height. */
+		transition: height 240ms ease-out;
+	}
+
+	.glow-histogram::before,
+	.glow-histogram::after {
+		background: linear-gradient(90deg, var(--glow-a), var(--glow-b), var(--glow-a));
+	}
+
 	@keyframes glow-turn {
 		to {
 			--glow-angle: 360deg;
@@ -339,8 +553,14 @@
 		.generation-glow::before,
 		.generation-glow::after,
 		.glow-blob,
-		.glow-grain {
+		.glow-grain,
+		.glow-ring {
 			animation: none;
+		}
+
+		/* A ring that cannot expand should not sit there as a static outline. */
+		.glow-ring {
+			display: none;
 		}
 
 		.generation-glow::before,

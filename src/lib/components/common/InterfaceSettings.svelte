@@ -627,6 +627,8 @@
 					<option value="pulse">{$i18n.t('Pulse')}</option>
 					<option value="aurora">{$i18n.t('Aurora')}</option>
 					<option value="nebula">{$i18n.t('Nebula')}</option>
+					<option value="ripple">{$i18n.t('Ripple')}</option>
+					<option value="meter">{$i18n.t('Meter')}</option>
 				</select>
 			</div>
 		</div>
