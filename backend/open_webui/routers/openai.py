@@ -1213,6 +1213,90 @@ class ConnectionVerificationForm(BaseModel):
     config: dict | None = None
 
 
+# Toolset labels arrive with a leading emoji ("🔍 Web Search & Scraping"). The
+# name is what matters; the picture is drawn here from the icon set the rest of
+# the interface uses, so the two do not disagree.
+_LEADING_SYMBOLS = re.compile(r'^[^\w(]+', re.UNICODE)
+
+
+def clean_toolset_label(label: str, fallback: str) -> str:
+    if not isinstance(label, str):
+        return fallback
+    cleaned = _LEADING_SYMBOLS.sub('', label).strip()
+    return cleaned or fallback
+
+
+async def fetch_hermes_document(session, url: str, path: str, headers, cookies):
+    """Reads one Hermes document, or None when it is not available."""
+    try:
+        async with session.get(
+            url=f'{url.rstrip("/")}{path}',
+            headers=headers,
+            cookies=cookies,
+            ssl=AIOHTTP_CLIENT_SESSION_SSL,
+        ) as response:
+            if response.status != 200:
+                return None
+            return await response.json(loads=JSONCodec.loads)
+    except Exception as e:
+        log.debug('hermes %s unavailable: %s', path, e)
+        return None
+
+
+@router.post('/hermes/info')
+async def get_hermes_info(
+    request: Request,
+    form_data: ConnectionVerificationForm,
+    user=Depends(get_admin_user),
+):
+    """What a Hermes Agent server is and what it brings.
+
+    Answering this in the connection form turns "the URL responded" into
+    something a person can act on: which agent, which version, and which of its
+    toolsets are actually switched on over there.
+    """
+    url = form_data.url
+    api_config = form_data.config or {}
+
+    async with aiohttp.ClientSession(trust_env=True, timeout=_MODEL_LIST_TIMEOUT) as session:
+        headers, cookies = await get_headers_and_cookies(request, url, form_data.key, api_config, user=user)
+
+        # /health answers without a key, so the server identifies itself even
+        # before anyone has pasted one.
+        health = await fetch_hermes_document(session, url, '/health', headers, cookies)
+        if not isinstance(health, dict) or health.get('platform') != 'hermes-agent':
+            return {'hermes': False}
+
+        capabilities = await fetch_hermes_document(session, url, '/capabilities', headers, cookies)
+        toolsets_document = await fetch_hermes_document(session, url, '/toolsets', headers, cookies)
+
+    toolsets = []
+    for entry in (toolsets_document or {}).get('data') or []:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get('name')
+        if not isinstance(name, str) or not name:
+            continue
+        toolsets.append(
+            {
+                'name': name,
+                'label': clean_toolset_label(entry.get('label'), name),
+                'description': entry.get('description') or '',
+                'enabled': bool(entry.get('enabled')),
+                'configured': bool(entry.get('configured', True)),
+                'tool_count': len(entry.get('tools') or []),
+            }
+        )
+
+    return {
+        'hermes': True,
+        'version': health.get('version') or '',
+        'model': (capabilities or {}).get('model') or '',
+        'capabilities': derive_hermes_capabilities(capabilities or {}),
+        'toolsets': toolsets,
+    }
+
+
 @router.post('/verify')
 async def verify_connection(
     request: Request,

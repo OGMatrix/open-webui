@@ -351,6 +351,44 @@ export const deleteProviderModel = async (token: string, urlIdx: number, model: 
 	return res;
 };
 
+/**
+ * What a Hermes Agent server is and what it brings.
+ *
+ * Returns `{ hermes: false }` for anything that is not one, so the caller can
+ * ask about any URL without knowing in advance.
+ */
+export const getHermesInfo = async (
+	token: string,
+	url: string,
+	key: string,
+	config: object = {}
+) => {
+	let error = null;
+
+	const res = await fetch(`${OPENAI_API_BASE_URL}/hermes/info`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			Authorization: `Bearer ${token}`
+		},
+		body: JSON.stringify({ url, key, config })
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err?.detail ?? err;
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
 export const verifyOpenAIConnection = async (
 	token: string = '',
 	connection: Record<string, any> = {},

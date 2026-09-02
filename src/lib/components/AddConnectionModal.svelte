@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { getContext, onMount } from 'svelte';
-	const i18n = getContext('i18n');
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 
-	import { verifyOpenAIConnection } from '$lib/apis/openai';
+	const i18n: Writable<i18nType> = getContext('i18n');
+
+	import { getHermesInfo, verifyOpenAIConnection } from '$lib/apis/openai';
 	import { verifyOllamaConnection } from '$lib/apis/ollama';
 
 	import Modal from '$lib/components/common/Modal.svelte';
@@ -12,6 +15,7 @@
 	import PencilSolid from '$lib/components/icons/PencilSolid.svelte';
 	import SensitiveInput from '$lib/components/common/SensitiveInput.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import HermesToolsets from './admin/Settings/Connections/HermesToolsets.svelte';
 	import Switch from '$lib/components/common/Switch.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import Tags from './common/Tags.svelte';
@@ -129,8 +133,31 @@
 
 		if (res) {
 			toast.success($i18n.t('Server connection verified'));
+			void loadHermesInfo();
 		}
 	};
+
+	/**
+	 * Asks whether this is a Hermes Agent, and what it brings.
+	 *
+	 * "The URL responded" is not much to go on. A Hermes server can say which
+	 * agent it runs and which of its toolsets are switched on over there, and
+	 * that is worth showing while someone is still setting the connection up.
+	 */
+	const loadHermesInfo = async () => {
+		hermesInfo = null;
+		if (!url) {
+			return;
+		}
+
+		hermesInfo = await getHermesInfo(localStorage.token, url, key, {
+			auth_type,
+			...(provider ? { provider } : {})
+		}).catch(() => null);
+	};
+
+	/** What the connected Hermes server reported, or null when it is not one. */
+	let hermesInfo: any = null;
 
 	const verifyHandler = () => {
 		if (ollama) {
@@ -608,10 +635,19 @@
 											<option value="azure">{$i18n.t('Azure OpenAI')}</option>
 											<option value="llama.cpp">{$i18n.t('llama.cpp')}</option>
 											<option value="lmstudio">{$i18n.t('LM Studio')}</option>
+											<option value="hermes">{$i18n.t('Hermes Agent')}</option>
 											<option value="litellm">{$i18n.t('LiteLLM')}</option>
 										</select>
 									</div>
 								</div>
+
+								{#if hermesInfo?.hermes}
+									<HermesToolsets
+										toolsets={hermesInfo.toolsets ?? []}
+										version={hermesInfo.version ?? ''}
+										model={hermesInfo.model ?? ''}
+									/>
+								{/if}
 							{/if}
 
 							{#if azure}
