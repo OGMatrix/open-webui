@@ -124,6 +124,46 @@ export const glowMotion = (
 };
 
 /**
+ * How many tokens to see before fixing the pace for this answer.
+ *
+ * The reported rate is a running average, so it is noisy at first and settles
+ * as tokens accumulate. Around here the estimate is within roughly a sixth of
+ * the truth, which on a logarithmic curve from 2 to 120 is a fifth of a second
+ * on a turn of two and a half — closer than anyone can see, and soon enough at
+ * any speed that the frame is not stuck at a placeholder pace for long.
+ */
+export const PACE_SETTLE_TOKENS = 32;
+
+/**
+ * The rate to draw at: measured once, early, and then held for the answer.
+ *
+ * Following the live rate meant every reading changed the turn duration, the
+ * brightness and the bloom radius together, several times a second. Each of
+ * those is a perturbation of its own — a re-synced animation clock, a fade
+ * restarted before it finished, a blurred layer re-rasterised — and together
+ * they made a frame that was never still. That reads as broken, whatever any
+ * single measurement says about it.
+ *
+ * What the frame is for survives being held: a local model grinding along and
+ * a hosted one racing still look nothing alike. What is lost is second-by-
+ * second responsiveness within one answer, which nobody was reading anyway.
+ */
+export const settledRate = (
+	reported: number | null | undefined,
+	held: number | null,
+	tokens: number,
+	settleAt: number = PACE_SETTLE_TOKENS
+): number | null => {
+	if (held !== null) {
+		return held;
+	}
+	if (typeof reported !== 'number' || !Number.isFinite(reported) || reported <= 0) {
+		return null;
+	}
+	return tokens >= settleAt ? reported : null;
+};
+
+/**
  * Animations whose duration is a fixed multiple of `--glow-duration`.
  *
  * Changing a running animation's duration keeps the elapsed time and recomputes

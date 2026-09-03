@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	GLOW_STYLES,
 	isPacedAnimation,
+	PACE_SETTLE_TOKENS,
+	settledRate,
 	PACED_ANIMATIONS,
 	rephaseFactor,
 	glowMotion,
@@ -382,5 +384,43 @@ describe('recognising a paced animation by the name the browser reports', () => 
 		expect(isPacedAnimation('')).toBe(false);
 		expect(isPacedAnimation(null)).toBe(false);
 		expect(isPacedAnimation(undefined)).toBe(false);
+	});
+});
+
+describe('fixing the pace once instead of following it', () => {
+	it('says nothing until enough tokens have been seen', () => {
+		// A running average is noisy at first, and adopting it early would mean
+		// adopting it again a moment later.
+		expect(settledRate(34, null, 0)).toBeNull();
+		expect(settledRate(34, null, PACE_SETTLE_TOKENS - 1)).toBeNull();
+	});
+
+	it('adopts the rate once the estimate is worth something', () => {
+		expect(settledRate(34, null, PACE_SETTLE_TOKENS)).toBe(34);
+		expect(settledRate(34, null, 500)).toBe(34);
+	});
+
+	it('holds what it adopted, however the reading moves after', () => {
+		// The whole point: one value per answer, so nothing is perturbed twice.
+		expect(settledRate(88, 34, 900)).toBe(34);
+		expect(settledRate(null, 34, 900)).toBe(34);
+		expect(settledRate(undefined, 34, 900)).toBe(34);
+	});
+
+	it('waits rather than adopting a reading that is not one', () => {
+		for (const rate of [null, undefined, NaN, Infinity, 0, -3]) {
+			expect(settledRate(rate as number, null, 900)).toBeNull();
+		}
+	});
+
+	it('lets the caller ask for a different threshold', () => {
+		expect(settledRate(34, null, 4, 4)).toBe(34);
+		expect(settledRate(34, null, 3, 4)).toBeNull();
+	});
+
+	it('leaves the neutral pace in charge until it settles', () => {
+		// glowMotion reads null as "streaming, nothing measured" and picks the
+		// middle, which is what the frame shows for the first second or so.
+		expect(glowMotion(settledRate(34, null, 2)).energy).toBeCloseTo(0.5, 5);
 	});
 });

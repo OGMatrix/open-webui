@@ -4,6 +4,7 @@
 		glowStyleAttribute,
 		glowMotion,
 		isPacedAnimation,
+		settledRate,
 		rephaseFactor,
 		hasInterior,
 		meterBars,
@@ -81,6 +82,9 @@
 		lastTokens = 0;
 		ripples = [];
 		rateHistory = [];
+		// The next answer measures its own pace; inheriting one would show the
+		// last model's speed for the first second of the next model's turn.
+		heldRate = null;
 	}
 
 	/**
@@ -109,7 +113,31 @@
 	$: bars = showsHistory(style) ? meterBars(rateHistory) : [];
 	$: progress = prefilling ? prefillFraction(prefill) : null;
 
-	$: motion = glowMotion(tokensPerSecond, {
+	/**
+	 * The rate the frame is drawn at, taken once and then kept.
+	 *
+	 * Assigned from a function rather than in the reactive statement itself, so
+	 * reading the value it just wrote cannot re-enter it.
+	 */
+	let heldRate: number | null = null;
+
+	let settledAtTokens = 0;
+
+	const settle = (reported: number | null, count: number) => {
+		// A count that went backwards is a new answer, not a continuing one.
+		// `active` catches that in the chat, but the designer never lowers it:
+		// its simulation loops, and without this the preview would hold the pace
+		// of its first pass for as long as the panel stayed open.
+		if (count < settledAtTokens) {
+			heldRate = null;
+		}
+		settledAtTokens = count;
+		heldRate = settledRate(reported, heldRate, count);
+	};
+
+	$: settle(tokensPerSecond, tokens);
+
+	$: motion = glowMotion(heldRate, {
 		prefilling,
 		speedScale: speed,
 		intensity,
@@ -376,6 +404,13 @@
 		filter: blur(var(--glow-bloom, 10px));
 		opacity: 0.7;
 		z-index: -1;
+		/*
+		 * The radius changes when the pace is settled, and a blur that changes
+		 * is a layer re-rasterised: without this it lands as a pop. Two changes
+		 * an answer now, so the fade is cheap and the pop was the only thing
+		 * anyone would have noticed.
+		 */
+		transition: filter 400ms ease;
 	}
 
 	/*
