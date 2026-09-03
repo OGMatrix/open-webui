@@ -58,10 +58,8 @@ class ERROR_MESSAGES(str, Enum):
 
     INVALID_TOKEN = 'Your session has expired or the token is invalid. Please sign in again.'
     INVALID_CRED = 'The email or password provided is incorrect. Please check for typos and try logging in again.'
-    # The password was right and a code is now wanted. Said apart from
-    # INVALID_CRED so the sign-in form can ask for one instead of claiming
-    # the password was wrong.
-    TOTP_REQUIRED = 'A verification code from your authenticator app is required.'
+    # Shown as they are, in the settings panel. Sign-in does not use these: it
+    # answers with a token instead, so the form can pick the wording itself.
     TOTP_INVALID = 'That verification code is not valid. Codes change every 30 seconds.'
     TOTP_NOT_ENABLED = 'Two-factor authentication is not set up for this account.'
     INVALID_EMAIL_FORMAT = "The email format you entered is invalid. Please double-check and make sure you're using a valid email address (e.g., yourname@example.com)."

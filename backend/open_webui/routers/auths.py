@@ -1785,6 +1785,15 @@ class TotpDisableForm(BaseModel):
     code: str
 
 
+#: Tokens, not prose.
+#:
+#: These two do not go in front of anyone: they tell the sign-in form which of
+#: its states to be in, and it says the rest in the reader's own language. Every
+#: other error here is a message, and stays one.
+SECOND_FACTOR_REQUIRED = 'second_factor_required'
+SECOND_FACTOR_INVALID = 'second_factor_invalid'
+
+
 def _totp_available() -> None:
     """Refuse where a second factor would be meaningless or unreachable.
 
@@ -1811,7 +1820,7 @@ async def require_second_factor(user, code: str | None, db: AsyncSession) -> Non
         return
 
     if not code:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.TOTP_REQUIRED)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=SECOND_FACTOR_REQUIRED)
 
     secret = open_secret(sealed)
     if secret and verify_totp(secret, code, time.time()):
@@ -1824,7 +1833,7 @@ async def require_second_factor(user, code: str | None, db: AsyncSession) -> Non
         log.info('user %s signed in with a recovery code; %d left', user.id, len(remaining))
         return
 
-    raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.TOTP_INVALID)
+    raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=SECOND_FACTOR_INVALID)
 
 
 @router.get('/totp', response_model=TotpStatusResponse)

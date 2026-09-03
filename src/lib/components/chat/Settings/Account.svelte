@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import { onMount, getContext } from 'svelte';
 
 	import { user, config } from '$lib/stores';
@@ -13,6 +15,7 @@
 	import { getUserVariables, updateUserVariables } from '$lib/apis/users';
 
 	import UpdatePassword from './Account/UpdatePassword.svelte';
+	import TwoFactor from './Account/TwoFactor.svelte';
 	import { generateInitialsImage } from '$lib/utils';
 	import { copyToClipboard } from '$lib/utils';
 	import Dropdown from '$lib/components/common/Dropdown.svelte';
@@ -32,7 +35,7 @@
 	import SettingsSelect from '$lib/components/common/SettingsSelect.svelte';
 	import UserSettingSection from './UserSettingSection.svelte';
 
-	const i18n = getContext('i18n');
+	const i18n: Writable<i18nType> = getContext('i18n');
 
 	export let saveHandler: () => void | Promise<void>;
 
@@ -369,6 +372,15 @@
 		{#if $config?.features.enable_login_form && $config?.features.enable_password_change_form}
 			<UserSettingSection title={$i18n.t('Password')}>
 				<UpdatePassword />
+			</UserSettingSection>
+
+			<!--
+				Under the password, because it is the thing that stands behind it.
+				Shown on the same condition: without a password to sign in with,
+				there is no first factor for this to be second to.
+			-->
+			<UserSettingSection title={$i18n.t('Two-factor authentication')}>
+				<TwoFactor />
 			</UserSettingSection>
 		{/if}
 
