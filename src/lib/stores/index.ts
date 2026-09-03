@@ -354,6 +354,12 @@ type Config = {
 	status: boolean;
 	name: string;
 	version: string;
+	/** This fork's own build, stated beside upstream's version rather than over it. */
+	fork?: {
+		version: string;
+		repo_url: string;
+		release_url: string;
+	};
 	default_locale: string;
 	default_models: string;
 	default_pinned_models?: string | null;

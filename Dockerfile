@@ -194,6 +194,9 @@ COPY --chown=$UID:$GID --from=build /app/package.json /app/package.json
 # itself, that this build is an unofficial fork.
 COPY --chown=$UID:$GID --from=build /app/LICENSE /app/LICENSE_HISTORY /app/LICENSE_NOTICE /app/NOTICE-FORK.md /app/
 
+# The fork changelog is also what the interface reads its own version from.
+COPY --chown=$UID:$GID --from=build /app/CHANGELOG-FORK.md /app/CHANGELOG-FORK.md
+
 # copy backend files
 COPY --chown=$UID:$GID ./backend .
 

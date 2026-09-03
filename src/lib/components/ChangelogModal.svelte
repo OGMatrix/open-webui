@@ -1,18 +1,20 @@
 <script lang="ts">
 	import DOMPurify from 'dompurify';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 
 	import { getContext } from 'svelte';
 
 	import { WEBUI_NAME, config, settings } from '$lib/stores';
 
 	import { WEBUI_VERSION } from '$lib/constants';
-	import { getChangelog } from '$lib/apis';
+	import { getChangelog, getForkChangelog } from '$lib/apis';
 
 	import Modal from './common/Modal.svelte';
 	import { updateUserSettings } from '$lib/apis/users';
 	import XMark from '$lib/components/icons/XMark.svelte';
 
-	const i18n = getContext('i18n');
+	const i18n: Writable<i18nType> = getContext('i18n');
 
 	export let show = false;
 
@@ -25,7 +27,21 @@
 	};
 
 	let changelog: Record<string, ChangelogVersion> | null = null;
+	let forkChangelog: Record<string, ChangelogVersion> | null = null;
 	let error = false;
+
+	/*
+	 * What this fork changed, kept apart from what Open WebUI changed.
+	 *
+	 * Upstream's heading and release identifier above are left exactly as they
+	 * are — the source marks them as covered by the licence, and they are. This
+	 * is an addition beside them, labelled so that nothing here reads as
+	 * Open WebUI's own work.
+	 */
+	$: fork = $config?.fork ?? null;
+	$: forkVersion = fork?.version ?? '';
+	$: forkEntry = forkVersion ? (forkChangelog?.[forkVersion] ?? null) : null;
+	$: forkSections = forkEntry ? Object.keys(forkEntry).filter((section) => section !== 'date') : [];
 
 	const init = async () => {
 		if (changelog || error) {
@@ -36,6 +52,10 @@
 			error = true;
 			return null;
 		});
+
+		// Its absence is not an error: a build from before the first fork release
+		// simply has nothing of its own to report.
+		forkChangelog = await getForkChangelog().catch(() => null);
 	};
 
 	const closeModal = async () => {
@@ -80,6 +100,11 @@
 		const entries = changelog?.[version]?.[section];
 		return Array.isArray(entries) ? entries : [];
 	};
+
+	const getForkSectionEntries = (section: string) => {
+		const entries = forkEntry?.[section];
+		return Array.isArray(entries) ? entries : [];
+	};
 </script>
 
 <Modal
@@ -119,6 +144,74 @@
 		<div
 			class="min-h-0 flex-1 overflow-y-auto px-4 py-2 text-gray-700 scrollbar-hidden dark:text-gray-100"
 		>
+			{#if forkSections.length > 0}
+				<!--
+					This fork's own changes, named as such.
+
+					Set apart in its own frame and labelled, because the dialog around
+					it is Open WebUI's. Nothing below is altered or hidden; upstream's
+					notes follow in full, under their own versions.
+				-->
+				<section
+					class="mb-4 rounded-xl border border-gray-100 bg-gray-50/50 p-3 dark:border-gray-800 dark:bg-white/[0.02]"
+				>
+					<div class="mb-2 flex items-start justify-between gap-2">
+						<div class="min-w-0">
+							<h3 class="m-0 truncate text-sm font-normal text-gray-950 dark:text-white">
+								{$i18n.t('In this fork')} · v{forkVersion}
+							</h3>
+							<div class="mt-0.5 text-[0.6875rem] text-gray-400 dark:text-gray-500">
+								{$i18n.t('Changed here, and not part of Open WebUI')}
+							</div>
+						</div>
+
+						{#if fork?.release_url}
+							<a
+								href={fork.release_url}
+								target="_blank"
+								rel="noreferrer"
+								class="shrink-0 rounded-lg px-2 py-1 text-[0.6875rem] text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-white"
+							>
+								{$i18n.t('Release page')}
+							</a>
+						{/if}
+					</div>
+
+					{#each forkSections as section}
+						<div class="mb-3 w-full last:mb-0">
+							<div
+								class="mb-2 text-[0.6875rem] font-normal tracking-wide uppercase {section ===
+								'added'
+									? 'text-blue-600 dark:text-blue-300'
+									: section === 'fixed'
+										? 'text-green-600 dark:text-green-300'
+										: section === 'changed'
+											? 'text-yellow-700 dark:text-yellow-300'
+											: 'text-gray-500 dark:text-gray-400'}"
+							>
+								{section}
+							</div>
+
+							<div class="space-y-2 text-[0.8125rem] leading-relaxed">
+								{#each getForkSectionEntries(section) as entry}
+									<div class="flex gap-2.5">
+										<span
+											class="mt-[0.6em] h-1 w-1 shrink-0 rounded-full bg-gray-300 dark:bg-gray-700"
+										></span>
+										<div
+											class="markdown-prose-sm !max-w-none min-w-0 list-none !text-[0.8125rem] text-gray-600 dark:text-gray-300 [&_*]:!my-0 [&_b]:!font-normal [&_strong]:!font-normal"
+										>
+											<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+											{@html DOMPurify.sanitize(entry?.raw ?? '')}
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/each}
+				</section>
+			{/if}
+
 			{#if changelog}
 				<div class="space-y-4">
 					{#each Object.keys(changelog) as version}
