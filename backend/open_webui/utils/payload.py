@@ -96,6 +96,9 @@ def apply_params_to_form_data(form_data: dict, model: dict, params: dict | None 
         'system': str,
         'note_id': str,
         'tool_approval_mode': str,
+        # Decides what Open WebUI puts into the next prompt, not what the
+        # provider is asked for. Forwarding it would be an unknown field.
+        'replay_reasoning': bool,
     }
 
     for key in list(params.keys()):
@@ -151,6 +154,9 @@ def remove_open_webui_params(params: dict) -> dict:
         'system': str,
         'note_id': str,
         'tool_approval_mode': str,
+        # Decides what Open WebUI puts into the next prompt, not what the
+        # provider is asked for. Forwarding it would be an unknown field.
+        'replay_reasoning': bool,
     }
 
     for key in list(params.keys()):

@@ -21,6 +21,7 @@
 		stream_delta_chunk_size: null, // Set the chunk size for streaming responses
 		compact_token_threshold: null,
 		function_calling: null,
+		replay_reasoning: null,
 		reasoning_tags: null,
 		seed: null,
 		stop: null,
@@ -138,6 +139,42 @@
 					{#if params.stream_response === true}
 						<span class="ml-2 self-center">{$i18n.t('On')}</span>
 					{:else if params.stream_response === false}
+						<span class="ml-2 self-center">{$i18n.t('Off')}</span>
+					{:else}
+						<span class="ml-2 self-center">{$i18n.t('Default')}</span>
+					{/if}
+				</button>
+			</div>
+		</Tooltip>
+	</div>
+
+	<div>
+		<Tooltip
+			content={$i18n.t(
+				'Whether the thinking from earlier turns is sent back to the model. Turning this off keeps <think> blocks out of the next prompt, which stops some models imitating and nesting the tags until the reasoning display breaks, and leaves more of the context window for the conversation. Only Ollama and llama.cpp send it back at all.'
+			)}
+			placement="top-start"
+			className="inline-tooltip"
+		>
+			<div class="flex w-full justify-between py-0.5">
+				<div class="self-center text-xs">
+					{$i18n.t('Replay Thinking')}
+				</div>
+				<button
+					class="flex rounded-sm p-1 px-3 text-xs transition"
+					on:click={() => {
+						params.replay_reasoning =
+							(params?.replay_reasoning ?? null) === null
+								? true
+								: params.replay_reasoning
+									? false
+									: null;
+					}}
+					type="button"
+				>
+					{#if params.replay_reasoning === true}
+						<span class="ml-2 self-center">{$i18n.t('On')}</span>
+					{:else if params.replay_reasoning === false}
 						<span class="ml-2 self-center">{$i18n.t('Off')}</span>
 					{:else}
 						<span class="ml-2 self-center">{$i18n.t('Default')}</span>

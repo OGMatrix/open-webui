@@ -2176,9 +2176,18 @@ async def load_messages_from_db(chat_id: str, message_id: str) -> Optional[list[
     return [{k: v for k, v in msg.items() if k in MESSAGE_REPLAY_KEYS} for msg in db_messages]
 
 
-def get_reasoning_format(model: dict) -> str | None:
+def get_reasoning_format(model: dict, metadata: dict | None = None) -> str | None:
     """
     Determine how reasoning should be included in reconstructed messages.
+
+    A model may be told to send none of it back. Once a turn's thinking is in
+    the history, some models start imitating the tags they can see - nesting
+    them, inventing variants - until the frontend can no longer tell thinking
+    from answer. It is also the largest thing in a long chat that nobody reads
+    twice, so leaving it out buys back context as well.
+
+    Only Ollama and llama.cpp replay it at all; every other provider is already
+    given none, so the switch has nothing to do there.
 
     Returns:
         'thinking': Ollama expects reasoning in the native thinking field.
@@ -2186,6 +2195,9 @@ def get_reasoning_format(model: dict) -> str | None:
         'reasoning_content': llama.cpp supports reasoning_content as a top-level field.
         None: skip reasoning (safe default for strict providers).
     """
+    if ((metadata or {}).get('params') or {}).get('replay_reasoning') is False:
+        return None
+
     provider = model.get('provider', '')
     if model.get('owned_by') == 'ollama':
         return 'thinking'
@@ -2610,7 +2622,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     form_data['messages'] = process_messages_with_output(
         form_data.get('messages', []),
-        reasoning_format=get_reasoning_format(model),
+        reasoning_format=get_reasoning_format(model, metadata),
     )
     form_data['messages'] = sanitize_tool_pairs(form_data['messages'])
 
@@ -3512,7 +3524,7 @@ async def drain_approved_tool_calls(request, form_data, user, model, metadata) -
 
             form_data['messages'] = process_messages_with_output(
                 db_messages,
-                reasoning_format=get_reasoning_format(model),
+                reasoning_format=get_reasoning_format(model, metadata),
             )
             form_data['messages'] = sanitize_tool_pairs(form_data['messages'])
 
@@ -5093,7 +5105,7 @@ async def streaming_chat_response_handler(response, ctx):
                                                 'data': {'prompt_progress': prompt_progress},
                                             }
                                         )
-                                    
+
                                     raw_usage = data.get('usage', {}) or {}
                                     raw_usage.update(data.get('timings', {}))  # llama.cpp
                                     if raw_usage:
@@ -6080,14 +6092,14 @@ async def streaming_chat_response_handler(response, ctx):
                             new_form_data['messages'] = (
                                 [system_message] if system_message else []
                             ) + convert_output_to_messages(
-                                output, raw=True, reasoning_format=get_reasoning_format(model)
+                                output, raw=True, reasoning_format=get_reasoning_format(model, metadata)
                             )
                             new_form_data['previous_response_id'] = last_response_id
                         else:
                             tool_messages = convert_output_to_messages(
                                 output,
                                 raw=True,
-                                reasoning_format=get_reasoning_format(model),
+                                reasoning_format=get_reasoning_format(model, metadata),
                                 flatten_tool_images=True,
                             )
 
@@ -6337,7 +6349,7 @@ async def streaming_chat_response_handler(response, ctx):
                                     *convert_output_to_messages(
                                         output,
                                         raw=True,
-                                        reasoning_format=get_reasoning_format(model),
+                                        reasoning_format=get_reasoning_format(model, metadata),
                                         flatten_tool_images=True,
                                     ),
                                 ],
