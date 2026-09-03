@@ -92,7 +92,15 @@
 		[key: string]: any;
 	}[] = [];
 
-	export let className = 'w-[20rem]';
+	/*
+	 * Wide enough for a model name to survive.
+	 *
+	 * At the twenty rem this used to be, a run of qwen3.8-flash-next-80b-a3b-*
+	 * lost everything past "80b-a3b" and four rows named nothing. Four more rem
+	 * carries the part that actually picks one, and the panel is still capped
+	 * against the viewport below.
+	 */
+	export let className = 'w-[24rem]';
 	export let triggerClassName = 'text-lg';
 	export let placement: 'top' | 'bottom' | 'auto' = 'bottom';
 	export let align: 'start' | 'end' = 'start';
@@ -1137,7 +1145,7 @@
 			<div
 				bind:this={panelElement}
 				class="z-40 {className ??
-					'w-[20rem]'} max-w-[calc(100vw-1rem)] justify-start rounded-xl border border-gray-100 bg-white p-0.5 shadow-lg outline-hidden dark:border-gray-800 dark:bg-gray-850 dark:text-white flex flex-col overflow-hidden"
+					'w-[24rem]'} max-w-[calc(100vw-1rem)] justify-start rounded-xl border border-gray-100 bg-white p-0.5 shadow-lg outline-hidden dark:border-gray-800 dark:bg-gray-850 dark:text-white flex flex-col overflow-hidden"
 				style={dropdownPosition.maxHeight ? `max-height: ${dropdownPosition.maxHeight}px;` : ''}
 				transition:flyAndScale
 			>
@@ -1483,7 +1491,7 @@
 					<div class="hidden w-[28rem]" />
 					<div class="hidden w-[24rem]" />
 					<div class="hidden w-[22rem]" />
-					<div class="hidden w-[20rem]" />
+					<div class="hidden w-[24rem]" />
 				</slot>
 			</div>
 		</div>

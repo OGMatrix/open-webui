@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
 	GLOW_STYLES,
+	PACED_ANIMATIONS,
+	rephaseFactor,
 	glowMotion,
 	glowStyleAttribute,
 	glowVariables,
@@ -295,5 +297,56 @@ describe('spotting the answer being written', () => {
 		expect(streamingAssistantMessage({})).toBeNull();
 		expect(streamingAssistantMessage({ currentId: 'nope', messages: {} })).toBeNull();
 		expect(streamingAssistantMessage({ currentId: null, messages: null })).toBeNull();
+	});
+});
+
+describe('holding the phase when the pace changes', () => {
+	it('stretches the clock by the same factor the duration moved', () => {
+		expect(rephaseFactor(3, 1.5)).toBe(0.5);
+		expect(rephaseFactor(2, 4)).toBe(2);
+	});
+
+	it('does nothing on the first reading or on no change', () => {
+		// Touching the clocks either time would be motion introduced by the fix.
+		expect(rephaseFactor(null, 3)).toBeNull();
+		expect(rephaseFactor(undefined, 3)).toBeNull();
+		expect(rephaseFactor(3, 3)).toBeNull();
+	});
+
+	it('refuses a pace that cannot be divided by', () => {
+		expect(rephaseFactor(0, 3)).toBeNull();
+		expect(rephaseFactor(3, 0)).toBeNull();
+		expect(rephaseFactor(-2, 3)).toBeNull();
+		expect(rephaseFactor(NaN, 3)).toBeNull();
+		expect(rephaseFactor(3, Infinity)).toBeNull();
+	});
+
+	it('names the animations that follow the pace, and only those', () => {
+		// The grain and the ripple rings run on fixed durations; stretching
+		// their clocks would be the bug rather than the cure.
+		expect(PACED_ANIMATIONS.has('glow-turn')).toBe(true);
+		expect(PACED_ANIMATIONS.has('glow-drift-b')).toBe(true);
+		expect(PACED_ANIMATIONS.has('glow-grain-shift')).toBe(false);
+		expect(PACED_ANIMATIONS.has('glow-ring-out')).toBe(false);
+		expect(PACED_ANIMATIONS.has('glow-enter')).toBe(false);
+	});
+});
+
+describe('the duration the stylesheet actually receives', () => {
+	it('is the same number the phase correction is computed from', () => {
+		// Correcting against a value the stylesheet never saw would push the
+		// light off by exactly the difference.
+		for (const rate of [2, 7, 30, 61, 120]) {
+			const motion = glowMotion(rate);
+			expect(glowVariables(motion)['--glow-duration']).toBe(
+				`${motion.durationSeconds.toFixed(2)}s`
+			);
+			expect(Math.round(motion.durationSeconds * 100) / 100).toBe(motion.durationSeconds);
+		}
+	});
+
+	it('never rounds down to a standstill, even at the fastest setting', () => {
+		expect(glowMotion(120, { speedScale: 3 }).durationSeconds).toBeGreaterThan(0);
+		expect(glowMotion(120, { speedScale: 999 }).durationSeconds).toBeGreaterThan(0);
 	});
 });

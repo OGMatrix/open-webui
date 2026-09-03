@@ -97,8 +97,15 @@ export const glowMotion = (
 
 	energy = clamp(energy, 0, 1);
 
-	// A full turn takes six seconds when barely moving and one when flying.
-	const durationSeconds = clamp(6 - energy * 5, 0.6, 12) / speedScale;
+	/*
+	 * A full turn takes six seconds when barely moving and one when flying.
+	 *
+	 * Rounded to the same two decimals the CSS variable is written with. The
+	 * frame's phase is corrected whenever this changes, and correcting it
+	 * against a number the stylesheet never received would push the light off
+	 * by exactly the difference.
+	 */
+	const durationSeconds = Math.round((clamp(6 - energy * 5, 0.6, 12) / speedScale) * 100) / 100;
 
 	return {
 		energy,
@@ -114,6 +121,55 @@ export const glowMotion = (
 		 */
 		spillPx: intensity === 0 ? 0 : Math.round(clamp(spill * 22, 0, 60))
 	};
+};
+
+/**
+ * Animations whose duration is a fixed multiple of `--glow-duration`.
+ *
+ * Changing a running animation's duration keeps the elapsed time and recomputes
+ * the progress from it, so the light lurches to wherever `(t mod D) / D` now
+ * lands — measured at 349 degrees against an expected 7. The jump does not get
+ * smaller when the duration changes by less: past the first turn the two
+ * remainders have nothing to do with each other.
+ *
+ * Every one of these scales by the same factor as `--glow-duration` does, so
+ * multiplying each of their clocks by that factor holds the progress exactly
+ * where it was. The grain and the ripple rings are left out on purpose: their
+ * durations are fixed, and stretching their clocks would be the bug rather than
+ * the cure.
+ */
+export const PACED_ANIMATIONS = new Set([
+	'glow-turn',
+	'glow-breathe',
+	'glow-drift-a',
+	'glow-drift-b',
+	'glow-drift-c'
+]);
+
+/**
+ * How much to stretch those clocks when the pace changes, or null for nothing
+ * to do.
+ *
+ * The first reading has nothing to compare against, and a pace that has not
+ * moved needs no correction — touching the clocks either time would be motion
+ * introduced by the fix.
+ */
+export const rephaseFactor = (
+	previous: number | null | undefined,
+	next: number | null | undefined
+): number | null => {
+	if (
+		typeof previous !== 'number' ||
+		typeof next !== 'number' ||
+		!Number.isFinite(previous) ||
+		!Number.isFinite(next) ||
+		previous <= 0 ||
+		next <= 0 ||
+		previous === next
+	) {
+		return null;
+	}
+	return next / previous;
 };
 
 /** The CSS custom properties a frame needs, ready to drop on an element. */

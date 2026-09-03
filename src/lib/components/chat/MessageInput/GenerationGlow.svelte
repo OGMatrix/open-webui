@@ -1,8 +1,10 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, tick } from 'svelte';
 	import {
 		glowStyleAttribute,
 		glowMotion,
+		PACED_ANIMATIONS,
+		rephaseFactor,
 		hasInterior,
 		meterBars,
 		prefillFraction,
@@ -114,6 +116,53 @@
 		spill
 	});
 
+	/** The frame itself, so its running animations can be reached. */
+	let frame: HTMLDivElement | null = null;
+	let pacedSeconds: number | null = null;
+
+	/**
+	 * Keeps the light where it is when the pace changes.
+	 *
+	 * A running animation given a new duration keeps the time it has already
+	 * spent and works the progress out again from it, so the band lurches to
+	 * wherever `(t mod D) / D` now falls — measured at 349 degrees where 7 was
+	 * due. Since the rate is remeasured several times a second, that was most of
+	 * what a generation looked like.
+	 *
+	 * Every paced animation is the same fixed multiple of the duration, so all
+	 * of their clocks scale by one factor, and scaling each clock by it puts
+	 * every one back exactly where it was. Only when the number actually moves,
+	 * and only on the animations that follow it.
+	 */
+	const repace = async (seconds: number) => {
+		const factor = rephaseFactor(pacedSeconds, seconds);
+		pacedSeconds = seconds;
+		if (factor === null || !frame?.getAnimations) {
+			return;
+		}
+
+		// The new duration has to be on the elements before their clocks are
+		// read, or the correction is applied against the old one.
+		await tick();
+		if (!frame) {
+			return;
+		}
+
+		for (const animation of frame.getAnimations({ subtree: true })) {
+			const name = (animation as unknown as { animationName?: string }).animationName ?? '';
+			if (!PACED_ANIMATIONS.has(name)) {
+				continue;
+			}
+			const time = animation.currentTime;
+			if (typeof time === 'number') {
+				animation.currentTime = time * factor;
+			}
+		}
+	};
+
+	// Depends on the duration alone; `repace` assigns only its own bookkeeping.
+	$: repace(motion.durationSeconds);
+
 	$: variables = [
 		glowStyleAttribute(motion),
 		hue === null ? '' : `--glow-hue: ${hue}`,
@@ -197,6 +246,7 @@
 		whenever the measured rate moves.
 	-->
 	<div
+		bind:this={frame}
 		class="generation-glow glow-{style}"
 		class:glow-reading={progress !== null}
 		class:glow-leaving={leaving}

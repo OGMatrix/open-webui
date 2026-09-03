@@ -131,12 +131,29 @@
 			</div>
 
 			<div class="flex min-w-0 items-center">
-				<Tooltip content={`${item.label} (${item.value})`} placement="top-start">
-					<!-- The shared part of the name stays readable but steps back, so what
-					     separates this model from the rest is what the eye lands on. -->
-					<div class="line-clamp-1">
-						{#if parts.head}<span class="text-gray-400 dark:text-gray-500">{parts.head}</span
-							>{/if}{parts.body}{#if parts.tail}<span class="text-gray-400 dark:text-gray-500"
+				<Tooltip
+					content={`${item.label} (${item.value})`}
+					placement="top-start"
+					className="flex min-w-0"
+				>
+					<!--
+						The shared part of the name stays readable but steps back, so what
+						separates this model from the rest is what the eye lands on.
+
+						It is also the part that goes when the row runs out of room. What
+						tells qwen3.8-27b-mtp-256k from qwen3.8-27b-256k sits at the end,
+						exactly where a plain truncation cuts first, and four rows reading
+						"qwen3.8-27b-..." name nothing at all. The opening is muted and
+						already said by the heading above, so it gives way a thousand times
+						more readily than the part that does the telling.
+					-->
+					<div class="flex min-w-0 items-baseline whitespace-nowrap">
+						{#if parts.head}<span
+								class="name-head min-w-0 truncate text-gray-400 dark:text-gray-500"
+								>{parts.head}</span
+							>{/if}<span class="name-body min-w-0 truncate">{parts.body}</span
+						>{#if parts.tail}<span
+								class="name-tail min-w-0 truncate text-gray-400 dark:text-gray-500"
 								>{parts.tail}</span
 							>{/if}
 					</div>
@@ -366,3 +383,26 @@
 		{/if}
 	</div>
 </button>
+
+<style>
+	/*
+	 * Which part of a name gives way when the row is too narrow.
+	 *
+	 * Flex shrinks each item in proportion to its factor, so these are an order
+	 * of priority rather than three sizes: the muted opening collapses first and
+	 * takes its own ellipsis, the shared ending next, and the part that actually
+	 * picks this model out is the last thing to go. A row too narrow for even
+	 * that still shows its beginning, which is the best that is left.
+	 */
+	.name-head {
+		flex: 0 1000 auto;
+	}
+
+	.name-tail {
+		flex: 0 10 auto;
+	}
+
+	.name-body {
+		flex: 0 1 auto;
+	}
+</style>
