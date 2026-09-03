@@ -13,6 +13,27 @@ Releases are produced by the `Fork · Release` workflow, which writes this file.
 
 <!-- fork-release: new entries are inserted directly below this line -->
 
+## [0.11.3-ogm.2] - 2026-09-03
+
+Built on Open WebUI `0.11.3` (`upstream/dev` at `0cf48a04c`), fork commit `62279696f`.
+
+### Added
+
+- Say which model is warm, and where it comes from, before opening anything (1f88045b4)
+- Let this fork say which build it is, without touching upstream's (a239ba7a9)
+- Stop feeding a model its own thinking back, when asked (bb9c92fff)
+- Find the warm models without hunting for them (66f177d47)
+- A second factor, and a way back in without it (5aa231838)
+- Turn the second factor on, and be asked for it (b69a5c619)
+- Say what a tool was asked, instead of showing its JSON (62279696f)
+
+### Fixed
+
+- Stop the frame lurching every time the pace is remeasured (349b0f1b6)
+- Make the phase correction actually run, and give opacity its ease back (c6f362532)
+- Measure the pace once, and then let the frame be still (4d89a79b7)
+- Put back what a background tab misses, and stop printing code at people (26698852c)
+- Stop one malformed tool call from taking the whole answer with it (7d83eb482)
 ## [0.11.3-ogm.1] - 2026-09-02
 
 Built on Open WebUI `0.11.3` (`upstream/dev` at `0cf48a04c`), fork commit `fc295704f`.
