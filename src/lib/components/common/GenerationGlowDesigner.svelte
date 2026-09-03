@@ -5,6 +5,12 @@
 
 	import GenerationGlow from '$lib/components/chat/MessageInput/GenerationGlow.svelte';
 	import Switch from '$lib/components/common/Switch.svelte';
+	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
+	import LightBulb from '$lib/components/icons/LightBulb.svelte';
+	import Mic from '$lib/components/icons/Mic.svelte';
+	import PlusAlt from '$lib/components/icons/PlusAlt.svelte';
+	import Sparkles from '$lib/components/icons/Sparkles.svelte';
+	import Voice from '$lib/components/icons/Voice.svelte';
 	import { GLOW_STYLES, type GlowStyle } from '$lib/utils/generationGlow';
 	import { previewFrame, type PreviewFrame } from '$lib/utils/generationPreview';
 
@@ -151,15 +157,46 @@
 				{grain}
 			/>
 
-			<div class="relative z-10 flex items-center justify-between gap-3 px-4 py-3.5">
-				<span class="truncate text-sm text-gray-400 dark:text-gray-500">
+			<!--
+				The chat's own shape, not a rectangle standing in for it. The frame
+				is drawn around whatever it contains, and a single line of text is
+				not the height or the weight of the real thing — the light would sit
+				differently around it and the preview would be quietly wrong.
+
+				Inert on purpose: nothing here is a control, so none of it is a
+				button and none of it takes focus. What it has to do is take up the
+				same room.
+			-->
+			<div class="relative z-10 flex flex-col gap-1 px-3.5 pt-3 pb-2" aria-hidden="true">
+				<div class="truncate text-sm text-gray-400 dark:text-gray-500">
 					{$i18n.t('Send a Message')}
-				</span>
-				<span
-					class="shrink-0 font-mono text-[0.625rem] tracking-tight text-gray-400 tabular-nums dark:text-gray-500"
-				>
-					{phaseLine}
-				</span>
+				</div>
+
+				<div class="flex items-center justify-between gap-2">
+					<div class="flex shrink-0 items-center gap-0.5 text-gray-500 dark:text-gray-400">
+						<div class="p-1"><PlusAlt className="size-[1.125rem]" /></div>
+						<div class="p-1"><Sparkles className="size-[1.125rem]" /></div>
+						<div class="p-1"><Voice className="size-[1.125rem]" /></div>
+						<div class="p-1"><LightBulb className="size-[1.125rem]" /></div>
+					</div>
+
+					<div class="flex min-w-0 items-center gap-1.5">
+						<span
+							class="truncate font-mono text-[0.625rem] tracking-tight text-gray-400 tabular-nums dark:text-gray-500"
+						>
+							{phaseLine}
+						</span>
+						<ChevronDown className="size-2.5 shrink-0 text-gray-400 dark:text-gray-500" />
+						<div class="p-1 text-gray-500 dark:text-gray-400">
+							<Mic className="size-[1.125rem]" />
+						</div>
+						<div
+							class="flex size-7 shrink-0 items-center justify-center rounded-full bg-black text-white dark:bg-white dark:text-black"
+						>
+							<Voice className="size-4" />
+						</div>
+					</div>
+				</div>
 			</div>
 		</div>
 	</div>

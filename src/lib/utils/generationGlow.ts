@@ -147,6 +147,26 @@ export const PACED_ANIMATIONS = new Set([
 ]);
 
 /**
+ * Whether a running animation is one of those, by the name the browser reports.
+ *
+ * Svelte rewrites every `@keyframes` name in a component to `svelte-<hash>-`
+ * plus the original, so what comes back from `getAnimations()` is never the
+ * name written in the stylesheet. Comparing the two directly matched nothing at
+ * all, and the correction below it quietly did nothing for as long as it
+ * existed — the technique had been proven on a plain stylesheet, which is
+ * exactly the one place the rewriting does not happen.
+ *
+ * Anchored at both ends rather than a substring test, so a name that merely
+ * ends in one of these is not swept up with them.
+ */
+const SCOPED = /^(?:svelte-[a-z0-9]+-)?(.+)$/;
+
+export const isPacedAnimation = (name: string | null | undefined): boolean => {
+	const match = SCOPED.exec((name ?? '').trim());
+	return match ? PACED_ANIMATIONS.has(match[1]) : false;
+};
+
+/**
  * How much to stretch those clocks when the pace changes, or null for nothing
  * to do.
  *

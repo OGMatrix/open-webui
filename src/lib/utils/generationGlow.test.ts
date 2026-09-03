@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	GLOW_STYLES,
+	isPacedAnimation,
 	PACED_ANIMATIONS,
 	rephaseFactor,
 	glowMotion,
@@ -348,5 +349,38 @@ describe('the duration the stylesheet actually receives', () => {
 	it('never rounds down to a standstill, even at the fastest setting', () => {
 		expect(glowMotion(120, { speedScale: 3 }).durationSeconds).toBeGreaterThan(0);
 		expect(glowMotion(120, { speedScale: 999 }).durationSeconds).toBeGreaterThan(0);
+	});
+});
+
+describe('recognising a paced animation by the name the browser reports', () => {
+	it('accepts the scoped name, which is the only one that ever turns up', () => {
+		// Svelte rewrites every keyframes name in a component to svelte-<hash>-
+		// plus the original. Matching the bare name found nothing, and the
+		// correction did nothing at all for as long as it was written that way.
+		expect(isPacedAnimation('svelte-1d3uzbr-glow-turn')).toBe(true);
+		expect(isPacedAnimation('svelte-1d3uzbr-glow-drift-b')).toBe(true);
+	});
+
+	it('still accepts the bare name', () => {
+		expect(isPacedAnimation('glow-turn')).toBe(true);
+		expect(isPacedAnimation('glow-breathe')).toBe(true);
+	});
+
+	it('leaves the fixed-duration ones alone in either form', () => {
+		for (const name of ['glow-grain-shift', 'glow-ring-out', 'glow-enter', 'glow-leave']) {
+			expect(isPacedAnimation(name)).toBe(false);
+			expect(isPacedAnimation(`svelte-abc123-${name}`)).toBe(false);
+		}
+	});
+
+	it('does not sweep up a name that merely ends in one of them', () => {
+		expect(isPacedAnimation('some-other-glow-turn')).toBe(false);
+		expect(isPacedAnimation('glow-turnabout')).toBe(false);
+	});
+
+	it('survives nothing at all', () => {
+		expect(isPacedAnimation('')).toBe(false);
+		expect(isPacedAnimation(null)).toBe(false);
+		expect(isPacedAnimation(undefined)).toBe(false);
 	});
 });

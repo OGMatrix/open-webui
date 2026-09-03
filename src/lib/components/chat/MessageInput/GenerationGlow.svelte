@@ -3,7 +3,7 @@
 	import {
 		glowStyleAttribute,
 		glowMotion,
-		PACED_ANIMATIONS,
+		isPacedAnimation,
 		rephaseFactor,
 		hasInterior,
 		meterBars,
@@ -150,7 +150,7 @@
 
 		for (const animation of frame.getAnimations({ subtree: true })) {
 			const name = (animation as unknown as { animationName?: string }).animationName ?? '';
-			if (!PACED_ANIMATIONS.has(name)) {
+			if (!isPacedAnimation(name)) {
 				continue;
 			}
 			const time = animation.currentTime;
@@ -738,7 +738,20 @@
 	 * custom property lands exactly where the running state expects it.
 	 */
 	.generation-glow {
-		animation: glow-enter 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+		/*
+		 * `backwards`, not `both`.
+		 *
+		 * A filling animation outranks the base value, so with `both` the frame's
+		 * opacity was held at the last keyframe for good — and the transition
+		 * beneath it never ran again. Every remeasured rate then snapped the
+		 * brightness instead of easing it, which is the flicker that was visible
+		 * throughout a generation. Measured: 0.648 to 0.300 inside 60ms with
+		 * `both`, against 0.591 at 60ms and arriving at 0.300 by 560ms without.
+		 *
+		 * The keyframe it ends on is the same expression the base carries, so
+		 * letting go at the end changes nothing about where it lands.
+		 */
+		animation: glow-enter 480ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 	}
 
 	.glow-leaving {
@@ -828,7 +841,7 @@
 
 		/* Fading is still motion, but it is the kind that does not travel. */
 		.generation-glow {
-			animation: glow-enter 480ms linear both;
+			animation: glow-enter 480ms linear backwards;
 		}
 
 		.glow-flash {
