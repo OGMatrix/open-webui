@@ -19,6 +19,7 @@
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import LoadIndicator from './LoadIndicator.svelte';
+	import { loadState } from '$lib/utils/modelLoaded';
 	import { flyAndScale } from '$lib/utils/transitions';
 
 	import { createEventDispatcher, onMount, getContext, tick } from 'svelte';
@@ -292,6 +293,7 @@
 
 	let selectedTag = '';
 	let selectedConnectionType = '';
+	let selectedState = '';
 	let selectedFilter = '';
 	let modelFilterItems = [];
 
@@ -369,6 +371,7 @@
 							.map((tag) => tag.name.toLowerCase())
 							.includes(selectedTag.toLowerCase());
 					})
+					.filter((item) => selectedState !== 'loaded' || loadState(item.model) === 'loaded')
 					.filter((item) => {
 						if (selectedConnectionType === '') {
 							return true;
@@ -389,6 +392,7 @@
 							.map((tag) => tag.name.toLowerCase())
 							.includes(selectedTag.toLowerCase());
 					})
+					.filter((item) => selectedState !== 'loaded' || loadState(item.model) === 'loaded')
 					.filter((item) => {
 						if (selectedConnectionType === '') {
 							return true;
@@ -485,7 +489,21 @@
 		resetView();
 	}
 
+	$: loadedCount = items.filter((item) => loadState(item.model) === 'loaded').length;
+
 	$: modelFilterItems = [
+		/*
+		 * What is warm right now, across every connection, in one click.
+		 *
+		 * The count is in the label so the answer is there before anything is
+		 * clicked. On one graphics card this is the question that matters: a
+		 * title generation can evict the model you were talking to, and until
+		 * now the only way to find out was to scroll the whole list looking for
+		 * a green dot.
+		 */
+		...(loadedCount > 0
+			? [{ value: 'state:loaded', label: `${$i18n.t('Loaded')} · ${loadedCount}` }]
+			: []),
 		...(items.find((item) => item.model?.connection_type === 'local')
 			? [{ value: 'connection:local', label: $i18n.t('Local') }]
 			: []),
@@ -498,21 +516,29 @@
 		...tags.map((tag) => ({ value: `tag:${tag}`, label: tag }))
 	];
 
-	$: selectedFilter = selectedConnectionType
-		? `connection:${selectedConnectionType}`
-		: selectedTag
-			? `tag:${selectedTag}`
-			: '';
+	$: selectedFilter = selectedState
+		? `state:${selectedState}`
+		: selectedConnectionType
+			? `connection:${selectedConnectionType}`
+			: selectedTag
+				? `tag:${selectedTag}`
+				: '';
 
 	const setModelFilter = (filterValue: string) => {
+		// The three are exclusive: picking one clears the others, so the list
+		// never narrows by two things at once without saying so.
+		selectedConnectionType = '';
+		selectedTag = '';
+		selectedState = '';
+
 		if (!filterValue) {
-			selectedConnectionType = '';
-			selectedTag = '';
+			return;
+		}
+		if (filterValue.startsWith('state:')) {
+			selectedState = filterValue.replace('state:', '');
 		} else if (filterValue.startsWith('connection:')) {
 			selectedConnectionType = filterValue.replace('connection:', '');
-			selectedTag = '';
 		} else if (filterValue.startsWith('tag:')) {
-			selectedConnectionType = '';
 			selectedTag = filterValue.replace('tag:', '');
 		}
 	};
