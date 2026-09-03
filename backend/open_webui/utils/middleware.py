@@ -3276,26 +3276,52 @@ async def build_chat_response_context(request, form_data, user, model, metadata,
     }
 
 
+def coerce_tool_params(tool_args) -> dict | None:
+    """The arguments a model sent, as a mapping, or None when they are not one.
+
+    A model can emit arguments that are valid JSON and still unusable: a bare
+    string, a number, a list. Everything downstream reads them as a mapping of
+    parameter names, so one that is not a mapping reached `.items()` outside any
+    try and took the whole response down with it, partial answer included —
+    reported against this exact version as open-webui#29323, and seen where one
+    reply carries several tool calls at once.
+
+    One function for both call sites, so the check cannot be added in one and
+    forgotten in the other, which is how it came to be missing in the first
+    place.
+    """
+    if not tool_args or not str(tool_args).strip():
+        return {}
+
+    parsed = None
+    try:
+        parsed = JSONCodec.loads(tool_args)
+    except Exception:
+        try:
+            parsed = ast.literal_eval(tool_args)
+        except Exception as e:
+            log.debug('tool arguments could not be parsed: %s', e)
+            return None
+
+    if not isinstance(parsed, dict):
+        log.debug('tool arguments parsed to %s rather than an object', type(parsed).__name__)
+        return None
+
+    return parsed
+
+
 async def execute_tool_call_for_output(request, form_data, user, metadata, event_caller, event_emitter, tool_call):
     tools = metadata.get('tools', {})
     name = tool_call.get('function', {}).get('name', '')
-    tool_args = tool_call.get('function', {}).get('arguments', '{}')
-    params = {}
-    if tool_args and tool_args.strip():
-        try:
-            params = JSONCodec.loads(tool_args)
-        except Exception:
-            try:
-                params = ast.literal_eval(tool_args)
-            except Exception as e:
-                log.debug(e)
-                return {
-                    'tool_call_id': tool_call.get('id', ''),
-                    'content': (
-                        'Error: Tool call arguments could not be parsed. '
-                        'The model generated malformed or incomplete JSON.'
-                    ),
-                }
+    params = coerce_tool_params(tool_call.get('function', {}).get('arguments', '{}'))
+    if params is None:
+        return {
+            'tool_call_id': tool_call.get('id', ''),
+            'content': (
+                'Error: Tool call arguments could not be read as an object. '
+                'The model generated malformed JSON, or a value that is not a set of parameters.'
+            ),
+        }
     tool_call.setdefault('function', {})['arguments'] = JSONCodec.dumps(params)
 
     tool = tools.get(name)
@@ -5810,17 +5836,9 @@ async def streaming_chat_response_handler(response, ctx):
                     results = []
 
                     def parse_tool_params(tool_call):
-                        tool_args = tool_call.get('function', {}).get('arguments', '{}')
-                        params = {}
-                        if tool_args and tool_args.strip():
-                            try:
-                                params = JSONCodec.loads(tool_args)
-                            except Exception:
-                                try:
-                                    params = ast.literal_eval(tool_args)
-                                except Exception as e:
-                                    log.debug(e)
-                                    return None
+                        params = coerce_tool_params(tool_call.get('function', {}).get('arguments', '{}'))
+                        if params is None:
+                            return None
                         tool_call.setdefault('function', {})['arguments'] = JSONCodec.dumps(params)
                         return params
 
@@ -5828,7 +5846,18 @@ async def streaming_chat_response_handler(response, ctx):
                         name = tool_call.get('function', {}).get('name', '')
                         params = parse_tool_params(tool_call)
                         if params is None:
-                            return {}, None, None, None, False
+                            # Told, not skipped: a call that vanishes without a
+                            # result leaves the model waiting on one.
+                            return (
+                                {},
+                                (
+                                    f'Error: Tool "{name}" was called with arguments that are not an '
+                                    'object. Send the parameters as a JSON object and try again.'
+                                ),
+                                None,
+                                None,
+                                False,
+                            )
                         tool = tools.get(name)
                         if not tool:
                             return params, f'Error: Tool "{name}" not found.', None, None, False
