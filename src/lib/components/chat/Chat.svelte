@@ -420,7 +420,7 @@
 		currentId: null
 	};
 
-	let taskIds = null;
+	let taskIds: string[] | null = null;
 
 	// Chat Input
 	let prompt = '';
@@ -1613,7 +1613,24 @@
 				message?.role === 'assistant' && !message.done && (message.childrenIds?.length ?? 0) === 0
 		);
 
-	const handleSocketConnect = async () => {
+	/**
+	 * Re-read the chat when this client may have missed part of it.
+	 *
+	 * Content arrives as appends — `message.content += ...` — and there is no
+	 * periodic full state, so anything that does not arrive is simply absent
+	 * from this copy for good. A socket that drops while a tab is in the
+	 * background loses whatever was emitted in the gap, and socket.io does not
+	 * replay it.
+	 *
+	 * This used to reload only when no task was still running, which is to say:
+	 * never during the answer that has the hole in it. The database is written
+	 * as the answer streams, so it holds what this copy is missing whether the
+	 * generation has finished or not.
+	 *
+	 * Gated on there being an unfinished assistant message, so an idle chat
+	 * costs nothing on every reconnect.
+	 */
+	const resyncIfIncomplete = async () => {
 		// Gate on $chatId, not chatIdProp: chats started from the home page keep an empty chatIdProp
 		if (!$chatId || $temporaryChatEnabled) {
 			return;
@@ -1623,12 +1640,31 @@
 			return;
 		}
 
-		const pendingTaskIds = await getTaskIdsByChatId(localStorage.token, $chatId)
-			.then((res) => res?.task_ids ?? [])
-			.catch(() => null);
+		await loadChat();
 
-		if (pendingTaskIds?.length === 0) {
-			await loadChat();
+		// Only after the reload, and only to learn whether anything is still
+		// running: a failed query used to mean no reload at all, which turned a
+		// transient error into permanently missing text.
+		taskIds = await getTaskIdsByChatId(localStorage.token, $chatId)
+			.then((res) => res?.task_ids ?? null)
+			.catch(() => taskIds);
+	};
+
+	const handleSocketConnect = async () => {
+		await resyncIfIncomplete();
+	};
+
+	/**
+	 * Coming back to a tab that was in the background.
+	 *
+	 * The reconnect above covers a socket that dropped and came back, and this
+	 * covers the rest: a delivery missed for any other reason leaves the same
+	 * hole, and returning to the tab is the moment it would be noticed. One
+	 * request, and only while an answer is unfinished.
+	 */
+	const handleVisibilityChange = async () => {
+		if (document.visibilityState === 'visible') {
+			await resyncIfIncomplete();
 		}
 	};
 
@@ -1638,6 +1674,7 @@
 		window.addEventListener('message', onMessageHandler);
 		$socket?.on('events', chatEventHandler);
 		$socket?.on('connect', handleSocketConnect);
+		document.addEventListener('visibilitychange', handleVisibilityChange);
 
 		$audioQueue?.destroy();
 
@@ -1730,6 +1767,7 @@
 				window.removeEventListener('message', onMessageHandler);
 				$socket?.off('events', chatEventHandler);
 				$socket?.off('connect', handleSocketConnect);
+				document.removeEventListener('visibilitychange', handleVisibilityChange);
 				dismissContextCompactionToast();
 				audioQueueInstance?.destroy();
 				audioQueue.set(null);

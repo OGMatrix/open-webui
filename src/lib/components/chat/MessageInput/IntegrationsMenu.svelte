@@ -429,11 +429,9 @@
 										</div>
 
 										<div class="min-w-0 truncate">{$i18n.t('Web Search')}</div>
-										{#if $i18n.t('Search the internet')}
-											<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
-												$i18n.t('Search the internet')
-											</div>
-										{/if}
+										<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
+											{$i18n.t('Search the internet')}
+										</div>
 									</div>
 								</div>
 
@@ -460,11 +458,9 @@
 										</div>
 
 										<div class="min-w-0 truncate">{$i18n.t('Image')}</div>
-										{#if $i18n.t('Generate an image')}
-											<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
-												$i18n.t('Generate an image')
-											</div>
-										{/if}
+										<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
+											{$i18n.t('Generate an image')}
+										</div>
 									</div>
 								</div>
 
@@ -491,11 +487,9 @@
 										</div>
 
 										<div class="min-w-0 truncate">{$i18n.t('Code Interpreter')}</div>
-										{#if $i18n.t('Execute code for analysis')}
-											<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
-												$i18n.t('Execute code for analysis')
-											</div>
-										{/if}
+										<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
+											{$i18n.t('Execute code for analysis')}
+										</div>
 									</div>
 								</div>
 
