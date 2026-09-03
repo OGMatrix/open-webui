@@ -11,7 +11,7 @@ from open_webui.internal.db import Base, JSONField, get_async_db_context
 from open_webui.models.users import User, UserModel, UserProfileImageResponse, Users
 from open_webui.utils.validate import validate_profile_image_url
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Boolean, Column, String, Text, delete, select, update
+from sqlalchemy import JSON, Boolean, Column, String, Text, delete, false, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +32,13 @@ class Auth(Base):  # credential ↔ user linkage
     email = Column(String)  # login address, kept in sync with User.email
     password = Column(Text)  # argon2 / bcrypt hash
     active = Column(Boolean)  # account soft-disable toggle
+
+    # Second factor. The secret is encrypted (see utils/two_factor.py); the
+    # flag is separate from it because a secret exists while enrolment is only
+    # half done, and a half-finished enrolment must not lock anyone out.
+    totp_secret = Column(Text, nullable=True)
+    totp_enabled = Column(Boolean, nullable=False, default=False, server_default=false())
+    totp_recovery = Column(JSON, nullable=True)  # hashed, one array per account
 
 
 class AuthModel(BaseModel):
@@ -61,6 +68,10 @@ class SigninResponse(Token, UserProfileImageResponse):
 class SigninForm(BaseModel):
     email: str
     password: str
+    # Second factor, when the account has one. Sent with the password rather
+    # than exchanged for a challenge token: one fewer short-lived credential to
+    # mint, expire and get wrong, and the password is already in flight here.
+    code: Optional[str] = None
 
 
 class LdapForm(BaseModel):
@@ -222,6 +233,92 @@ class AuthsTable:
             if auth_row is None:
                 return False
             auth_row.password = new_password
+            await session.commit()
+            return True
+
+    async def get_two_factor_by_id(
+        self,
+        user_id: str,
+        db: AsyncSession | None = None,
+    ) -> tuple[bool, str | None, list[str]]:
+        """Whether a second factor is on, its sealed secret, and what is left of the recovery codes."""
+        async with get_async_db_context(db) as session:
+            auth_row = await session.get(Auth, user_id)
+            if auth_row is None:
+                return False, None, []
+            return (
+                bool(auth_row.totp_enabled),
+                auth_row.totp_secret,
+                list(auth_row.totp_recovery or []),
+            )
+
+    async def start_two_factor_by_id(
+        self,
+        user_id: str,
+        sealed_secret: str,
+        db: AsyncSession | None = None,
+    ) -> bool:
+        """Stage a secret without turning anything on.
+
+        Enrolment is two steps because the first one can fail silently: a key
+        that never reached the authenticator would otherwise lock the account
+        on the next sign-in. Nothing is enforced until a code proves the app
+        has it.
+        """
+        async with get_async_db_context(db) as session:
+            auth_row = await session.get(Auth, user_id)
+            if auth_row is None:
+                return False
+            auth_row.totp_secret = sealed_secret
+            auth_row.totp_enabled = False
+            auth_row.totp_recovery = None
+            await session.commit()
+            return True
+
+    async def enable_two_factor_by_id(
+        self,
+        user_id: str,
+        recovery_hashes: list[str],
+        db: AsyncSession | None = None,
+    ) -> bool:
+        """Turn it on, once a code has proved the secret arrived."""
+        async with get_async_db_context(db) as session:
+            auth_row = await session.get(Auth, user_id)
+            if auth_row is None or not auth_row.totp_secret:
+                return False
+            auth_row.totp_enabled = True
+            auth_row.totp_recovery = recovery_hashes
+            await session.commit()
+            return True
+
+    async def set_recovery_codes_by_id(
+        self,
+        user_id: str,
+        recovery_hashes: list[str],
+        db: AsyncSession | None = None,
+    ) -> bool:
+        """Replace what is left of the recovery codes - one was spent, or all were regenerated."""
+        async with get_async_db_context(db) as session:
+            auth_row = await session.get(Auth, user_id)
+            if auth_row is None:
+                return False
+            auth_row.totp_recovery = recovery_hashes
+            await session.commit()
+            return True
+
+    async def disable_two_factor_by_id(
+        self,
+        user_id: str,
+        db: AsyncSession | None = None,
+    ) -> bool:
+        """Turn it off and forget the secret, so re-enrolling starts fresh."""
+        async with get_async_db_context(db) as session:
+            auth_row = await session.get(Auth, user_id)
+            if auth_row is None:
+                return False
+            auth_row.totp_enabled = False
+            auth_row.totp_secret = None
+            auth_row.totp_recovery = None
             await session.commit()
             return True
 
