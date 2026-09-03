@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { emphasizeNames } from '$lib/utils/modelNames';
 	import { groupModels } from '$lib/utils/modelGroups';
+	import { promoteRecent, rememberModel } from '$lib/utils/recentModels';
+	import {
+		namedProviders,
+		normalizeProvider as normalizeProviderKey,
+		providerLabel as providerBadgeLabel
+	} from '$lib/utils/modelProviders';
 	import type { Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
 	import { marked } from 'marked';
@@ -12,6 +18,7 @@
 
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
+	import LoadIndicator from './LoadIndicator.svelte';
 	import { flyAndScale } from '$lib/utils/transitions';
 
 	import { createEventDispatcher, onMount, getContext, tick } from 'svelte';
@@ -32,6 +39,7 @@
 		MODEL_DOWNLOAD_POOL,
 		mobile,
 		models,
+		recentModels,
 		temporaryChatEnabled,
 		settings,
 		config,
@@ -66,6 +74,14 @@
 	export let searchEnabled = true;
 	export let searchPlaceholder = $i18n.t('Search a model');
 	export let selectionOnly = false;
+
+	/**
+	 * Told when a model is picked, so the picker can learn what gets used.
+	 *
+	 * Left unset where a pick is not that kind of act — choosing a base model
+	 * for a preset is not reaching for something to talk to.
+	 */
+	export let onSelect: (modelId: string) => void = () => {};
 	export let includeHidden = false;
 
 	export let items: {
@@ -253,6 +269,10 @@
 	$: selectedValues = values ?? (value ? [value] : []);
 	$: primaryValue = selectedValues[0] ?? value ?? '';
 	$: selectedModel = items.find((item) => item.value === primaryValue) ?? '';
+	// The same lookup without the `?? ''`. `selectedModel` is declared a string
+	// and then given an item, so reading a field off it is an error this file
+	// already carries; there is no reason to add another one for the indicator.
+	$: selectedEntry = items.find((item) => item.value === primaryValue);
 	$: selectedCount = selectedValues.filter(Boolean).length;
 	$: triggerLabel = selectedModel
 		? compareEnabled && selectedCount > 1
@@ -325,7 +345,7 @@
 		updateFuse();
 	}
 
-	$: filteredItems = (
+	$: matchedItems = (
 		searchValue
 			? fuse
 					.search(searchValue)
@@ -374,15 +394,39 @@
 					})
 	).filter((item) => includeHidden || !(item.model?.info?.meta?.hidden ?? false));
 
+	// The models this user reaches for, lifted to the top — but not while a
+	// search is running. A search is a specific question and its ranking is the
+	// answer; reordering that would answer a different one.
+	$: promotion = searchValue.trim()
+		? { items: matchedItems, count: 0 }
+		: promoteRecent(matchedItems, (item) => item.value, $recentModels);
+	$: filteredItems = promotion.items;
+	$: recentCount = promotion.count;
+
 	// Each name against its own neighbours, so a family's shared opening steps back
 	// while an unrelated model stays whole. Recomputed as the search narrows, which
 	// is when it matters most.
 	$: nameParts = emphasizeNames(filteredItems.map((item) => item.label ?? ''));
 
+	// Decided across the whole list, not the filtered one: a badge that vanished
+	// the moment you searched for the very models it marks would be worse than
+	// none. Only a genuinely mixed deployment gets labels at all.
+	$: labelledProviders = namedProviders(items.map((item) => item.model?.provider));
+	$: providerNames = filteredItems.map((item) =>
+		labelledProviders.has(normalizeProviderKey(item.model?.provider))
+			? providerBadgeLabel(item.model?.provider)
+			: ''
+	);
+
 	// Headings sit in the same fixed-height grid as the models, so the virtual
 	// window keeps working on plain arithmetic. The list is not reordered: the
 	// runs are found where they already are.
-	$: grouped = groupModels(filteredItems, (item) => item.label ?? '');
+	$: grouped = groupModels(
+		filteredItems,
+		(item) => item.label ?? '',
+		undefined,
+		recentCount > 0 ? { count: recentCount, label: $i18n.t('Recent') } : undefined
+	);
 	$: listRows = grouped.rows;
 	$: rowIndexOfModel = grouped.rowIndexOfModel;
 
@@ -507,6 +551,7 @@
 
 	const selectItem = (item, index: number) => {
 		selectedModelIdx = index;
+		onSelect(item.value);
 
 		if (values) {
 			if (compareEnabled) {
@@ -1064,6 +1109,21 @@
 			}}
 		>
 			<span class="min-w-0 flex-1 truncate">{triggerLabel}</span>
+			{#if selectedCount === 1}
+				<!--
+					Whether the model is warm, without opening anything. Only when one
+					model is selected: with several, a single dot would be read as
+					speaking for all of them.
+
+					As fresh as the last fetch — which the hover above refreshes, so
+					pointing at the selector is also how you re-check it.
+				-->
+				<LoadIndicator
+					model={selectedEntry?.model}
+					showUnloaded={true}
+					className="shrink-0 self-center"
+				/>
+			{/if}
 			<ChevronDown className="ml-1 size-2.5 shrink-0 self-center" strokeWidth="2.5" />
 		</div>
 	</button>
@@ -1245,6 +1305,7 @@
 											isLoading={loadingModelIds.has(item.model?.id)}
 											{deleteModelHandler}
 											nameParts={nameParts[index]}
+											providerName={providerNames[index] ?? ''}
 											{selectionOnly}
 											{compareEnabled}
 											{selectedValues}

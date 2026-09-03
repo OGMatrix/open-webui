@@ -122,3 +122,56 @@ describe('groupModels', () => {
 		expect(Date.now() - started).toBeLessThan(1000);
 	});
 });
+
+describe('a leading group the caller put there', () => {
+	const labels = (rows: ReturnType<typeof groupModels>['rows']) =>
+		rows.map((row) => (row.kind === 'header' ? `# ${row.label}` : row.item));
+
+	it('heads the promoted block and leaves the rest to the families', () => {
+		const items = ['gpt-4o', 'qwen3-8b', 'llama-70b-a', 'llama-70b-b'];
+		const { rows } = groupModels(items, (item) => item, undefined, { count: 2, label: 'Recent' });
+		expect(labels(rows)).toEqual([
+			'# Recent',
+			'gpt-4o',
+			'qwen3-8b',
+			'# llama-70b',
+			'llama-70b-a',
+			'llama-70b-b'
+		]);
+	});
+
+	it('keeps the promoted names out of the family search', () => {
+		// Two llama models pinned to the top are there because they were picked,
+		// not because they are a family; letting them form a run would put an
+		// unrelated heading over the top of the list.
+		const items = ['llama-a', 'llama-b', 'gpt-4o'];
+		const { rows } = groupModels(items, (item) => item, undefined, { count: 2, label: 'Recent' });
+		expect(labels(rows)).toEqual(['# Recent', 'llama-a', 'llama-b', 'gpt-4o']);
+	});
+
+	it('still points the cursor at the right row', () => {
+		const items = ['a', 'b', 'c'];
+		const { rows, rowIndexOfModel } = groupModels(items, (item) => item, undefined, {
+			count: 1,
+			label: 'Recent'
+		});
+		for (let i = 0; i < items.length; i += 1) {
+			expect(rows[rowIndexOfModel[i]]).toMatchObject({ kind: 'model', item: items[i] });
+		}
+	});
+
+	it('does nothing without a count or a label', () => {
+		const items = ['a', 'b'];
+		expect(groupModels(items, (i) => i, undefined, { count: 0, label: 'Recent' }).rows).toEqual(
+			groupModels(items, (i) => i).rows
+		);
+		expect(groupModels(items, (i) => i, undefined, { count: 2, label: '' }).rows).toEqual(
+			groupModels(items, (i) => i).rows
+		);
+	});
+
+	it('will not promote more than there is', () => {
+		const { rows } = groupModels(['a'], (i) => i, undefined, { count: 9, label: 'Recent' });
+		expect(labels(rows)).toEqual(['# Recent', 'a']);
+	});
+});

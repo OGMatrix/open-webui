@@ -1,11 +1,12 @@
 <script lang="ts">
-	import { models, pinnedModels, settings, user } from '$lib/stores';
+	import { models, pinnedModels, recentModels, settings, user } from '$lib/stores';
 	import { getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import Selector from './ModelSelector/Selector.svelte';
 
 	import { updateUserSettings } from '$lib/apis/users';
 	import equal from 'fast-deep-equal';
+	import { rememberModel } from '$lib/utils/recentModels';
 	const i18n = getContext('i18n');
 
 	export let selectedModels = [''];
@@ -32,6 +33,21 @@
 		await updateUserSettings(localStorage.token, { ui: $settings });
 
 		toast.success($i18n.t('Default model updated'));
+	};
+
+	/**
+	 * Remembers what was picked, so the picker can lead with it next time.
+	 *
+	 * Saved alongside the other model preferences, which is what makes it
+	 * follow the person rather than the browser they happened to use.
+	 */
+	const rememberModelHandler = async (modelId: string) => {
+		const next = rememberModel($recentModels, modelId);
+		if (equal(next, $recentModels)) {
+			return;
+		}
+		settings.set({ ...$settings, recentModels: next });
+		await updateUserSettings(localStorage.token, { ui: $settings });
 	};
 
 	const pinModelHandler = async (modelId) => {
@@ -73,6 +89,7 @@
 						model: model
 					}))}
 					{pinModelHandler}
+					onSelect={rememberModelHandler}
 					{className}
 					{triggerClassName}
 					{placement}

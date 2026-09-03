@@ -4,7 +4,6 @@
 	import { marked } from 'marked';
 
 	import { getContext, tick } from 'svelte';
-	import dayjs from '$lib/dayjs';
 
 	import { mobile, settings, user } from '$lib/stores';
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
@@ -15,6 +14,7 @@
 	import ArrowDownTray from '$lib/components/icons/ArrowDownTray.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import Check from '$lib/components/icons/Check.svelte';
+	import LoadIndicator from './LoadIndicator.svelte';
 	import ModelItemMenu from './ModelItemMenu.svelte';
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
 	import { toast } from 'svelte-sonner';
@@ -42,6 +42,14 @@
 	export let selectionOnly = false;
 	/** The name already split into the part it shares with its neighbours and the rest. */
 	export let nameParts: NameParts | undefined = undefined;
+
+	/**
+	 * Which backend this row comes from, or empty when saying so adds nothing.
+	 *
+	 * The selector decides: it can see the whole list, and a provider that
+	 * every model shares is not a distinction.
+	 */
+	export let providerName = '';
 
 	$: parts = nameParts ?? { head: '', body: item.label ?? '', tail: '' };
 
@@ -136,6 +144,16 @@
 			</div>
 
 			<div class="flex shrink-0 items-center gap-1.5">
+				{#if providerName}
+					<Tooltip content={$i18n.t('Served by {{provider}}', { provider: providerName })}>
+						<span
+							class="shrink-0 rounded-sm bg-gray-100 px-1 py-px text-[0.625rem] font-medium whitespace-nowrap text-gray-500 dark:bg-white/[0.06] dark:text-gray-400"
+						>
+							{providerName}
+						</span>
+					</Tooltip>
+				{/if}
+
 				{#if item.model.owned_by === 'ollama'}
 					{#if (item.model.ollama?.details?.parameter_size ?? '') !== ''}
 						<div class="flex items-center translate-y-[0.5px]">
@@ -180,28 +198,7 @@
 					{/if}
 				{/if}
 
-				{#if item.model.loaded}
-					<div class="flex items-center px-0.5">
-						<Tooltip
-							content={item.model.ollama?.expires_at &&
-							new Date(item.model.ollama?.expires_at * 1000) > new Date()
-								? `${$i18n.t('Unloads {{FROM_NOW}}', {
-										FROM_NOW: dayjs(item.model.ollama?.expires_at * 1000).fromNow()
-									})}`
-								: `${$i18n.t('Loaded')}`}
-							className="self-end"
-						>
-							<div class=" flex items-center">
-								<span class="relative flex size-1.5">
-									<span
-										class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"
-									/>
-									<span class="relative inline-flex size-1.5 rounded-full bg-green-500" />
-								</span>
-							</div>
-						</Tooltip>
-					</div>
-				{/if}
+				<LoadIndicator model={item.model} />
 
 				<!-- {JSON.stringify(item.info)} -->
 

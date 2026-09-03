@@ -39,15 +39,27 @@ const sharedPrefixLength = (a: string[], b: string[]) => {
 };
 
 /**
+ * A block at the head of the list that is a group because it was put there,
+ * not because the names happen to agree — the recently picked models.
+ */
+export type LeadingGroup = { count: number; label: string };
+
+/**
  * Groups adjacent models that share a leading part of their name.
  *
  * `label` decides what a row is called; anything it returns empty is treated as
  * unnamed and never joins a family.
+ *
+ * `leading` marks off however many items at the front were promoted there by
+ * the caller. They are held out of the family search: their names have nothing
+ * to do with each other, and letting them join a run would drag an unrelated
+ * heading over the top of the list.
  */
 export const groupModels = <T>(
 	items: T[],
 	label: (item: T) => string,
-	headerFor: (prefix: string, item: T) => string = (prefix) => prefix
+	headerFor: (prefix: string, item: T) => string = (prefix) => prefix,
+	leading?: LeadingGroup
 ): GroupedModels<T> => {
 	const names = items.map((item) => label(item) ?? '');
 	const segmented = names.map(splitName);
@@ -56,6 +68,16 @@ export const groupModels = <T>(
 	const rowIndexOfModel: number[] = [];
 
 	let index = 0;
+
+	const leadingCount = Math.max(0, Math.min(leading?.count ?? 0, items.length));
+	if (leadingCount > 0 && leading?.label) {
+		rows.push({ kind: 'header', label: leading.label, key: 'header:leading' });
+		for (; index < leadingCount; index += 1) {
+			rowIndexOfModel[index] = rows.length;
+			rows.push({ kind: 'model', item: items[index], modelIndex: index });
+		}
+	}
+
 	while (index < items.length) {
 		// How far the run starting here reaches, and on how much of the name.
 		let end = index + 1;

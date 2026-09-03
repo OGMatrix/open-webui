@@ -117,6 +117,10 @@ export const pinnedModels = derived([settings, config], ([$settings, $config]) =
 		: $settings.pinnedModels
 );
 
+// The models this user reaches for, newest first. Kept per user rather than per
+// device: it follows the person, the way their pins and defaults already do.
+export const recentModels = derived(settings, ($settings) => $settings?.recentModels ?? []);
+
 // Pins for models the user cannot see are kept in their settings but left out of the sidebar
 export const visiblePinnedModels = derived([pinnedModels, models], ([$pinnedModels, $models]) =>
 	$pinnedModels.filter((id) =>
@@ -223,6 +227,8 @@ type OllamaModelDetails = {
 
 type Settings = {
 	pinnedModels?: string[];
+	/** Model ids in the order they were last picked, newest first. */
+	recentModels?: string[];
 	toolServers?: never[];
 	detectArtifacts?: boolean;
 	showUpdateToast?: boolean;
