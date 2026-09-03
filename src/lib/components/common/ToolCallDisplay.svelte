@@ -17,6 +17,8 @@
 	import CheckCircle from '../icons/CheckCircle.svelte';
 	import XMark from '../icons/XMark.svelte';
 	import Image from './Image.svelte';
+	import ToolValue from './ToolCallDisplay/ToolValue.svelte';
+	import { describeValue, summariseArguments, toolHue } from '$lib/utils/toolCalls';
 	import FullHeightIframe from './FullHeightIframe.svelte';
 	import { settings } from '$lib/stores';
 
@@ -135,6 +137,17 @@
 
 	export let resultContent: string = '';
 
+	/*
+	 * What the call was asked and what came back, described rather than
+	 * stringified. The row is read to find out what a tool did; braces are the
+	 * data, not the answer.
+	 */
+	$: summary = summariseArguments(parsedArgs);
+	$: hue = toolHue(attributes?.name ?? '');
+	$: describedArgs = parsedArgs ? describeValue(parsedArgs) : null;
+	$: describedResult =
+		parsedResult !== null && typeof parsedResult === 'object' ? describeValue(parsedResult) : null;
+
 	$: result = resultContent || decode(attributes?.result ?? '');
 	$: files = parseJSONString(decode(attributes?.files ?? ''));
 	$: embeds = parseJSONString(decode(attributes?.embeds ?? ''));
@@ -229,24 +242,40 @@
 					</div>
 				{/if}
 
+				<!--
+					A colour of its own, from the name, so a run of five calls is five
+					things rather than five wrenches. The same tool is the same colour
+					in every chat, because it is derived and not assigned.
+				-->
+				<span
+					class="size-1.5 shrink-0 rounded-full"
+					style="background: hsl({hue} 65% 55%)"
+					aria-hidden="true"
+				></span>
+
 				<!-- Label -->
-				<div class="flex-1 min-w-0 line-clamp-1">
+				<div class="line-clamp-1 min-w-0 flex-1">
 					<!-- Short label (below md) -->
-					<span class="@md:hidden text-black dark:text-white">{attributes.name}</span>
+					<span class="text-black @md:hidden dark:text-white">{attributes.name}</span>
 					<!-- Full label (md and above) -->
 					<span class="hidden @md:inline font-normal">
 						{#if isRejected}
 							{$i18n.t('Denied {{NAME}}', { NAME: attributes.name })}
-						{:else if isDone}
-							{$i18n.t('View Result from {{NAME}}', { NAME: attributes.name })}
 						{:else if needsInput}
 							{$i18n.t('Input needed')}
 						{:else if needsApproval}
 							{$i18n.t('Allow {{NAME}}?', { NAME: attributes.name })}
-						{:else if isPreparing}
-							{$i18n.t('Preparing {{NAME}}...', { NAME: attributes.name })}
 						{:else}
-							{$i18n.t('Executing {{NAME}}...', { NAME: attributes.name })}
+							<!--
+								The name, and what it was asked. The state is already in the
+								icon to the left; saying it again in words spent the room
+								this needed, and "View Result from search_web" never said
+								which search.
+							-->
+							<span class="text-black dark:text-white">{attributes.name}</span>
+							{#if summary}
+								<span class="text-gray-400 dark:text-gray-500">· {summary}</span>
+							{/if}
 						{/if}
 					</span>
 				</div>
@@ -297,18 +326,9 @@
 								{$i18n.t('Input')}
 							</div>
 
-							{#if parsedArgs}
-								<div class="px-1 space-y-0.5">
-									{#each Object.entries(parsedArgs) as [key, value]}
-										<div class="flex gap-2 text-xs py-0.5">
-											<span class="font-normal text-gray-600 dark:text-gray-400 shrink-0"
-												>{key}</span
-											>
-											<span class="text-gray-800 dark:text-gray-200 break-all"
-												>{typeof value === 'object' ? JSON.stringify(value) : value}</span
-											>
-										</div>
-									{/each}
+							{#if describedArgs}
+								<div class="space-y-0.5 px-1 text-xs">
+									<ToolValue value={describedArgs} />
 								</div>
 							{:else}
 								<div class="tool-call-body w-full max-w-none!">
@@ -330,13 +350,10 @@
 								{$i18n.t('Output')}
 							</div>
 							<div class="w-full max-w-none!">
-								{#if typeof parsedResult === 'object' && parsedResult !== null}
-									<pre
-										class="text-xs text-gray-600 dark:text-gray-300 whitespace-pre font-mono bg-gray-50 dark:bg-gray-900 rounded-lg p-2 overflow-x-auto">{JSON.stringify(
-											parsedResult,
-											null,
-											2
-										)}</pre>
+								{#if describedResult}
+									<div class="space-y-0.5 px-1 text-xs">
+										<ToolValue value={describedResult} />
+									</div>
 								{:else}
 									{@const resultStr = String(parsedResult)}
 									{@const isTruncated = resultStr.length > RESULT_PREVIEW_LIMIT && !expandedResult}
