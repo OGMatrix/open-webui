@@ -273,9 +273,44 @@ jobs:
             echo
             echo "Built from \`${BUILT_FROM}\` for \`linux/amd64\`, digest \`${IMAGE_DIGEST}\`."
             echo
-            echo 'In TrueNAS: Apps → Discover Apps → Custom App, image repository'
-            echo "\`${IMAGE%:*}\`, tag \`${VERSION}\`. Container port 8080, and"
-            echo "persist \`/app/backend/data\` to a dataset."
+
+            echo '### TrueNAS SCALE deployment'
+            echo
+            echo '1. Create dataset: **Apps → Manage → Datasets → Add Dataset** (name: \`open-webui\`)'
+            echo '2. Go to **Apps → Discover Apps → Custom App → Install via YAML**'
+            echo '3. Paste the compose file below, replacing \`<pool>\` with your pool name'
+            echo '4. Click **Save**'
+            echo
+            echo '```yaml'
+            echo 'services:'
+            echo '  ollama:'
+            echo '    image: ollama/ollama:latest'
+            echo '    container_name: ollama'
+            echo '    volumes:'
+            echo '      - /mnt/<pool>/apps/ollama:/root/.ollama'
+            echo '    tty: true'
+            echo '    restart: unless-stopped'
+            echo ''
+            echo '  open-webui:'
+            echo "    image: ${IMAGE}"
+            echo '    container_name: open-webui'
+            echo '    depends_on:'
+            echo '      - ollama'
+            echo '    ports:'
+            echo '      - "8080:8080"'
+            echo '    volumes:'
+            echo '      - /mnt/<pool>/apps/open-webui:/app/backend/data'
+            echo '    environment:'
+            echo '      - OLLAMA_BASE_URL=http://ollama:11434'
+            echo '      - WEBUI_SECRET_KEY='
+            echo '      - SCARF_NO_ANALYTICS=true'
+            echo '      - DO_NOT_TRACK=true'
+            echo '    extra_hosts:'
+            echo '      - host.docker.internal:host-gateway'
+            echo '    restart: unless-stopped'
+            echo '```'
+            echo
+            echo 'For remote Ollama or API-only setup, see \`truenas/\` in the repository.'
             echo
 
             echo '## Notice'

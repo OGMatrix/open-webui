@@ -1,0 +1,38 @@
+# =============================================================================
+# Open WebUI (Fork) — TrueNAS SCALE
+# =============================================================================
+# Deploy: Apps → Discover Apps → Custom App → Install via YAML
+#
+# Prerequisites:
+#   1. Create dataset: Apps → Manage → Datasets → Add Dataset
+#      Name: open-webui (adjust path below if different)
+#   2. Update the image tag to the version you want
+# =============================================================================
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    volumes:
+      - /mnt/<pool>/apps/ollama:/root/.ollama
+    tty: true
+    restart: unless-stopped
+
+  open-webui:
+    image: ghcr.io/ogmatrix/open-webui:0.11.3-ogm.1
+    container_name: open-webui
+    depends_on:
+      - ollama
+    ports:
+      - "8080:8080"
+    volumes:
+      - /mnt/<pool>/apps/open-webui:/app/backend/data
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=
+      - SCARF_NO_ANALYTICS=true
+      - DO_NOT_TRACK=true
+      - ANONYMIZED_TELEMETRY=false
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    restart: unless-stopped

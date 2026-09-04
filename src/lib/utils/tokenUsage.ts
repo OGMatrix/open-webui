@@ -62,9 +62,21 @@ export const extractTurnUsage = (usage: unknown): TurnUsage | null => {
 
 	const payload = usage as Record<string, any>;
 
+	// input_tokens and output_tokens first, on purpose.
+	//
+	// One assistant turn can make many provider calls -- a tool loop runs until
+	// the model stops asking for tools -- and the backend merges their usage
+	// differently by field: input_tokens and the cached-token details are added
+	// up across the calls, while prompt_tokens keeps only the last call's value
+	// (which is the context size, not what was consumed).
+	//
+	// This panel is about consumption, so it has to read the fields that mean
+	// the same thing. Mixing them made the cache share read 846%: two million
+	// cached tokens over eight calls, against a quarter of a million from the
+	// last one alone.
 	let promptTokens = firstCount(
-		payload.prompt_tokens,
 		payload.input_tokens,
+		payload.prompt_tokens,
 		payload.prompt_eval_count
 	);
 	if (!promptTokens) {
@@ -73,8 +85,8 @@ export const extractTurnUsage = (usage: unknown): TurnUsage | null => {
 	}
 
 	const completionTokens = firstCount(
-		payload.completion_tokens,
 		payload.output_tokens,
+		payload.completion_tokens,
 		payload.eval_count,
 		payload.predicted_n
 	);

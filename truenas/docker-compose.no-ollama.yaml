@@ -1,0 +1,25 @@
+# =============================================================================
+# Open WebUI (Fork) — No Ollama (API Only)
+# =============================================================================
+# Minimal deployment for use with OpenAI API, OpenRouter, or other
+# OpenAI-compatible backends configured through the WebUI settings.
+#
+# Deploy: Apps → Discover Apps → Custom App → Install via YAML
+# =============================================================================
+
+services:
+  open-webui:
+    image: ghcr.io/ogmatrix/open-webui:0.11.3-ogm.1
+    container_name: open-webui
+    ports:
+      - "8080:8080"
+    volumes:
+      - /mnt/<pool>/apps/open-webui:/app/backend/data
+    environment:
+      - WEBUI_SECRET_KEY=
+      - SCARF_NO_ANALYTICS=true
+      - DO_NOT_TRACK=true
+      - ANONYMIZED_TELEMETRY=false
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    restart: unless-stopped

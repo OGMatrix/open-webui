@@ -219,19 +219,52 @@ jobs:
             echo "digest: ${DIGEST}"
             echo '```'
             echo
-            echo "#### Using it in TrueNAS"
+            echo "#### TrueNAS SCALE deployment"
             echo
-            echo "Apps → Discover Apps → Custom App. Image repository"
-            echo "\`${IMAGE_BASE}\`, tag \`${VERSION}\`. Pin the version rather"
-            echo "than using \`latest\`, so a later release cannot restart the"
-            echo "app onto a build nobody has looked at."
+            echo "1. Create dataset: **Apps → Manage → Datasets → Add Dataset** (name: \`open-webui\`)"
+            echo "2. Go to **Apps → Discover Apps → Custom App → Install via YAML**"
+            echo "3. Paste the compose file below, replacing \`<pool>\` with your pool name"
+            echo "4. Click **Save**"
             echo
-            echo "Container port 8080, and persist \`/app/backend/data\` to a"
-            echo "dataset — chats and settings live there, and otherwise only"
-            echo "inside the container."
+            echo '```yaml'
+            echo 'services:'
+            echo '  ollama:'
+            echo '    image: ollama/ollama:latest'
+            echo '    container_name: ollama'
+            echo '    volumes:'
+            echo '      - /mnt/<pool>/apps/ollama:/root/.ollama'
+            echo '    tty: true'
+            echo '    restart: unless-stopped'
+            echo ''
+            echo '  open-webui:'
+            echo "    image: ${IMAGE}"
+            echo '    container_name: open-webui'
+            echo '    depends_on:'
+            echo '      - ollama'
+            echo '    ports:'
+            echo '      - "8080:8080"'
+            echo '    volumes:'
+            echo '      - /mnt/<pool>/apps/open-webui:/app/backend/data'
+            echo '    environment:'
+            echo '      - OLLAMA_BASE_URL=http://ollama:11434'
+            echo '      - WEBUI_SECRET_KEY='
+            echo '      - SCARF_NO_ANALYTICS=true'
+            echo '      - DO_NOT_TRACK=true'
+            echo '    extra_hosts:'
+            echo '      - host.docker.internal:host-gateway'
+            echo '    restart: unless-stopped'
+            echo '```'
+            echo
+            echo "For remote Ollama or API-only setup, see \`truenas/\` in the repository."
+            echo
+            echo "#### Docker pull"
+            echo
+            echo '```bash'
+            echo "docker pull ${IMAGE}"
+            echo '```'
             echo
             echo "If the package is still private, store the credentials once"
-            echo "under Apps → Discover Apps → Manage Container Images → Pull"
-            echo "Image (host \`ghcr.io\`, your GitHub username, a token with"
-            echo "\`read:packages\`). Making the package public avoids this."
+            echo "under **Apps → Discover Apps → Manage Container Images → Pull Image**"
+            echo "(host \`ghcr.io\`, your GitHub username, a token with \`read:packages\`)."
+            echo "Making the package public avoids this."
           } >> "$GITHUB_STEP_SUMMARY"
