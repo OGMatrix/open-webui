@@ -94,85 +94,108 @@
 		);
 	}
 
-	$: toolCallCount = tokens.filter((t) => t?.attributes?.type === 'tool_calls').length;
-	$: reasoningCount = tokens.filter((t) => t?.attributes?.type === 'reasoning').length;
-	$: pendingToolTokens = tokens.filter(
-		(t) => t?.attributes?.type === 'tool_calls' && t?.attributes?.status === 'pending'
-	);
-	$: hasActiveToolCalls = tokens.some(
-		(t) =>
-			t?.attributes?.type === 'tool_calls' &&
-			t?.attributes?.status !== 'rejected' &&
-			t?.attributes?.status !== 'failed' &&
-			t?.attributes?.status !== 'incomplete' &&
-			t?.attributes?.done !== 'true'
-	);
-	$: hasRejected = tokens.some(
-		(t) => t?.attributes?.type === 'tool_calls' && t?.attributes?.status === 'rejected'
-	);
-	$: hasError = tokens.some(
-		(t) =>
-			t?.attributes?.type === 'tool_calls' &&
-			(t?.attributes?.status === 'failed' ||
-				(t?.attributes?.done === 'true' && isToolResultError(decode(t?.text ?? ''))))
-	);
+	// Single-pass computation over tokens (instead of 9 separate iterations)
+	$: computed = (() => {
+		let toolCallCount = 0;
+		let reasoningCount = 0;
+		let codeInterpreterCount = 0;
+		let hasActiveToolCalls = false;
+		let hasRejected = false;
+		let hasError = false;
+		const pendingToolTokens: typeof tokens = [];
+		const embedResult: Array<{ name: string; embed: string; args: string }> = [];
+		const nameCounts: Record<string, number> = {};
 
-	$: codeInterpreterCount = tokens.filter((t) => t?.attributes?.type === 'code_interpreter').length;
-
-	// Collect all embeds from tool_calls tokens
-	$: allEmbeds = (() => {
-		if (!allowEmbeds) return [];
-
-		const result: Array<{ name: string; embed: string; args: string }> = [];
 		for (const t of tokens) {
-			if (t?.attributes?.type !== 'tool_calls') continue;
-			const raw = decode(t.attributes?.embeds ?? '');
-			try {
-				const parsed = parseJSONString(raw);
-				if (Array.isArray(parsed) && parsed.length > 0) {
-					for (const embed of parsed) {
-						result.push({
-							name: t.attributes?.name ?? '',
-							embed,
-							args: decode(t.attributes?.arguments ?? '')
-						});
-					}
+			const type = t?.attributes?.type;
+
+			if (type === 'tool_calls') {
+				toolCallCount++;
+				const name = t?.attributes?.name ?? 'tool';
+				nameCounts[name] = (nameCounts[name] || 0) + 1;
+
+				const status = t?.attributes?.status;
+				const done = t?.attributes?.done;
+
+				if (status === 'pending') {
+					pendingToolTokens.push(t);
 				}
-			} catch {}
-		}
-		return result;
-	})();
 
-	$: summaryText = (() => {
-		const parts = [];
+				if (
+					status !== 'rejected' &&
+					status !== 'failed' &&
+					status !== 'incomplete' &&
+					done !== 'true'
+				) {
+					hasActiveToolCalls = true;
+				}
 
-		if (toolCallCount > 0) {
-			// Group by tool name and show counts
-			const nameCounts: Record<string, number> = {};
-			tokens
-				.filter((t) => t?.attributes?.type === 'tool_calls')
-				.forEach((t) => {
-					const name = t?.attributes?.name ?? 'tool';
-					nameCounts[name] = (nameCounts[name] || 0) + 1;
-				});
+				if (status === 'rejected') {
+					hasRejected = true;
+				}
 
-			const toolParts = Object.entries(nameCounts).map(([name, count]) =>
-				count > 1 ? `${count} ${name}` : name
-			);
-			parts.push(...toolParts);
-		}
+				if (status === 'failed' || (done === 'true' && isToolResultError(decode(t?.text ?? '')))) {
+					hasError = true;
+				}
 
-		if (codeInterpreterCount > 0) {
-			if (codeInterpreterCount === 1) {
-				parts.push($i18n.t('Ran {{COUNT}} analysis', { COUNT: codeInterpreterCount }));
-			} else {
-				parts.push($i18n.t('Ran {{COUNT}} analyses', { COUNT: codeInterpreterCount }));
+				if (allowEmbeds) {
+					const raw = decode(t.attributes?.embeds ?? '');
+					try {
+						const parsed = parseJSONString(raw);
+						if (Array.isArray(parsed) && parsed.length > 0) {
+							for (const embed of parsed) {
+								embedResult.push({
+									name: t.attributes?.name ?? '',
+									embed,
+									args: decode(t.attributes?.arguments ?? '')
+								});
+							}
+						}
+					} catch {}
+				}
+			} else if (type === 'reasoning') {
+				reasoningCount++;
+			} else if (type === 'code_interpreter') {
+				codeInterpreterCount++;
 			}
 		}
 
-		const detail = parts.join(', ');
-		return detail;
+		const toolParts = Object.entries(nameCounts).map(([name, count]) =>
+			count > 1 ? `${count} ${name}` : name
+		);
+
+		const summaryParts: string[] = [];
+		if (toolParts.length > 0) summaryParts.push(...toolParts);
+		if (codeInterpreterCount === 1) {
+			summaryParts.push($i18n.t('Ran {{COUNT}} analysis', { COUNT: codeInterpreterCount }));
+		} else if (codeInterpreterCount > 1) {
+			summaryParts.push($i18n.t('Ran {{COUNT}} analyses', { COUNT: codeInterpreterCount }));
+		}
+
+		return {
+			toolCallCount,
+			reasoningCount,
+			codeInterpreterCount,
+			hasActiveToolCalls,
+			hasRejected,
+			hasError,
+			pendingToolTokens,
+			allEmbeds: embedResult,
+			summaryText: summaryParts.join(', ')
+		};
 	})();
+
+	$: ({
+		toolCallCount,
+		reasoningCount,
+		codeInterpreterCount,
+		hasActiveToolCalls,
+		hasRejected,
+		hasError,
+		pendingToolTokens,
+		allEmbeds,
+		summaryText
+	} = computed);
 
 	$: prefixText = hasActiveToolCalls ? $i18n.t('Exploring') : $i18n.t('Explored');
 </script>
@@ -299,7 +322,7 @@
 	{/if}
 
 	{#if open}
-		<div transition:slide={{ duration: 300, easing: quintOut, axis: 'y' }}>
+		<div transition:slide={{ duration: 150, easing: quintOut, axis: 'y' }}>
 			<div class="mb-1">
 				<slot name="content" />
 			</div>

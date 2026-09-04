@@ -1,7 +1,4 @@
 <script lang="ts">
-	import { decode } from 'html-entities';
-	import { v4 as uuidv4 } from 'uuid';
-
 	import { getContext } from 'svelte';
 	const i18n = getContext('i18n');
 
@@ -12,22 +9,18 @@
 	dayjs.extend(duration);
 	dayjs.extend(relativeTime);
 
-	async function loadLocale(locales) {
-		if (!locales || !Array.isArray(locales)) {
-			return;
-		}
-		for (const locale of locales) {
-			try {
-				dayjs.locale(locale);
-				break; // Stop after successfully loading the first available locale
-			} catch (error) {
-				console.error(`Could not load locale '${locale}':`, error);
+	// Preload dayjs locale once from current i18n languages
+	$: {
+		const locales = $i18n?.languages;
+		if (locales && Array.isArray(locales)) {
+			for (const locale of locales) {
+				try {
+					dayjs.locale(locale);
+					break;
+				} catch {}
 			}
 		}
 	}
-
-	// Assuming $i18n.languages is an array of language codes
-	$: loadLocale($i18n.languages);
 
 	import { slide } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
@@ -65,8 +58,6 @@
 		open = !open;
 		onChange(open);
 	};
-
-	const collapsibleId = uuidv4();
 </script>
 
 <div {id} class={className}>
@@ -161,7 +152,7 @@
 				{#if grow}
 					{#if open && !hide}
 						<div
-							transition:slide={{ duration: 300, easing: quintOut, axis: 'y' }}
+							transition:slide={{ duration: 150, easing: quintOut, axis: 'y' }}
 							on:click={(e) => {
 								e.stopPropagation();
 							}}
@@ -176,7 +167,7 @@
 
 	{#if !grow}
 		{#if open && !hide}
-			<div transition:slide={{ duration: 300, easing: quintOut, axis: 'y' }}>
+			<div transition:slide={{ duration: 150, easing: quintOut, axis: 'y' }}>
 				<slot name="content" />
 			</div>
 		{/if}
