@@ -9,6 +9,7 @@
 	import Markdown from './Markdown.svelte';
 	import ConsecutiveDetailsGroup from './Markdown/ConsecutiveDetailsGroup.svelte';
 	import {
+		NOTE_DETAIL_TYPE,
 		buildOutputDisplayItems,
 		type OutputDetailToken,
 		type OutputDisplayItem,
@@ -109,7 +110,27 @@
 		>
 			<div slot="content">
 				{#each displayItem.tokens as detailToken, detailIndex}
-					{#if detailToken.attributes?.type === 'tool_calls'}
+					{#if detailToken.attributes?.type === NOTE_DETAIL_TYPE}
+						<!--
+							Something the assistant said between two tool calls. Folded in
+							with them because more calls followed, so it was written while
+							working -- but it is prose, and renders as prose.
+						-->
+						<div class="markdown-prose my-1 text-sm">
+							<Markdown
+								id={`${id}-${displayItem.id}-${detailIndex}-note`}
+								{chatId}
+								{messageId}
+								content={detailToken.text}
+								{done}
+								{save}
+								{preview}
+								{compactPreview}
+								{editCodeBlock}
+								{onToolCallResolved}
+							/>
+						</div>
+					{:else if detailToken.attributes?.type === 'tool_calls'}
 						<ToolCallDisplay
 							id={`${id}-${displayItem.id}-${detailIndex}-tool-call`}
 							attributes={detailToken.attributes}

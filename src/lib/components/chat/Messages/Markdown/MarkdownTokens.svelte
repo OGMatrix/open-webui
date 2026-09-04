@@ -19,6 +19,7 @@
 	import ToolCallDisplay from '$lib/components/common/ToolCallDisplay.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import ConsecutiveDetailsGroup from './ConsecutiveDetailsGroup.svelte';
+	import { getDisplayTokens, isGroupableDetailToken } from '$lib/utils/markdownGrouping';
 
 	import HtmlToken from './HTMLToken.svelte';
 	import ColonFenceBlock from './ColonFenceBlock.svelte';
@@ -54,43 +55,6 @@
 
 	const headerComponent = (depth: number) => {
 		return 'h' + depth;
-	};
-
-	const GROUPABLE_DETAIL_TYPES = new Set(['tool_calls', 'reasoning', 'code_interpreter']);
-
-	const isGroupableDetailToken = (token: Token & { attributes?: { type?: string } }) => {
-		return token?.type === 'details' && GROUPABLE_DETAIL_TYPES.has(token?.attributes?.type ?? '');
-	};
-
-	const getDisplayTokens = (tokenList: Token[] = []) => {
-		const displayTokens = [];
-		let detailGroup = [];
-
-		const flushDetailGroup = () => {
-			if (detailGroup.length > 1) {
-				displayTokens.push({
-					type: 'detail_group',
-					items: [...detailGroup]
-				});
-			} else if (detailGroup.length === 1) {
-				displayTokens.push(detailGroup[0]);
-			}
-
-			detailGroup = [];
-		};
-
-		for (const token of tokenList) {
-			if (isGroupableDetailToken(token)) {
-				detailGroup.push(token);
-			} else {
-				flushDetailGroup();
-				displayTokens.push(token);
-			}
-		}
-
-		flushDetailGroup();
-
-		return displayTokens;
 	};
 
 	const getDetailTextContent = (token) => {
@@ -313,7 +277,30 @@
 				{#each token.items as detailToken, detailIdx}
 					{@const textContent = getDetailTextContent(detailToken)}
 
-					{#if detailToken?.attributes?.type === 'tool_calls'}
+					{#if !isGroupableDetailToken(detailToken)}
+						<!--
+							A note the assistant wrote between two tool calls. It is
+							folded in with them because more calls followed it, so it was
+							written while working rather than as the answer -- but it is
+							still prose, and it renders as prose.
+						-->
+						<div class="my-1 text-sm">
+							<svelte:self
+								id={`${id}-${tokenIdx}-${detailIdx}-note`}
+								{chatId}
+								{messageId}
+								tokens={[detailToken]}
+								{done}
+								{save}
+								{preview}
+								{compactPreview}
+								{editCodeBlock}
+								{onTaskClick}
+								{sourceIds}
+								{onSourceClick}
+							/>
+						</div>
+					{:else if detailToken?.attributes?.type === 'tool_calls'}
 						<ToolCallDisplay
 							id={`${id}-${tokenIdx}-${detailIdx}-tc`}
 							attributes={detailToken.attributes}

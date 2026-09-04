@@ -82,6 +82,15 @@ type ResponseStreamEvent = {
 	[key: string]: unknown;
 };
 
+/**
+ * A message folded into a run of tool calls.
+ *
+ * Carried as a detail token so the group can hold it in order, with a type the
+ * group's own counting does not recognise -- it is not a tool call and must not
+ * be counted as one.
+ */
+export const NOTE_DETAIL_TYPE = 'note';
+
 const GROUPABLE_OUTPUT_TYPES = new Set([
 	'reasoning',
 	'function_call',
@@ -363,8 +372,32 @@ export function buildOutputDisplayItems(
 		}
 	}
 
+	/**
+	 * Messages seen since the last tool call, not yet placed.
+	 *
+	 * A message with more tool activity after it was written while working, and
+	 * folds into the run; a message after the last one is the answer, and stays
+	 * out. Deciding that needs to wait until the next item arrives, which is
+	 * what these are waiting for.
+	 */
+	const pendingMessages: { id: string; text: string }[] = [];
+
+	const emitPendingMessages = () => {
+		for (const message of pendingMessages) {
+			displayItems.push({ type: 'message', ...message });
+		}
+		pendingMessages.length = 0;
+	};
+
 	const flushDetails = () => {
-		if (currentDetailTokens.length > 1) {
+		// Counted rather than measured by array length: the array also holds
+		// folded-in notes, and a group of one detail is a heading with nothing
+		// under it.
+		const detailCount = currentDetailTokens.filter(
+			(token) => token.attributes?.type !== NOTE_DETAIL_TYPE
+		).length;
+
+		if (detailCount > 1) {
 			displayItems.push({
 				type: 'detail_group',
 				id: `detail-group-${displayItems.length}`,
@@ -380,6 +413,12 @@ export function buildOutputDisplayItems(
 		currentDetailTokens.length = 0;
 	};
 
+	/** Details first, then anything that was waiting behind them. */
+	const flushAll = () => {
+		flushDetails();
+		emitPendingMessages();
+	};
+
 	output.forEach((item, index) => {
 		if (!item) {
 			return;
@@ -388,7 +427,7 @@ export function buildOutputDisplayItems(
 		if (item.type === 'function_call_output') {
 			const inlineFile = getInlineFileFromToolOutput(toolCallByCallId[item.call_id ?? ''], item);
 			if (inlineFile) {
-				flushDetails();
+				flushAll();
 				displayItems.push({
 					type: 'file',
 					id: item.id ?? `file-${index}`,
@@ -414,6 +453,20 @@ export function buildOutputDisplayItems(
 				messageDone
 			);
 			if (token) {
+				if (currentDetailTokens.length === 0) {
+					// Nothing to fold into yet: anything waiting came before the
+					// run rather than between its calls.
+					emitPendingMessages();
+				} else {
+					for (const message of pendingMessages) {
+						currentDetailTokens.push({
+							summary: '',
+							text: message.text,
+							attributes: { type: NOTE_DETAIL_TYPE, id: message.id }
+						});
+					}
+					pendingMessages.length = 0;
+				}
 				currentDetailTokens.push(token);
 			}
 			return;
@@ -422,28 +475,18 @@ export function buildOutputDisplayItems(
 		if (item.type === 'message') {
 			const text = getMessageText(item);
 			if (text.trim()) {
-				flushDetails();
-				displayItems.push({
-					type: 'message',
-					id: item.id ?? `message-${index}`,
-					text
-				});
+				pendingMessages.push({ id: item.id ?? `message-${index}`, text });
 			}
 			return;
 		}
 
 		const fallbackText = getMessageText(item);
 		if (fallbackText.trim()) {
-			flushDetails();
-			displayItems.push({
-				type: 'message',
-				id: item.id ?? `output-${index}`,
-				text: fallbackText
-			});
+			pendingMessages.push({ id: item.id ?? `output-${index}`, text: fallbackText });
 		}
 	});
 
-	flushDetails();
+	flushAll();
 	return displayItems;
 }
 

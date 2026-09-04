@@ -99,3 +99,98 @@ describe('buildOutputDisplayItems', () => {
 		]);
 	});
 });
+
+describe('folding a turn that talks between its tool calls', () => {
+	const call = (name: string, id: string): OutputItem => ({
+		type: 'function_call',
+		name,
+		call_id: id,
+		status: 'completed'
+	});
+	const result = (id: string): OutputItem => ({
+		type: 'function_call_output',
+		call_id: id,
+		output: [{ type: 'output_text', text: 'ok' }]
+	});
+	const says = (text: string, id = text): OutputItem => ({
+		type: 'message',
+		id,
+		status: 'completed',
+		content: [{ type: 'output_text', text }]
+	});
+
+	const types = (items: OutputItem[]) => buildOutputDisplayItems(items, true).map((i) => i.type);
+
+	it('groups across the sentences that used to break the run', () => {
+		// Twenty tool calls with a sentence between each rendered as twenty
+		// separate groups, because a message flushed the run.
+		const items = [
+			call('a', '1'),
+			result('1'),
+			says('now the client'),
+			call('b', '2'),
+			result('2'),
+			says('now the tests'),
+			call('c', '3'),
+			result('3')
+		];
+		expect(types(items)).toEqual(['detail_group']);
+	});
+
+	it('keeps the notes inside the group, in order, marked as notes', () => {
+		const built = buildOutputDisplayItems(
+			[call('a', '1'), result('1'), says('between'), call('b', '2'), result('2')],
+			true
+		);
+		const tokens = (built[0] as { tokens: { attributes: { type: string }; text: string }[] })
+			.tokens;
+		expect(tokens.map((t) => t.attributes.type)).toEqual(['tool_calls', 'note', 'tool_calls']);
+		expect(tokens[1].text).toBe('between');
+	});
+
+	it('leaves the answer outside', () => {
+		const items = [
+			call('a', '1'),
+			result('1'),
+			says('working'),
+			call('b', '2'),
+			result('2'),
+			says('Here is the result.')
+		];
+		expect(types(items)).toEqual(['detail_group', 'message']);
+	});
+
+	it('leaves a message that came before the run outside it', () => {
+		const items = [says('let me look'), call('a', '1'), result('1'), call('b', '2'), result('2')];
+		expect(types(items)).toEqual(['message', 'detail_group']);
+	});
+
+	it('does not turn one tool call plus a note into a group', () => {
+		// A group of one detail is a heading with nothing under it.
+		expect(types([call('a', '1'), result('1'), says('done')])).toEqual([
+			'detail_single',
+			'message'
+		]);
+	});
+
+	it('never loses a message', () => {
+		const items = [
+			says('one'),
+			call('a', '1'),
+			result('1'),
+			says('two'),
+			call('b', '2'),
+			result('2'),
+			says('three')
+		];
+		const built = buildOutputDisplayItems(items, true);
+		const texts = built.flatMap((item: any) =>
+			item.type === 'message'
+				? [item.text]
+				: item.type === 'detail_group'
+					? item.tokens.filter((t: any) => t.attributes.type === 'note').map((t: any) => t.text)
+					: []
+		);
+		expect(texts).toEqual(['one', 'two', 'three']);
+	});
+});

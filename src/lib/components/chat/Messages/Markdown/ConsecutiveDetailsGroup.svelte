@@ -198,9 +198,31 @@
 	} = computed);
 
 	$: prefixText = hasActiveToolCalls ? $i18n.t('Exploring') : $i18n.t('Explored');
+
+	/**
+	 * Past this many entries, an opened group is taller than the viewport, and
+	 * the control that shuts it again has scrolled off the top. A second one at
+	 * the bottom means getting out costs a click rather than a scroll back.
+	 *
+	 * A sticky header would do the same job more elegantly and is not used: the
+	 * navbar is itself sticky at the top of this very scroll container, at a
+	 * height that differs between mobile, desktop and embedded, so a pinned
+	 * header would sit behind it at some of those sizes.
+	 */
+	const LONG_GROUP_FROM = 6;
+	$: longGroup = tokens.length >= LONG_GROUP_FROM;
+
+	let groupElement: HTMLDivElement;
+
+	const collapseFromFoot = () => {
+		open = false;
+		// Shutting a group taller than the viewport leaves the view somewhere
+		// below where the group now ends; put its head back under the cursor.
+		groupElement?.scrollIntoView({ block: 'nearest' });
+	};
 </script>
 
-<div {id} class="w-full min-w-0">
+<div {id} class="w-full min-w-0" bind:this={groupElement}>
 	<div class="flex w-full min-w-0 items-center gap-2">
 		<div
 			role="button"
@@ -326,6 +348,21 @@
 			<div class="mb-1">
 				<slot name="content" />
 			</div>
+
+			{#if longGroup}
+				<!--
+					A way out that does not require scrolling back to the top of a
+					group taller than the window.
+				-->
+				<button
+					type="button"
+					class="mb-1 flex w-full items-center gap-1.5 py-0.5 text-left text-xs text-gray-400 transition hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+					on:click={collapseFromFoot}
+				>
+					<ChevronUp strokeWidth="3.5" className="size-3 shrink-0" />
+					<span>{$i18n.t('Collapse {{COUNT}} steps', { COUNT: tokens.length })}</span>
+				</button>
+			{/if}
 		</div>
 	{/if}
 
