@@ -231,6 +231,7 @@ from open_webui.utils.chat_variables import (
     normalize_chat_variables,
 )
 from open_webui.utils.embeddings import generate_embeddings
+from open_webui.utils.fork import FORK_CHANGELOG, fork_info
 from open_webui.utils.json_codec import JSONCodec
 from open_webui.utils.json_response import apply_orjson_http_json
 from open_webui.utils.logger import start_logger
@@ -1165,6 +1166,8 @@ async def chat_completion(
         stream_delta_chunk_size = form_data.get('params', {}).get('stream_delta_chunk_size')
         reasoning_tags = form_data.get('params', {}).get('reasoning_tags')
         compact_token_threshold = form_data.get('params', {}).get('compact_token_threshold')
+        # Already merged across the defaults, the model's own params and this request.
+        replay_reasoning = form_data.get('params', {}).get('replay_reasoning')
 
         # Model Params
         if model_info_params.get('stream_response') is not None:
@@ -1270,6 +1273,7 @@ async def chat_completion(
                     or 'native'
                 ),
                 'tool_approval_mode': tool_approval_mode,
+                'replay_reasoning': replay_reasoning,
             },
         }
 
@@ -2282,6 +2286,8 @@ async def get_app_config(request: Request):
         'status': True,
         'name': app.state.WEBUI_NAME,
         'version': VERSION,
+        # Stated beside upstream's version, never in place of it.
+        'fork': fork_info(),
         'default_locale': str(DEFAULT_LOCALE),
         'oauth': {
             # Hide providers (and thus the login buttons / auto-redirect) when OAuth
@@ -2582,6 +2588,17 @@ async def get_app_latest_release_version(user=Depends(get_verified_user)):
 @app.get('/api/changelog')
 async def get_app_changelog():
     return {key: CHANGELOG[key] for idx, key in enumerate(CHANGELOG) if idx < 5}
+
+
+@app.get('/api/changelog/fork')
+async def get_fork_changelog():
+    """What this fork changed, separately from what Open WebUI changed.
+
+    Its own endpoint rather than folded into the one above: the two are not the
+    same project's release notes, and returning them together would say they
+    were.
+    """
+    return {key: FORK_CHANGELOG[key] for idx, key in enumerate(FORK_CHANGELOG) if idx < 5}
 
 
 @app.get('/api/usage')

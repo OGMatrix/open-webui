@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import DOMPurify from 'dompurify';
 	import { toast } from 'svelte-sonner';
 
@@ -73,6 +75,26 @@
 	import { getSuggestionRenderer } from '../common/RichTextInput/suggestions';
 
 	import InputMenu from './MessageInput/InputMenu.svelte';
+	import ReasoningEffortMenu from './MessageInput/ReasoningEffortMenu.svelte';
+	import {
+		applyReasoningLevel,
+		getReasoningMode,
+		readReasoningLevel,
+		resolveReasoningLevel,
+		type ReasoningHints
+	} from '$lib/utils/reasoning';
+	import { getOllamaModelInfo } from '$lib/apis/ollama';
+	import { getOpenAIModelCapabilities } from '$lib/apis/openai';
+	import GenerationGlow from './MessageInput/GenerationGlow.svelte';
+	import { getGenerationStatsView } from '$lib/utils/generationStats';
+	import { streamingAssistantMessage, type GlowStyle } from '$lib/utils/generationGlow';
+	import ContextPanel from './MessageInput/ContextPanel.svelte';
+	import ContextIndicator from './MessageInput/ContextIndicator.svelte';
+	import InfoCircle from '$lib/components/icons/InfoCircle.svelte';
+	import { sumChatUsage } from '$lib/utils/tokenUsage';
+	import { getContextWindow } from '$lib/utils/contextWindow';
+	import { estimateMessagesTokens, estimateTokens } from '$lib/utils/tokenEstimate';
+	import { getModelPricing } from '$lib/utils/cost';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import ModelSelector from './ModelSelector.svelte';
 
@@ -113,7 +135,7 @@
 	import QueuedMessageItem from './MessageInput/QueuedMessageItem.svelte';
 	import TaskList from './Messages/ResponseMessage/TaskList.svelte';
 
-	const i18n: any = getContext('i18n');
+	const i18n = getContext<Writable<i18nType>>('i18n');
 
 	type AskUserPrompt = {
 		show: boolean;
@@ -170,6 +192,29 @@
 			(history.currentId && history.messages[history.currentId]?.done != true) ||
 			generating);
 	$: canCompact = !!history?.currentId;
+
+	// The message being written right now, which is the only one whose speed
+	// there is anything to show. Reading history directly keeps this reactive:
+	// a helper would hide the dependency from Svelte and freeze the value.
+	//
+	// Not keyed on `generating`: that flag is only raised on the merge-of-agents
+	// path, so on an ordinary answer it stays false the whole way through. An
+	// assistant message that has not been marked done is what "a model is
+	// writing" actually looks like, and it is what the surrounding code uses.
+	// `history` is untyped here, so the message shape is whatever the chat put
+	// in it; naming that plainly beats a narrower type that would be a fiction.
+	$: streamingMessage = streamingAssistantMessage<any>(history);
+	$: glowView = streamingMessage?.generationStats
+		? getGenerationStatsView(streamingMessage.generationStats)
+		: null;
+
+	$: glowStyle = ($settings?.generationGlow ?? 'sweep') as GlowStyle;
+	$: glowSpeed = $settings?.generationGlowSpeed ?? 1;
+	$: glowIntensity = $settings?.generationGlowIntensity ?? 1;
+	$: glowSpill = $settings?.generationGlowSpill ?? 1;
+	$: glowGrain = $settings?.generationGlowGrain ?? false;
+	$: glowHue =
+		typeof $settings?.generationGlowHue === 'number' ? $settings.generationGlowHue : null;
 	$: canToggleTemporary =
 		!embedded &&
 		!chatId &&
@@ -187,6 +232,136 @@
 
 	export let imageGenerationEnabled = false;
 	export let webSearchEnabled = false;
+	/** Chat-level params; the thinking picker reads and writes its choice here. */
+	export let params: Record<string, any> = {};
+
+	// The thinking controls follow whichever model the next message goes to, so
+	// switching models swaps the available levels.
+	$: activeReasoningModel =
+		atSelectedModel ?? $models.find((model) => model?.id === selectedModels?.[0]);
+	// Ollama reports what a model actually supports, so ask it rather than guess.
+	// Cached per model id, and only ever asked once, including after a failure.
+	// Providers with an endpoint that describes the served model. Everything else
+	// is left to the name patterns.
+	const REASONING_PROBE_PROVIDERS = new Set(['llama.cpp']);
+	const reasoningHintCache = new Map<string, ReasoningHints>();
+	/** When a model that told us nothing may be asked again. */
+	const reasoningHintRetryAt = new Map<string, number>();
+	/** When each model last actually answered, so a stale window can be noticed. */
+	const reasoningHintAskedAt = new Map<string, number>();
+	let reasoningHints: ReasoningHints | null = null;
+
+	/** A provider that has not loaded a model cannot describe it yet. */
+	const REASONING_PROBE_RETRY_MS = 20_000;
+
+	/**
+	 * How long a reported context window is taken as still true.
+	 *
+	 * The rest of what a probe returns is immutable under a running server -- a
+	 * chat template does not change -- so it is kept for good. The window is
+	 * not: a llama.cpp router unloads a model and loads it again with a
+	 * different --ctx-size, and the meter would go on filling against a number
+	 * from the previous load for the rest of the session.
+	 */
+	const CONTEXT_WINDOW_FRESH_MS = 60_000;
+
+	const loadReasoningHints = async (
+		model:
+			| { id?: string; owned_by?: string; provider?: string; status?: { value?: string } }
+			| null
+			| undefined
+	) => {
+		const id = model?.id;
+		reasoningHints = id ? (reasoningHintCache.get(id) ?? null) : null;
+
+		const askable =
+			model?.owned_by === 'ollama' || REASONING_PROBE_PROVIDERS.has(model?.provider ?? '');
+		if (!id || !askable) {
+			return;
+		}
+
+		// A llama.cpp router answers about a model by loading it. Selecting one in
+		// the picker must not start that, so an unloaded model is left alone until
+		// something else has a reason to load it.
+		if (model?.status?.value === 'unloaded') {
+			return;
+		}
+
+		// An answer worth having is kept for good -- except the context window,
+		// which the serving process can change under us by reloading the model.
+		// An empty answer only ever means "could not say yet".
+		const known = reasoningHintCache.get(id);
+		const windowStale = Date.now() - (reasoningHintAskedAt.get(id) ?? 0) > CONTEXT_WINDOW_FRESH_MS;
+		if (known && Object.keys(known).length > 0 && !windowStale) {
+			return;
+		}
+		if ((reasoningHintRetryAt.get(id) ?? 0) > Date.now()) {
+			return;
+		}
+
+		// Held off before awaiting so a burst of model switches cannot pile up calls.
+		reasoningHintRetryAt.set(id, Date.now() + REASONING_PROBE_RETRY_MS);
+
+		let hints: ReasoningHints = {};
+		if (model?.owned_by === 'ollama') {
+			const info = await getOllamaModelInfo(localStorage.token, id).catch(() => null);
+			const capabilities = info?.capabilities;
+			if (Array.isArray(capabilities)) {
+				hints = { thinking: capabilities.includes('thinking') };
+			}
+		} else {
+			const capabilities = await getOpenAIModelCapabilities(localStorage.token, id).catch(
+				() => null
+			);
+			if (typeof capabilities?.reasoning === 'boolean') {
+				hints = { thinking: capabilities.reasoning };
+			}
+			if (typeof capabilities?.context_length === 'number') {
+				hints.contextLength = capabilities.context_length;
+			}
+			// The exact levels this model's chat template accepts, where the
+			// serving process could read them off it.
+			if (Array.isArray(capabilities?.reasoning_levels)) {
+				hints.levels = capabilities.reasoning_levels.filter(
+					(level: unknown): level is string => typeof level === 'string'
+				);
+			}
+			if (typeof capabilities?.reasoning_default === 'string') {
+				hints.defaultLevel = capabilities.reasoning_default;
+			}
+		}
+
+		if (Object.keys(hints).length > 0) {
+			// Merge rather than replace: a re-probe for a fresh window must not
+			// throw away template facts an earlier, better-timed probe learned.
+			const merged = { ...(reasoningHintCache.get(id) ?? {}), ...hints };
+			reasoningHintCache.set(id, merged);
+			reasoningHintAskedAt.set(id, Date.now());
+			reasoningHintRetryAt.delete(id);
+			hints = merged;
+		}
+		if (activeReasoningModel?.id === id) {
+			reasoningHints = hints;
+		}
+	};
+
+	// Asked again when the model changes, when a response finishes -- a
+	// generation is what loads a model, and what it loaded with is only knowable
+	// afterwards -- and whenever the context panel is opened to be read.
+	$: loadReasoningHints(activeReasoningModel);
+	$: if (!generating) {
+		loadReasoningHints(activeReasoningModel);
+	}
+	$: reasoningMode = getReasoningMode(activeReasoningModel, reasoningHints);
+	$: reasoningLevel = readReasoningLevel(params, reasoningMode);
+	// What a message would actually be sent with: this chat's setting if it has
+	// one, otherwise the user's default, otherwise the model's own.
+	$: reasoningResolved = resolveReasoningLevel(
+		params,
+		reasoningMode,
+		reasoningHints,
+		$settings?.params
+	);
 	export let codeInterpreterEnabled = false;
 	export let toolApprovalMode = 'full';
 	export let onToolApprovalModeChange: Function = () => {};
@@ -442,35 +617,16 @@
 	const trimNumber = (value: number) =>
 		value >= 10 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, '');
 
-	const estimateTokens = (value) => {
-		if (value === null || value === undefined || value === '') {
-			return 0;
-		}
-		if (typeof value !== 'string') {
-			try {
-				value = JSON.stringify(value);
-			} catch {
-				value = String(value);
-			}
-		}
-		return Math.max(1, Math.floor(value.length / 4));
-	};
-
-	const estimateMessagesTokens = (messages) =>
-		messages.reduce((total, message) => {
-			let next = total + 4 + estimateTokens(message.content);
-			next += estimateTokens(message.output);
-			next += estimateTokens(message.tool_calls);
-			next += estimateTokens(message.files);
-			return next;
-		}, 0);
-
-	const getLocalContextUsage = () => {
-		if (!history?.currentId) {
+	// Takes the history as an argument rather than closing over it: a reactive
+	// statement only tracks what it references itself, so reading `history`
+	// inside the function meant the figures never refreshed while a response
+	// streamed in.
+	const getLocalContextUsage = (chatHistory: typeof history) => {
+		if (!chatHistory?.currentId) {
 			return null;
 		}
 
-		const messages = createMessagesList(history, history.currentId);
+		const messages = createMessagesList(chatHistory, chatHistory.currentId);
 		if (!messages.length) {
 			return null;
 		}
@@ -521,7 +677,7 @@
 		}, 1600);
 	};
 
-	$: statusContextUsage = contextUsage ?? getLocalContextUsage();
+	$: statusContextUsage = contextUsage ?? getLocalContextUsage(history);
 	$: contextHasThreshold = Number(statusContextUsage?.threshold) > 0;
 	$: contextPercent = contextHasThreshold
 		? Math.max(0, Math.round(statusContextUsage?.percent ?? 0))
@@ -535,6 +691,56 @@
 			: `${contextTokens} ${$i18n.t('tokens')}`
 		: $i18n.t('unknown');
 	$: contextBarPercent = contextHasThreshold ? Math.min(contextPercent, 100) : 0;
+
+	// Feeding the context panel: the raw numbers rather than the pre-joined string.
+	$: contextTokenCount = Number(
+		statusContextUsage?.estimated_tokens || statusContextUsage?.tokens || 0
+	);
+	// Compaction only sets a threshold when it is switched on. Without one the
+	// bar has nothing to fill against, so fall back to the model's own window.
+	$: probedContextLength = reasoningHints?.contextLength ?? null;
+	$: contextThresholdValue = contextHasThreshold
+		? Number(statusContextUsage?.threshold)
+		: getContextWindow(
+				activeReasoningModel,
+				{ ...$settings?.params, ...params },
+				probedContextLength
+			);
+	// Where that number came from, in the same order it was resolved. Worth
+	// saying: a model card and the process actually serving it disagree often
+	// enough -- a 256k model started with --ctx-size 32768 is the usual case --
+	// that a bare figure invites doubt.
+	$: contextWindowSource = (
+		{ ...$settings?.params, ...params }?.num_ctx
+			? 'setting'
+			: probedContextLength
+				? 'server'
+				: contextThresholdValue
+					? 'model'
+					: null
+	) as 'server' | 'model' | 'setting' | null;
+	// Open WebUI estimates the window from message text until a turn reports usage.
+	$: contextIsEstimated =
+		!statusContextUsage?.tokens && Boolean(statusContextUsage?.estimated_tokens);
+	$: modelPricing = getModelPricing(activeReasoningModel);
+
+	// What the next request would put in the window: what is already there, plus
+	// the draft. Warn before sending rather than explaining the failure after.
+	// The draft is estimated from its text, so this is deliberately approximate
+	// and only speaks up once the overrun is past a rounding error.
+	const CONTEXT_WARNING_MARGIN = 0.02;
+	$: draftTokens = estimateTokens(prompt ?? '');
+	$: projectedContextTokens = contextTokenCount + draftTokens;
+	$: contextWouldOverflow =
+		contextThresholdValue !== null &&
+		contextThresholdValue > 0 &&
+		projectedContextTokens > contextThresholdValue * (1 + CONTEXT_WARNING_MARGIN);
+	$: contextOverflowBy = contextWouldOverflow
+		? projectedContextTokens - (contextThresholdValue as number)
+		: 0;
+	$: chatTokenUsage = sumChatUsage(
+		history?.currentId ? createMessagesList(history, history.currentId) : []
+	);
 
 	const getCommand = () => {
 		const chatInput = document.getElementById('chat-input');
@@ -1776,6 +1982,32 @@
 							</div>
 						{/if}
 
+						{#if contextWouldOverflow}
+							<div
+								class="mx-1 mb-1 flex items-start gap-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-400/10 dark:text-amber-300"
+								role="status"
+							>
+								<InfoCircle className="size-3.5 shrink-0 mt-px" />
+								<div class="min-w-0">
+									<div>
+										{$i18n.t(
+											'This message would exceed the context window by about {{tokens}} tokens.',
+											{ tokens: formatTokenCount(contextOverflowBy) }
+										)}
+									</div>
+									{#if contextCompactionEnabled}
+										<button
+											type="button"
+											class="mt-0.5 underline underline-offset-2 hover:no-underline"
+											on:click={() => compactHandler()}
+										>
+											{$i18n.t('Compact the conversation first')}
+										</button>
+									{/if}
+								</div>
+							</div>
+						{/if}
+
 						{#if showStatusPanel}
 							<div class="mx-1 rounded-2xl bg-white text-xs dark:bg-gray-900">
 								<div class="flex items-center justify-between px-3 py-1.5">
@@ -1795,25 +2027,15 @@
 								</div>
 
 								<div class="space-y-0.5 px-3 pb-2">
-									<div class="rounded-xl py-0.5 text-gray-600 dark:text-gray-400">
-										<div class="flex min-h-4 items-center gap-3">
-											<span class="min-w-0 flex-1 truncate">{$i18n.t('Context usage')}</span>
-											<span
-												class="shrink-0 font-mono text-[0.625rem] text-gray-400 dark:text-gray-600"
-											>
-												{contextValue}
-											</span>
-										</div>
-										{#if contextHasThreshold}
-											<div
-												class="mt-1.5 h-0.5 overflow-hidden rounded-full bg-gray-100 dark:bg-white/8"
-											>
-												<div
-													class="h-full rounded-full bg-gray-300 dark:bg-white/20"
-													style={`width: ${contextBarPercent}%`}
-												></div>
-											</div>
-										{/if}
+									<div class="rounded-xl py-0.5">
+										<ContextPanel
+											tokens={contextTokenCount}
+											threshold={contextThresholdValue}
+											estimated={contextIsEstimated}
+											windowSource={contextWindowSource}
+											usage={chatTokenUsage}
+											pricing={modelPricing}
+										/>
 									</div>
 
 									{#if messageQueue.length}
@@ -1864,6 +2086,20 @@
 								: ''}  transition px-0.5 bg-white/5 dark:bg-gray-500/5 backdrop-blur-sm dark:text-gray-100"
 							dir={$settings?.chatDirection ?? 'auto'}
 						>
+							<GenerationGlow
+								active={streamingMessage !== null}
+								tokensPerSecond={glowView?.tokensPerSecond ?? null}
+								prefilling={glowView?.prefilling ?? false}
+								style={glowStyle}
+								speed={glowSpeed}
+								intensity={glowIntensity}
+								spill={glowSpill}
+								hue={glowHue}
+								grain={glowGrain}
+								tokens={glowView?.tokens ?? 0}
+								prefill={glowView?.prefill ?? null}
+							/>
+
 							{#if atSelectedModel !== undefined}
 								<div class="px-2.5 pt-2.5 text-left w-full flex flex-col z-10">
 									<div class="flex items-center justify-between w-full">
@@ -2427,6 +2663,27 @@
 													</Tooltip>
 												{/if}
 											{/each}
+
+											<ContextIndicator
+												tokens={contextTokenCount}
+												threshold={contextThresholdValue}
+												estimated={contextIsEstimated}
+												windowSource={contextWindowSource}
+												usage={chatTokenUsage}
+												pricing={modelPricing}
+											/>
+
+											{#if reasoningMode}
+												<ReasoningEffortMenu
+													mode={reasoningMode}
+													level={reasoningLevel}
+													effective={reasoningResolved.level}
+													inherited={reasoningResolved.source !== 'chat'}
+													onSelect={(next) => {
+														params = applyReasoningLevel(params, reasoningMode, next);
+													}}
+												/>
+											{/if}
 
 											{#if webSearchEnabled && showWebSearchButton}
 												<Tooltip content={$i18n.t('Web Search')} placement="top">

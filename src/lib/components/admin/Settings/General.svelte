@@ -126,6 +126,25 @@
 							{/if}
 						</div>
 
+						{#if $config?.fork?.version}
+							<!--
+								Which fork build this is, beside upstream's version rather than
+								instead of it. The line above is Open WebUI's own identifier and
+								stays exactly as it is.
+							-->
+							<div class="mt-0.5 text-xs text-gray-400 dark:text-gray-600">
+								{$i18n.t('This build')}:
+								<a
+									href={$config.fork.release_url}
+									target="_blank"
+									rel="noreferrer"
+									class="underline-offset-2 transition-colors hover:text-gray-700 hover:underline dark:hover:text-gray-300"
+								>
+									v{$config.fork.version}
+								</a>
+							</div>
+						{/if}
+
 						<button
 							class="mt-0.5 text-xs text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-600 dark:hover:text-gray-300"
 							type="button"

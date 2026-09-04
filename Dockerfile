@@ -19,6 +19,11 @@ ARG USE_AUXILIARY_EMBEDDING_MODEL=TaylorAI/bge-micro-v2
 ARG USE_TIKTOKEN_ENCODING_NAME="cl100k_base"
 
 ARG BUILD_HASH=dev-build
+
+# What the release that produced this image called itself. The fork changelog
+# is copied in as well, but it is written down only after the image is built --
+# so without this the image would spend its life naming the release before it.
+ARG FORK_BUILD_VERSION=""
 # Override at your own risk - non-root configurations are untested
 ARG UID=0
 ARG GID=0
@@ -187,6 +192,16 @@ COPY --chown=$UID:$GID --from=build /app/build /app/build
 COPY --chown=$UID:$GID --from=build /app/CHANGELOG.md /app/CHANGELOG.md
 COPY --chown=$UID:$GID --from=build /app/package.json /app/package.json
 
+# The licence texts travel with the binary. Clause 2 of the Open WebUI License
+# requires a redistribution in binary form to reproduce the copyright notice,
+# the conditions and the disclaimer in the materials it ships with, and an
+# image is exactly such a distribution. NOTICE-FORK.md says, inside the image
+# itself, that this build is an unofficial fork.
+COPY --chown=$UID:$GID --from=build /app/LICENSE /app/LICENSE_HISTORY /app/LICENSE_NOTICE /app/NOTICE-FORK.md /app/
+
+# The fork changelog is also what the interface reads its own version from.
+COPY --chown=$UID:$GID --from=build /app/CHANGELOG-FORK.md /app/CHANGELOG-FORK.md
+
 # copy backend files
 COPY --chown=$UID:$GID ./backend .
 
@@ -220,6 +235,13 @@ USER $UID:$GID
 
 ARG BUILD_HASH
 ENV WEBUI_BUILD_VERSION=${BUILD_HASH}
+
+# Stated by the build rather than read back out of a file it shipped, so an
+# image can always name its own release even when the changelog inside it was
+# written before the entry existed. See backend/open_webui/utils/fork.py.
+ARG FORK_BUILD_VERSION
+ENV FORK_BUILD_VERSION=${FORK_BUILD_VERSION}
+
 ENV DOCKER=true
 
 CMD [ "bash", "start.sh"]

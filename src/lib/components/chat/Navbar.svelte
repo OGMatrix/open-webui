@@ -12,7 +12,9 @@
 		showControls,
 		showSidebar,
 		temporaryChatEnabled,
-		user
+		user,
+		generatingTitleChatIds,
+		isGeneratingTitle
 	} from '$lib/stores';
 
 	import { slide } from 'svelte/transition';
@@ -21,6 +23,7 @@
 
 	import ShareChatModal from '../chat/ShareChatModal.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
+	import GeneratedTitle from '../common/GeneratedTitle.svelte';
 	import Menu from '$lib/components/layout/Navbar/Menu.svelte';
 	import AdjustmentsHorizontal from '../icons/AdjustmentsHorizontal.svelte';
 
@@ -120,7 +123,11 @@
 							<div
 								class="min-w-0 truncate py-1 text-left text-[0.9375rem] font-normal text-gray-700 dark:text-gray-300"
 							>
-								{title || chat?.chat?.title || $i18n.t('New Chat')}
+								<GeneratedTitle
+									title={title || chat?.chat?.title || $i18n.t('New Chat')}
+									generating={isGeneratingTitle($generatingTitleChatIds, chat?.id)}
+									skeletonWidth="11rem"
+								/>
 							</div>
 
 							{#if shareEnabled && chat && (chat.id || $temporaryChatEnabled)}

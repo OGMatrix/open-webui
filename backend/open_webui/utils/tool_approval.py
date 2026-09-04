@@ -7,12 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from open_webui.constants import ERROR_MESSAGES
 from open_webui.models.chats import Chats
 from open_webui.socket.main import get_event_emitter
+from open_webui.utils.ask_user import ASK_USER_REFUSALS, read_ask_user_answers
 from open_webui.utils.json_codec import JSONCodec
 
 
 class ResolveToolCallForm(BaseModel):
     call_id: str
-    action: Literal['approve', 'reject', 'answer']
+    action: Literal['approve', 'reject', 'answer', 'decline']
     answers: Any | None = None
     timed_out: bool = False
 
@@ -62,6 +63,26 @@ async def resolve_tool_call_output(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='ask_user requires an answer or deny.')
         function_call['status'] = 'queued'
         function_call['approved'] = True
+    elif form_data.action == 'decline':
+        if tool_name != 'ask_user':
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Only ask_user can be declined.')
+        function_call['status'] = 'completed'
+        output.append(
+            {
+                'type': 'function_call_output',
+                'id': f'fco_{form_data.call_id}',
+                'call_id': form_data.call_id,
+                'output': [
+                    {
+                        'type': 'input_text',
+                        'text': JSONCodec.dumps(
+                            {'status': 'declined', 'answers': {}, 'advice': ASK_USER_REFUSALS['declined']}
+                        ),
+                    }
+                ],
+                'status': 'completed',
+            }
+        )
     elif form_data.action == 'reject':
         function_call['status'] = 'rejected'
         output.append(
@@ -79,11 +100,32 @@ async def resolve_tool_call_output(
         if form_data.answers is None and not form_data.timed_out:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Answers are required for ask_user.')
         function_call['status'] = 'completed'
-        answer_payload = (
-            {'status': 'cancelled', 'answers': {}, 'timed_out': True}
-            if form_data.timed_out
-            else {'status': 'answered', 'answers': form_data.answers or {}}
-        )
+
+        if form_data.timed_out:
+            answer_payload = {
+                'status': 'cancelled',
+                'answers': {},
+                'timed_out': True,
+                'advice': ASK_USER_REFUSALS['cancelled'],
+            }
+        else:
+            # The reply is checked against the questions that were actually staged,
+            # so an option that was never offered cannot reach the model as an answer.
+            try:
+                staged = JSONCodec.loads(function_call.get('arguments') or '{}')
+                questions = staged.get('questions') if isinstance(staged, dict) else None
+            except (JSONCodec.JSONDecodeError, TypeError, ValueError):
+                questions = None
+
+            if isinstance(questions, list) and questions:
+                answers, values, problems = read_ask_user_answers(questions, form_data.answers or {})
+                answer_payload = (
+                    {'status': 'error', 'error': 'Unusable answers: ' + '; '.join(problems)}
+                    if problems
+                    else {'status': 'answered', 'values': values, 'answers': answers}
+                )
+            else:
+                answer_payload = {'status': 'answered', 'answers': form_data.answers or {}}
         output.append(
             {
                 'type': 'function_call_output',

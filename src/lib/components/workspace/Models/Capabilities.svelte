@@ -39,6 +39,12 @@
 				'Model can access Open Terminal for command execution and file management'
 			)
 		},
+		reasoning: {
+			label: $i18n.t('Reasoning'),
+			description: $i18n.t(
+				'Offers a thinking control in the chat input.\nSet this when a model supports thinking but is not recognised automatically, or to hide the control.'
+			)
+		},
 		usage: {
 			label: $i18n.t('Usage'),
 			description: $i18n.t(

@@ -25,7 +25,9 @@
 		visiblePinnedModels,
 		selectedFolder,
 		WEBUI_NAME,
-		sidebarWidth
+		sidebarWidth,
+		generatingTitleChatIds,
+		isGeneratingTitle
 	} from '$lib/stores';
 	import {
 		loadNextChatListPage,
@@ -1583,6 +1585,7 @@
 													className=""
 													id={chat.id}
 													title={chat.title}
+													titleGenerating={isGeneratingTitle($generatingTitleChatIds, chat.id)}
 													createdAt={chat.created_at}
 													updatedAt={chat.updated_at}
 													lastReadAt={chat.last_read_at}
@@ -1648,6 +1651,7 @@
 											className=""
 											id={chat.id}
 											title={chat.title}
+											titleGenerating={isGeneratingTitle($generatingTitleChatIds, chat.id)}
 											createdAt={chat.created_at}
 											updatedAt={chat.updated_at}
 											lastReadAt={chat.last_read_at}

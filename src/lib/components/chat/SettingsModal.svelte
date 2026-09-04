@@ -223,6 +223,15 @@
 				'always collapse codeblocks',
 				'always collapse code blocks',
 				'always expand details',
+				'animation',
+				'aurora',
+				'glow',
+				'grain',
+				'nebula',
+				'ripple',
+				'meter',
+				'input animation',
+				'inputanimation',
 				'always on web search',
 				'always play notification sound',
 				'alwayscollapsecodeblocks',
@@ -881,6 +890,55 @@
 		await config.set(await getBackendConfig());
 	};
 
+	let settingsPane: HTMLElement | null = null;
+	let highlightTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	/**
+	 * Scrolls the first match in the open section into view and marks it.
+	 *
+	 * Filtering the section list only gets the reader to a page that can run to
+	 * dozens of controls; the search term itself is what they were looking for, so
+	 * this finds it in the rendered panel. Reading the DOM rather than a registry
+	 * of settings is deliberate: the sections do not share a row component, so any
+	 * registry would silently cover only some of them.
+	 */
+	const highlightSearchMatch = async () => {
+		if (!browser) return;
+		await tick();
+
+		settingsPane?.querySelectorAll('.settings-hit').forEach((node) => {
+			node.classList.remove('settings-hit');
+		});
+		if (highlightTimeout) {
+			clearTimeout(highlightTimeout);
+			highlightTimeout = null;
+		}
+
+		const query = search.trim().toLowerCase();
+		if (!query || !settingsPane) return;
+
+		const walker = document.createTreeWalker(settingsPane, NodeFilter.SHOW_TEXT);
+		let node: Node | null;
+		while ((node = walker.nextNode())) {
+			if (!(node.textContent ?? '').toLowerCase().includes(query)) continue;
+
+			// The label alone is not the setting; the row that carries it is.
+			let row = node.parentElement;
+			while (row && row !== settingsPane && (row.offsetHeight ?? 0) < 16) {
+				row = row.parentElement;
+			}
+			if (!row || row === settingsPane) return;
+
+			row.classList.add('settings-hit');
+			row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+			highlightTimeout = setTimeout(() => {
+				row?.classList.remove('settings-hit');
+				highlightTimeout = null;
+			}, 2400);
+			return;
+		}
+	};
+
 	const searchDebounceHandler = () => {
 		if (searchDebounceTimeout) {
 			clearTimeout(searchDebounceTimeout);
@@ -888,6 +946,7 @@
 
 		searchDebounceTimeout = setTimeout(() => {
 			setFilteredSettings();
+			void highlightSearchMatch();
 		}, 100);
 	};
 
@@ -952,7 +1011,7 @@
 		</button>
 
 		<div
-			class="hidden md:flex items-center gap-1.5 h-7 px-2 mx-1 mt-1 mb-0.5 shrink-0 rounded-lg text-xs bg-gray-50/70 dark:bg-white/[0.03]"
+			class="flex items-center gap-1.5 h-7 px-2 mx-1 mt-1 mb-0.5 shrink-0 rounded-lg text-xs bg-gray-50/70 dark:bg-white/[0.03]"
 		>
 			<div class="self-center rounded-l-xl bg-transparent">
 				<Search className="size-3.5" strokeWidth="1.5" />
@@ -1204,7 +1263,7 @@
 	</nav>
 
 	<div class="flex-1 min-w-0 min-h-0 p-4 md:px-5 flex flex-col">
-		<div class="flex-1 min-h-0 overflow-hidden">
+		<div class="flex-1 min-h-0 overflow-hidden" bind:this={settingsPane}>
 			{#if selectedTab === 'general'}
 				<General
 					{getModels}
@@ -1327,3 +1386,23 @@
 		</div>
 	</div>
 </Modal>
+
+<style>
+	/* A found setting is marked rather than merely scrolled to, because on a page
+	   of thirty controls "it is somewhere here" is not an answer. */
+	:global(.settings-hit) {
+		border-radius: 0.5rem;
+		box-shadow: 0 0 0 2px rgb(120 120 120 / 0.35);
+		animation: settings-hit-fade 2.4s ease-out forwards;
+	}
+
+	@keyframes settings-hit-fade {
+		0%,
+		70% {
+			box-shadow: 0 0 0 2px rgb(120 120 120 / 0.35);
+		}
+		100% {
+			box-shadow: 0 0 0 2px rgb(120 120 120 / 0);
+		}
+	}
+</style>

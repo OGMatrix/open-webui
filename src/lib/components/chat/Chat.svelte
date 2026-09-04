@@ -32,6 +32,7 @@
 		temporaryChatEnabled,
 		mobile,
 		chatTitle,
+		generatingTitleChatIds,
 		showArtifacts,
 		artifactContents,
 		tools,
@@ -62,11 +63,30 @@
 		removeAllDetails,
 		getCodeBlockContents,
 		displayFileHandler,
-		getUsageTokenCount
+		getUsageTokenCount,
+		initMermaid,
+		renderVegaVisualization
 	} from '$lib/utils';
+	import { getContextWindow } from '$lib/utils/contextWindow';
+	import { estimateMessagesTokens, estimateTokens } from '$lib/utils/tokenEstimate';
+	import ScrollToBottom from './ScrollToBottom.svelte';
 	import { AudioQueue } from '$lib/utils/audio';
+	import {
+		applyGenerationUsage,
+		completeGenerationStats,
+		createGenerationStats,
+		recordGenerationDelta,
+		recordPrefillProgress,
+		syncGenerationProgress,
+		type GenerationStats
+	} from '$lib/utils/generationStats';
 	import { createTemporaryChatId, isTemporaryChatId } from '$lib/utils/chatId';
-	import { applyResponseStreamEvent, getOutputText } from './Messages/structuredOutput';
+	import {
+		applyResponseStreamEvent,
+		getGeneratedText,
+		getOutputText,
+		type OutputItem
+	} from './Messages/structuredOutput';
 
 	import {
 		archiveChatById,
@@ -224,31 +244,17 @@
 		}
 	}
 
-	const estimateTokens = (value) => {
-		if (value === null || value === undefined || value === '') {
-			return 0;
-		}
-		if (typeof value !== 'string') {
-			try {
-				value = JSON.stringify(value);
-			} catch {
-				value = String(value);
-			}
-		}
-		return Math.max(1, Math.floor(value.length / 4));
-	};
-
-	const estimateMessagesTokens = (messages) =>
-		messages.reduce((total, message) => {
-			let next = total + 4 + estimateTokens(message.content);
-			next += estimateTokens(message.output);
-			next += estimateTokens(message.tool_calls);
-			next += estimateTokens(message.files);
-			return next;
-		}, 0);
-
 	$: contextCompactionEnabled = Boolean($config?.features?.enable_context_compaction);
 
+	/**
+	 * What the meter fills against.
+	 *
+	 * An explicit threshold wins, because someone chose it. Failing that it is
+	 * the model's own context window, which is also what the server budgets
+	 * compaction against — so the bar and the decision agree. Compaction being
+	 * switched off does not make the window unknowable, and a user watching a
+	 * chat fill up wants the number either way.
+	 */
 	const getContextThreshold = () => {
 		const chatThreshold = Number(params?.compact_token_threshold);
 		if (Number.isFinite(chatThreshold) && chatThreshold > 0) {
@@ -258,7 +264,11 @@
 		const modelId = atSelectedModel?.id ?? selectedModels.find((id) => id);
 		const model = $models.find((item) => item.id === modelId);
 		const threshold = Number(model?.info?.params?.compact_token_threshold);
-		return Number.isFinite(threshold) && threshold > 0 ? threshold : null;
+		if (Number.isFinite(threshold) && threshold > 0) {
+			return threshold;
+		}
+
+		return getContextWindow(model, { ...$settings?.params, ...params });
 	};
 
 	const getContextUsage = () => {
@@ -267,9 +277,7 @@
 		}
 
 		const messages = createMessagesList(history, history.currentId);
-		const threshold = contextCompactionEnabled
-			? (getContextThreshold() ?? serverContextUsage?.threshold ?? null)
-			: null;
+		const threshold = getContextThreshold() ?? serverContextUsage?.threshold ?? null;
 		const systemTokens = estimateTokens($settings?.system ?? '');
 		let estimatedTokens = systemTokens;
 		let hasUsageCheckpoint = false;
@@ -403,7 +411,7 @@
 		currentId: null
 	};
 
-	let taskIds = null;
+	let taskIds: string[] | null = null;
 
 	// Chat Input
 	let prompt = '';
@@ -580,6 +588,26 @@
 		onToolCallResolved(res);
 	};
 
+	// The person chose not to answer, which is a different outcome from the
+	// prompt being rejected: the model is told so and told not to re-ask.
+	const declinePendingAskUser = async (messageId, callId) => {
+		if (!$chatId || !messageId || !callId) {
+			return;
+		}
+
+		const res = await resolveChatMessageToolCall(
+			localStorage.token,
+			$chatId,
+			messageId,
+			callId,
+			'decline'
+		).catch(async (error) => {
+			toast.error(`${error}`);
+			await loadChat();
+		});
+		onToolCallResolved(res);
+	};
+
 	$: pendingAskUser = findPendingAskUser(history);
 	$: savedAskUserPrompt = pendingAskUser
 		? {
@@ -590,6 +618,15 @@
 				allowOther: pendingAskUser.args?.allow_other !== false,
 				timeoutMs: null,
 				onConfirm: (value) => {
+					// Declining is its own outcome, not a rejection: the person answered
+					// the prompt by choosing not to, and the model is told which it was.
+					if (value?.status === 'declined') {
+						void declinePendingAskUser(
+							pendingAskUser.message.id,
+							pendingAskUser.call.call_id || pendingAskUser.call.id
+						);
+						return;
+					}
 					void answerPendingAskUser(
 						pendingAskUser.message.id,
 						pendingAskUser.call.call_id || pendingAskUser.call.id,
@@ -1194,6 +1231,13 @@
 	const chatEventHandler = async (event, cb) => {
 		console.log(event);
 
+		// Handled before the active-chat guard: a title can land for a chat the
+		// user has already navigated away from, and its placeholder still needs
+		// clearing in the sidebar.
+		if (event?.data?.type === 'chat:title') {
+			setTitleGenerating(event.chat_id, false);
+		}
+
 		if (event.chat_id === $chatId) {
 			await tick();
 			const type = event?.data?.type ?? null;
@@ -1209,11 +1253,37 @@
 			if (message) {
 				const data = event?.data?.data ?? null;
 
+				ensureGenerationStats(message);
+
 				if (type === 'status') {
 					if (message?.statusHistory) {
 						message.statusHistory.push(data);
 					} else {
 						message.statusHistory = [data];
+					}
+				} else if (type === 'chat:tool:progress') {
+					// A tool the provider is running on its own side. It arrives twice,
+					// once starting and once finished, so the same entry is updated in
+					// place rather than the list growing a second copy of every tool.
+					const entry = {
+						action: 'tool_progress',
+						call_id: data?.call_id ?? null,
+						description: [data?.emoji, data?.label ?? data?.name].filter(Boolean).join(' '),
+						done: data?.status !== 'running'
+					};
+
+					const history = message.statusHistory ?? [];
+					const existing = entry.call_id
+						? history.findIndex(
+								(item: any) => item?.action === 'tool_progress' && item?.call_id === entry.call_id
+							)
+						: -1;
+
+					if (existing >= 0) {
+						history[existing] = { ...history[existing], ...entry };
+						message.statusHistory = history;
+					} else {
+						message.statusHistory = [...history, entry];
 					}
 				} else if (type === 'context_compaction') {
 					handleContextCompactionStatus(data);
@@ -1249,6 +1319,12 @@
 					}
 				} else if (type === 'chat:message:delta' || type === 'message') {
 					message.content += data.content;
+					if (!message.done) {
+						message.generationStats = recordGenerationDelta(
+							message.generationStats,
+							data.content ?? ''
+						);
+					}
 				} else if (type === 'chat:message' || type === 'replace') {
 					message.content = data.content;
 				} else if (type === 'chat:message:files' || type === 'files') {
@@ -1377,6 +1453,22 @@
 					eventConfirmationInputValue = data?.value ?? '';
 					eventConfirmationInputType = data?.input?.type ?? data?.type ?? '';
 					eventConfirmationInputOptions = data?.input?.options ?? data?.options ?? [];
+				} else if (type === 'request:diagram_check') {
+					// The tool asks the browser rather than guessing, because the parser
+					// that will draw the diagram lives here and is the only thing that
+					// can say for certain whether it draws.
+					try {
+						const language = data?.diagram_type;
+						if (language === 'mermaid') {
+							const mermaid = await initMermaid();
+							await mermaid.parse(data?.source ?? '', { suppressErrors: false });
+						} else {
+							await renderVegaVisualization(data?.source ?? '', language);
+						}
+						cb?.({ ok: true });
+					} catch (error) {
+						cb?.({ ok: false, error: error instanceof Error ? error.message : String(error) });
+					}
 				} else if (type === 'request:user_input') {
 					eventCallback = cb;
 					askUserQuestions = data?.questions ?? [];
@@ -1389,6 +1481,8 @@
 				} else {
 					console.log('Unknown message type', data);
 				}
+
+				trackGenerationProgress(message);
 
 				history.messages[event.message_id] = message;
 			}
@@ -1510,7 +1604,24 @@
 				message?.role === 'assistant' && !message.done && (message.childrenIds?.length ?? 0) === 0
 		);
 
-	const handleSocketConnect = async () => {
+	/**
+	 * Re-read the chat when this client may have missed part of it.
+	 *
+	 * Content arrives as appends — `message.content += ...` — and there is no
+	 * periodic full state, so anything that does not arrive is simply absent
+	 * from this copy for good. A socket that drops while a tab is in the
+	 * background loses whatever was emitted in the gap, and socket.io does not
+	 * replay it.
+	 *
+	 * This used to reload only when no task was still running, which is to say:
+	 * never during the answer that has the hole in it. The database is written
+	 * as the answer streams, so it holds what this copy is missing whether the
+	 * generation has finished or not.
+	 *
+	 * Gated on there being an unfinished assistant message, so an idle chat
+	 * costs nothing on every reconnect.
+	 */
+	const resyncIfIncomplete = async () => {
 		// Gate on $chatId, not chatIdProp: chats started from the home page keep an empty chatIdProp
 		if (!$chatId || $temporaryChatEnabled) {
 			return;
@@ -1520,12 +1631,31 @@
 			return;
 		}
 
-		const pendingTaskIds = await getTaskIdsByChatId(localStorage.token, $chatId)
-			.then((res) => res?.task_ids ?? [])
-			.catch(() => null);
+		await loadChat();
 
-		if (pendingTaskIds?.length === 0) {
-			await loadChat();
+		// Only after the reload, and only to learn whether anything is still
+		// running: a failed query used to mean no reload at all, which turned a
+		// transient error into permanently missing text.
+		taskIds = await getTaskIdsByChatId(localStorage.token, $chatId)
+			.then((res) => res?.task_ids ?? null)
+			.catch(() => taskIds);
+	};
+
+	const handleSocketConnect = async () => {
+		await resyncIfIncomplete();
+	};
+
+	/**
+	 * Coming back to a tab that was in the background.
+	 *
+	 * The reconnect above covers a socket that dropped and came back, and this
+	 * covers the rest: a delivery missed for any other reason leaves the same
+	 * hole, and returning to the tab is the moment it would be noticed. One
+	 * request, and only while an answer is unfinished.
+	 */
+	const handleVisibilityChange = async () => {
+		if (document.visibilityState === 'visible') {
+			await resyncIfIncomplete();
 		}
 	};
 
@@ -1535,6 +1665,7 @@
 		window.addEventListener('message', onMessageHandler);
 		$socket?.on('events', chatEventHandler);
 		$socket?.on('connect', handleSocketConnect);
+		document.addEventListener('visibilitychange', handleVisibilityChange);
 
 		$audioQueue?.destroy();
 
@@ -1627,6 +1758,7 @@
 				window.removeEventListener('message', onMessageHandler);
 				$socket?.off('events', chatEventHandler);
 				$socket?.off('connect', handleSocketConnect);
+				document.removeEventListener('visibilitychange', handleVisibilityChange);
 				dismissContextCompactionToast();
 				audioQueueInstance?.destroy();
 				audioQueue.set(null);
@@ -2530,6 +2662,50 @@
 		}));
 	};
 
+	// The backend only reports the finished title, so the placeholder is driven
+	// from this side: raised when we ask for a title, cleared when it lands.
+	// The timeout is a backstop for a generation that fails or never answers,
+	// so a chat is never left showing a placeholder forever.
+	const TITLE_GENERATION_TIMEOUT_MS = 90000;
+	const titleGenerationTimers = new Map();
+
+	const setTitleGenerating = (id: string | undefined | null, generating: boolean) => {
+		if (!id) {
+			return;
+		}
+
+		const timer = titleGenerationTimers.get(id);
+		if (timer) {
+			clearTimeout(timer);
+			titleGenerationTimers.delete(id);
+		}
+
+		generatingTitleChatIds.update((ids) => {
+			const next = new Set(ids);
+			if (generating) {
+				next.add(id);
+			} else {
+				next.delete(id);
+			}
+			return next;
+		});
+
+		if (generating) {
+			titleGenerationTimers.set(
+				id,
+				setTimeout(() => setTitleGenerating(id, false), TITLE_GENERATION_TIMEOUT_MS)
+			);
+		}
+	};
+
+	// A brand new chat has no id yet when the request goes out, so remember that
+	// a title was asked for and bind it to the chat as soon as its id exists.
+	let pendingTitleGeneration = false;
+	$: if (pendingTitleGeneration && $chatId) {
+		pendingTitleGeneration = false;
+		setTitleGenerating($chatId, true);
+	}
+
 	const chatCompletedHandler = async (_chatId, modelId, responseMessageId, messages) => {
 		// Backend handles outlet filters and persistence inline.
 		// Just refresh the sidebar chat list.
@@ -2728,7 +2904,45 @@
 		}
 	};
 
+	// Text reaches a response through three different socket paths (chat
+	// completions, the Responses API, and chat:message events), so every one of
+	// them funnels through these helpers to keep the live token/rate readout in
+	// step regardless of which event carried it.
+	type MeasuredMessage = {
+		content?: string;
+		output?: OutputItem[];
+		done?: boolean;
+		generationStats?: GenerationStats;
+	};
+
+	// Reasoning is streamed as its own output items and never reaches
+	// message.content, so measuring content alone misses every thinking token and
+	// leaves the rate window covering only the visible answer.
+	const getMeasuredText = (message: MeasuredMessage) =>
+		message.output?.length ? getGeneratedText(message.output) : (message.content ?? '');
+
+	const ensureGenerationStats = (message: MeasuredMessage) => {
+		if (!message.generationStats || (message.generationStats.completedAt && !message.done)) {
+			message.generationStats = createGenerationStats(Date.now(), getMeasuredText(message).length);
+		}
+	};
+
+	const trackGenerationProgress = (message: MeasuredMessage) => {
+		if (message?.done) {
+			// A finished response keeps the numbers it ended with.
+			return;
+		}
+
+		ensureGenerationStats(message);
+		message.generationStats = syncGenerationProgress(
+			message.generationStats,
+			getMeasuredText(message)
+		);
+	};
+
 	const responseCompletionEventHandler = (data, message) => {
+		ensureGenerationStats(message);
+
 		message.output = applyResponseStreamEvent(message.output ?? [], data);
 
 		if (data?.type === 'response.output_text.delta') {
@@ -2745,12 +2959,29 @@
 			message.content = getOutputText(message.output) || message.content;
 		}
 
+		trackGenerationProgress(message);
+
 		history.messages[message.id] = message;
 		history = history;
 	};
 
 	const chatCompletionEventHandler = async (data, message, chatId) => {
-		const { id, done, choices, content, output, sources, selected_model_id, error, usage } = data;
+		const {
+			id,
+			done,
+			choices,
+			content,
+			output,
+			sources,
+			selected_model_id,
+			error,
+			usage,
+			prompt_progress
+		} = data;
+
+		// Runs before any content lands so a continued response baselines against
+		// the text already on the message instead of recounting it.
+		ensureGenerationStats(message);
 
 		// Store raw OR-aligned output items from backend
 		if (output) {
@@ -2779,6 +3010,7 @@
 					console.log('Empty response');
 				} else {
 					message.content += value;
+					message.generationStats = recordGenerationDelta(message.generationStats, value);
 
 					if (navigator.vibrate && ($settings?.hapticFeedback ?? false)) {
 						navigator.vibrate(5);
@@ -2803,8 +3035,21 @@
 			message.arena = true;
 		}
 
+		// Covers the non-stream and output-replacement paths, which set the whole
+		// body instead of appending; a no-op when the delta above already counted it.
+		// Runs before the usage payload so the provider's numbers win.
+		message.generationStats = syncGenerationProgress(
+			message.generationStats,
+			getMeasuredText(message)
+		);
+
+		if (prompt_progress) {
+			message.generationStats = recordPrefillProgress(message.generationStats, prompt_progress);
+		}
+
 		if (usage) {
 			message.usage = usage;
+			message.generationStats = applyGenerationUsage(message.generationStats, usage);
 		}
 
 		history.messages[message.id] = message;
@@ -2812,6 +3057,7 @@
 
 		if (done) {
 			message.done = true;
+			message.generationStats = completeGenerationStats(message.generationStats);
 			const visibleContent =
 				getOutputText(message?.output) || removeAllDetails(message?.content ?? '');
 
@@ -2836,6 +3082,11 @@
 			);
 
 			history.messages[message.id] = message;
+
+			// The backend persists assistant messages from a fixed field whitelist,
+			// so the client-measured generation stats only survive a reload if we
+			// write them back ourselves. Fire-and-forget, like the handler below.
+			saveChatHandler(chatId, history);
 
 			await tick();
 			if (shouldAutoScrollResponse()) {
@@ -3248,6 +3499,7 @@
 					model: model.id,
 					modelName: model.name ?? model.id,
 					modelIdx: modelIdx ? modelIdx : _modelIdx,
+					generationStats: createGenerationStats(),
 					timestamp: Math.floor(Date.now() / 1000) // Unix epoch
 				};
 
@@ -3416,6 +3668,24 @@
 	) => {
 		const responseMessage = _history.messages[responseMessageId];
 		const userMessage = _history.messages[responseMessage.parentId];
+
+		// Titles are only generated for the first message of a saved chat. Derived
+		// once so the placeholder below cannot drift from what we actually request.
+		const isFirstMessageOfSavedChat =
+			!$temporaryChatEnabled &&
+			(!_chatId ||
+				(embedded &&
+					(userMessage?.parentId ?? null) === null &&
+					createMessagesList(_history, responseMessageId).length === 2));
+		const willGenerateTitle = isFirstMessageOfSavedChat && ($settings?.title?.auto ?? true);
+
+		if (willGenerateTitle) {
+			if (_chatId) {
+				setTitleGenerating(_chatId, true);
+			} else {
+				pendingTitleGeneration = true;
+			}
+		}
 
 		const chatMessageFiles = _messages
 			.filter((message) => message.files)
@@ -3597,13 +3867,9 @@
 				...(continueResponse ? { assistant_message_id: responseMessageId } : {}),
 
 				background_tasks: {
-					...(!$temporaryChatEnabled &&
-					(!_chatId ||
-						(embedded &&
-							(userMessage?.parentId ?? null) === null &&
-							createMessagesList(_history, responseMessageId).length === 2))
+					...(isFirstMessageOfSavedChat
 						? {
-								title_generation: $settings?.title?.auto ?? true,
+								title_generation: willGenerateTitle,
 								tags_generation: $settings?.autoTags ?? true
 							}
 						: {}),
@@ -3760,6 +4026,10 @@
 			if (responseMessage) {
 				history.messages[history.currentId] = responseMessage;
 			}
+
+			// A stopped response never reaches the completion event, so its stats
+			// need saving here for the same reason.
+			saveChatHandler($chatId, history);
 
 			if (shouldAutoScrollResponse()) {
 				scrollToBottom();
@@ -4420,8 +4690,23 @@
 							{:else}
 								<div
 									id={embedded ? messageInputDropzoneId : undefined}
-									class=" pb-2 {dragged ? 'z-0' : 'z-10'}"
+									class="relative pb-2 {dragged ? 'z-0' : 'z-10'}"
 								>
+									<!--
+										Scrolling up to read something earlier detaches the view,
+										which is right; nothing then said the answer had moved on,
+										and getting back meant dragging to the end of a
+										conversation that was still growing.
+									-->
+									<ScrollToBottom
+										attached={autoScroll}
+										{generating}
+										onClick={() => {
+											autoScroll = true;
+											scrollToBottom('smooth');
+										}}
+									/>
+
 									<MessageInput
 										bind:this={messageInput}
 										{history}
@@ -4433,6 +4718,7 @@
 										bind:selectedToolIds
 										bind:selectedSkillIds
 										bind:selectedFilterIds
+										bind:params
 										bind:imageGenerationEnabled
 										bind:codeInterpreterEnabled
 										{pendingOAuthTools}
@@ -4525,6 +4811,7 @@
 										bind:selectedToolIds
 										bind:selectedSkillIds
 										bind:selectedFilterIds
+										bind:params
 										bind:imageGenerationEnabled
 										bind:codeInterpreterEnabled
 										{pendingOAuthTools}
@@ -4585,6 +4872,7 @@
 									bind:selectedToolIds
 									bind:selectedSkillIds
 									bind:selectedFilterIds
+									bind:params
 									bind:imageGenerationEnabled
 									bind:codeInterpreterEnabled
 									bind:webSearchEnabled

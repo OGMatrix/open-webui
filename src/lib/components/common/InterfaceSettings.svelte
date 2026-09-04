@@ -9,6 +9,8 @@
 	import Minus from '$lib/components/icons/Minus.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import Switch from '$lib/components/common/Switch.svelte';
+	import GenerationGlowDesigner from '$lib/components/common/GenerationGlowDesigner.svelte';
+	import type { GlowStyle } from '$lib/utils/generationGlow';
 	import ManageFloatingActionButtonsModal from '$lib/components/chat/Settings/Interface/ManageFloatingActionButtonsModal.svelte';
 	import ManageImageCompressionModal from '$lib/components/chat/Settings/Interface/ManageImageCompressionModal.svelte';
 
@@ -71,6 +73,7 @@
 
 	let temporaryChatByDefault = false;
 	let chatFadeStreamingText = true;
+	let showGenerationStats = true;
 	let collapseCodeBlocks = false;
 	let renderMarkdownInUserMessages = true;
 	let renderMarkdownInAssistantMessages = true;
@@ -119,6 +122,18 @@
 	let fontFamilyInput = '';
 	let showTextScaleSlider = false;
 	let showFontFamilyInput = false;
+	// The animated frame on the input while a model is answering. Off is a real
+	// choice: it is motion next to a text field, which not everybody wants.
+	let generationGlow: GlowStyle = 'sweep';
+	let generationGlowSpeed = 1;
+	let generationGlowIntensity = 1;
+	/** How far its light reaches past the frame. */
+	let generationGlowSpill = 1;
+	/** null follows the theme; a number pins the palette to that hue. */
+	let generationGlowHue: number | null = null;
+	/** Film grain, laid over whichever style is running. */
+	let generationGlowGrain = false;
+
 	const settingRowClass = 'flex items-center justify-between gap-2.5';
 	const settingLabelClass = 'min-w-0 text-xs text-gray-600 dark:text-gray-400';
 	const settingControlClass = 'flex shrink-0 items-center justify-end gap-1.5';
@@ -317,6 +332,15 @@
 		autoTags = currentSettings?.autoTags ?? true;
 		autoFollowUps = currentSettings?.autoFollowUps ?? true;
 
+		generationGlow = (currentSettings?.generationGlow ?? 'sweep') as GlowStyle;
+		generationGlowSpeed = currentSettings?.generationGlowSpeed ?? 1;
+		generationGlowIntensity = currentSettings?.generationGlowIntensity ?? 1;
+		generationGlowHue =
+			typeof currentSettings?.generationGlowHue === 'number'
+				? currentSettings.generationGlowHue
+				: null;
+		generationGlowSpill = currentSettings?.generationGlowSpill ?? 1;
+		generationGlowGrain = currentSettings?.generationGlowGrain ?? false;
 		highContrastMode = currentSettings?.highContrastMode ?? false;
 
 		detectArtifacts = currentSettings?.detectArtifacts ?? true;
@@ -331,6 +355,7 @@
 
 		displayMultiModelResponsesInTabs = currentSettings?.displayMultiModelResponsesInTabs ?? false;
 		chatFadeStreamingText = currentSettings?.chatFadeStreamingText ?? true;
+		showGenerationStats = currentSettings?.showGenerationStats ?? true;
 
 		richTextInput = currentSettings?.richTextInput ?? true;
 		showFormattingToolbar = currentSettings?.showFormattingToolbar ?? false;
@@ -586,6 +611,32 @@
 		<p class={settingDescriptionClass}>
 			{$i18n.t('Use a local font family for the app interface.')}
 		</p>
+	</div>
+
+	<div>
+		<div class={settingRowClass}>
+			<div class={settingLabelClass}>{$i18n.t('Input Animation While Answering')}</div>
+		</div>
+		<p class={settingDescriptionClass}>
+			{$i18n.t('The frame follows how fast the model is answering.')}
+		</p>
+
+		<!--
+			Shown rather than described: the preview runs the same component the
+			chat runs, on a simulated generation, so choosing is looking rather
+			than imagining.
+		-->
+		<div class="mt-2">
+			<GenerationGlowDesigner
+				{saveSettings}
+				bind:style={generationGlow}
+				bind:speed={generationGlowSpeed}
+				bind:intensity={generationGlowIntensity}
+				bind:spill={generationGlowSpill}
+				bind:hue={generationGlowHue}
+				bind:grain={generationGlowGrain}
+			/>
+		</div>
 	</div>
 
 	<div>
@@ -969,6 +1020,29 @@
 		</div>
 		<p class={settingDescriptionClass}>
 			{$i18n.t('Fade streaming text as it arrives.')}
+		</p>
+	</div>
+
+	<div>
+		<div class={settingRowClass}>
+			<div id="generation-stats-label" class={settingLabelClass}>
+				{$i18n.t('Live Generation Stats')}
+			</div>
+
+			<div class={settingControlClass}>
+				<Switch
+					ariaLabelledbyId="generation-stats-label"
+					tooltip={true}
+					bind:state={showGenerationStats}
+					inherited={isDefaultSetting('showGenerationStats')}
+					on:change={() => {
+						saveSettings({ showGenerationStats });
+					}}
+				/>
+			</div>
+		</div>
+		<p class={settingDescriptionClass}>
+			{$i18n.t('Show token count, speed and elapsed time under each response.')}
 		</p>
 	</div>
 

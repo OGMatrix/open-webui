@@ -10,6 +10,7 @@
 	import { copyToClipboard, extractCurlyBraceWords } from '$lib/utils';
 
 	import Message from './Messages/Message.svelte';
+	import ContextCompactedMarker from './Messages/ContextCompactedMarker.svelte';
 	import Loader from '../common/Loader.svelte';
 	import Spinner from '../common/Spinner.svelte';
 
@@ -540,6 +541,18 @@
 					{/if}
 					<ul role="log" aria-live="polite" aria-relevant="additions" aria-atomic="false">
 						{#each messages as message, messageIdx (message.id)}
+							{#if message?.contextSummary ?? message?.context_summary}
+								<!--
+									Where the history above this point was replaced by a note.
+									Compaction is otherwise invisible: the chat stops remembering
+									things it was told and nothing says why.
+								-->
+								<ContextCompactedMarker
+									id={message.id}
+									summary={message.contextSummary ?? message.context_summary}
+									detail={message.contextCompaction ?? null}
+								/>
+							{/if}
 							<Message
 								{chatId}
 								bind:history

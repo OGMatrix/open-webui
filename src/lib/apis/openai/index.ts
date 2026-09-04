@@ -106,6 +106,33 @@ export const getOpenAIModelsDirect = async (url: string, key: string) => {
 	return res;
 };
 
+/**
+ * What the serving provider reports about a model, where it exposes anything.
+ * Returns an empty object when the provider cannot be asked, so callers should
+ * treat a missing key as "unknown" rather than "not supported".
+ */
+export const getOpenAIModelCapabilities = async (token: string = '', model: string) => {
+	const res = await fetch(`${OPENAI_API_BASE_URL}/model/capabilities`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		},
+		body: JSON.stringify({ model })
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			console.error(err);
+			return null;
+		});
+
+	return res?.capabilities ?? {};
+};
+
 export const getOpenAIModels = async (token: string, urlIdx?: number) => {
 	let error = null;
 
@@ -314,6 +341,44 @@ export const deleteProviderModel = async (token: string, urlIdx: number, model: 
 		})
 		.catch((err) => {
 			error = getErrorMessage(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+/**
+ * What a Hermes Agent server is and what it brings.
+ *
+ * Returns `{ hermes: false }` for anything that is not one, so the caller can
+ * ask about any URL without knowing in advance.
+ */
+export const getHermesInfo = async (
+	token: string,
+	url: string,
+	key: string,
+	config: object = {}
+) => {
+	let error = null;
+
+	const res = await fetch(`${OPENAI_API_BASE_URL}/hermes/info`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			Authorization: `Bearer ${token}`
+		},
+		body: JSON.stringify({ url, key, config })
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err?.detail ?? err;
 			return null;
 		});
 

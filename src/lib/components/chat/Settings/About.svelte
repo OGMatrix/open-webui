@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { getVersionUpdates } from '$lib/apis';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import { getOllamaVersion } from '$lib/apis/ollama';
 	import { WEBUI_BUILD_HASH, WEBUI_VERSION } from '$lib/constants';
 	import { WEBUI_NAME, config, showChangelog } from '$lib/stores';
@@ -10,7 +12,7 @@
 	import UserSettingRow from './UserSettingRow.svelte';
 	import UserSettingSection from './UserSettingSection.svelte';
 
-	const i18n: any = getContext('i18n');
+	const i18n: Writable<i18nType> = getContext('i18n');
 
 	let ollamaVersion = '';
 
@@ -101,6 +103,40 @@
 				{/if}
 			</UserSettingRow>
 		</UserSettingSection>
+
+		{#if $config?.fork?.version}
+			<!--
+				This fork's own build, in its own section.
+
+				Upstream's version section above is untouched — the source marks it as
+				covered by the licence. What this adds is the thing that section
+				cannot say: which fork build is running, and where its notes are.
+
+				The notice is the wording Open WebUI's own licence documentation asks
+				a public fork to show, and the About section is where it asks for it.
+			-->
+			<UserSettingSection title={$i18n.t('This build')}>
+				<UserSettingRow description={$i18n.t('Built on Open WebUI, with changes made here.')}>
+					<div slot="label" class="flex flex-col text-xs text-gray-600 dark:text-gray-400">
+						<div>v{$config.fork.version}</div>
+						<a
+							class={actionButtonClass}
+							href={$config.fork.release_url}
+							target="_blank"
+							rel="noreferrer"
+						>
+							{$i18n.t('Release page')}
+						</a>
+					</div>
+				</UserSettingRow>
+
+				<div class="mt-1 text-[0.6875rem] leading-relaxed text-gray-400 dark:text-gray-600">
+					{$i18n.t(
+						'This project is a customized fork of Open WebUI. This release is not affiliated with or maintained by the official Open WebUI team.'
+					)}
+				</div>
+			</UserSettingSection>
+		{/if}
 
 		{#if ollamaVersion}
 			<UserSettingSection title={$i18n.t('Ollama Version')}>

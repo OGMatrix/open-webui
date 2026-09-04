@@ -274,6 +274,131 @@ def get_model_management_root_url(url: str, provider: str) -> str:
     return root_url
 
 
+# Endpoints that describe what a served model can do. Only providers that expose
+# something machine-readable are listed; the rest advertise nothing.
+MODEL_CAPABILITY_ENDPOINTS = {
+    'llama.cpp': '/props',
+    # Hermes serves its capability document under /v1, so the path is relative
+    # to the configured base URL rather than to the host root.
+    'hermes': '/capabilities',
+}
+
+
+# A chat template that accepts an effort has to reject the words it does not
+# know, and that membership test is the model's own list of levels. Reading it
+# beats guessing from the model's name, which is the only other option.
+_EFFORT_CHOICES = re.compile(
+    r'(?:resolved_)?reasoning_effort\s+(?:not\s+)?in\s*[\(\[]([^)\]]*)[\)\]]',
+    re.IGNORECASE,
+)
+_EFFORT_DEFAULT = re.compile(
+    r'reasoning_effort\s*\|\s*default\(\s*[\'"]([^\'"]+)[\'"]',
+    re.IGNORECASE,
+)
+_QUOTED_WORD = re.compile(r'[\'"]([^\'"]+)[\'"]')
+
+
+def read_template_efforts(template: str) -> list[str] | None:
+    """The effort levels a chat template says it accepts, in its own order."""
+    if not isinstance(template, str) or not template:
+        return None
+    match = _EFFORT_CHOICES.search(template)
+    if not match:
+        return None
+    levels = [value.strip() for value in _QUOTED_WORD.findall(match.group(1)) if value.strip()]
+    return levels or None
+
+
+def derive_llamacpp_capabilities(props: dict) -> dict:
+    """Read what llama.cpp's /props says about a model.
+
+    Thinking is a chat template feature there. Recent builds summarise the
+    template in `chat_template_caps`, which states outright whether it takes a
+    reasoning effort; older ones only carry the template itself, where an
+    `enable_thinking` argument is the sign that thinking can be switched at all.
+
+    The levels are read from the template rather than guessed from the model
+    name: a template that accepts an effort lists the words it accepts.
+    """
+    template = props.get('chat_template')
+    if not isinstance(template, str):
+        # Newer builds can return a list of templates keyed by name.
+        templates = props.get('chat_templates') or props.get('chat_template_tool_use')
+        template = templates if isinstance(templates, str) else ''
+
+    caps = props.get('chat_template_caps')
+    caps = caps if isinstance(caps, dict) else {}
+
+    supports_effort = bool(caps.get('supports_reasoning_effort'))
+    capabilities = {'reasoning': supports_effort or 'enable_thinking' in template}
+
+    if capabilities['reasoning']:
+        levels = read_template_efforts(template)
+        if levels:
+            capabilities['reasoning_levels'] = levels
+            default = _EFFORT_DEFAULT.search(template)
+            if default:
+                capabilities['reasoning_default'] = default.group(1)
+
+    # The size the server was actually started with, which is the number that
+    # matters. It beats the model's trained length from /v1/models.
+    settings = props.get('default_generation_settings')
+    n_ctx = settings.get('n_ctx') if isinstance(settings, dict) else props.get('n_ctx')
+    if isinstance(n_ctx, (int, float)) and not isinstance(n_ctx, bool) and n_ctx > 0:
+        capabilities['context_length'] = int(n_ctx)
+
+    return capabilities
+
+
+def derive_hermes_capabilities(document: dict) -> dict:
+    """Read what a Hermes Agent server says it can do.
+
+    Unlike llama.cpp's /props, this describes the server rather than a loaded
+    model: Hermes is an agent, and the interesting facts are that it runs the
+    tools itself and that it reports their progress while it does.
+
+    Verified against a live 0.20.6 server; every field is read defensively
+    because the document has grown between releases.
+    """
+    if document.get('object') != 'hermes.api_server.capabilities':
+        return {}
+
+    features = document.get('features') or {}
+    runtime = document.get('runtime') or {}
+
+    capabilities = {
+        'agent': True,
+        # Tools execute on the Hermes host. Worth surfacing: the toolsets the
+        # agent brings are not the ones configured here.
+        'server_side_tools': runtime.get('tool_execution') == 'server',
+        'tool_progress': bool(features.get('tool_progress_events')),
+    }
+
+    description = runtime.get('description')
+    if isinstance(description, str) and description:
+        capabilities['runtime_description'] = description
+
+    for header_key, feature_key in (
+        ('session_header', 'session_continuity_header'),
+        ('session_key_header', 'session_key_header'),
+    ):
+        value = features.get(feature_key)
+        if isinstance(value, str) and value:
+            capabilities[header_key] = value
+
+    return capabilities
+
+
+def derive_provider_capabilities(provider: str, payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        return {}
+    if provider == 'llama.cpp':
+        return derive_llamacpp_capabilities(payload)
+    if provider == 'hermes':
+        return derive_hermes_capabilities(payload)
+    return {}
+
+
 def get_provider_model_loaded_state(model: dict, provider: str, manual_model_ids: bool = False) -> bool | None:
     if provider == 'lmstudio':
         if model.get('loaded_instances'):
@@ -940,6 +1065,117 @@ async def get_models(request: Request, url_idx: int | None = None, user=Depends(
     return models
 
 
+# What each model reported, once it has reported anything.
+#
+# A llama.cpp model can only describe itself while it is loaded, and a router
+# unloads models as it pleases. A chat template does not change under a running
+# server, so an answer once given stays true, and asking again after the model
+# has gone quiet would otherwise lose it.
+_capability_memory: dict[tuple[int, str], dict] = {}
+
+
+def remember_capabilities(url_idx: int, model_id: str, capabilities: dict) -> dict:
+    """Keeps a non-empty answer, and hands back the best one known."""
+    key = (url_idx, model_id)
+    if capabilities:
+        _capability_memory[key] = capabilities
+        return capabilities
+    return _capability_memory.get(key, {})
+
+
+def recall_capabilities(url_idx: int, model_id: str) -> dict:
+    """What was remembered, without asking the provider again.
+
+    Read by anything that needs a probed fact -- the context window, above all
+    -- outside the request that probed for it.
+    """
+    return _capability_memory.get((url_idx, model_id), {})
+
+
+def forget_capabilities() -> int:
+    """Drops everything remembered, for when a provider was reconfigured."""
+    count = len(_capability_memory)
+    _capability_memory.clear()
+    return count
+
+
+class ModelCapabilitiesForm(BaseModel):
+    model: str
+
+
+@router.post('/model/capabilities')
+async def get_model_capabilities(request: Request, form_data: ModelCapabilitiesForm, user=Depends(get_verified_user)):
+    """What the serving provider reports about a model.
+
+    Only the derived flags are returned, never the provider's raw response:
+    llama.cpp's /props also carries the model path and sampling defaults, which
+    are of no use here and should not be handed to every user.
+
+    Never raises for a provider that cannot answer. The caller treats an empty
+    result as "unknown" and falls back to its own detection.
+    """
+    model_id = form_data.model
+
+    models = request.app.state.OPENAI_MODELS
+    if not models or model_id not in models:
+        await get_all_models(request, user=user)
+        models = request.app.state.OPENAI_MODELS
+
+    model = models.get(model_id)
+    if not model or 'urlIdx' not in model:
+        return {'capabilities': {}}
+
+    await check_model_access(user, await Models.get_model_by_id(model_id), BYPASS_MODEL_ACCESS_CONTROL)
+
+    url_idx = model['urlIdx']
+    try:
+        url, key, api_config = await get_openai_connection(url_idx)
+    except IndexError:
+        return {'capabilities': {}}
+
+    provider = api_config.get('provider', '')
+    path = MODEL_CAPABILITY_ENDPOINTS.get(provider)
+    if not path:
+        return {'capabilities': {}}
+
+    root_url = get_model_management_root_url(url, provider)
+    headers, cookies = await get_headers_and_cookies(request, root_url, key, api_config, user=user)
+
+    response = None
+    try:
+        session = await get_session()
+        # A llama.cpp router serves several models and answers /props about the
+        # one it is asked for; without a name it describes only itself, and
+        # reports no template at all. A single-model server ignores the
+        # parameter, so it is safe to always send.
+        probe_url = f'{root_url}{path}'
+        if provider == 'llama.cpp':
+            probe_url = f'{probe_url}?model={quote(model.get("id") or model_id, safe="")}'
+
+        response = await session.get(
+            probe_url,
+            headers=headers,
+            cookies=cookies,
+            ssl=AIOHTTP_CLIENT_SESSION_SSL,
+            timeout=get_client_timeout(),
+        )
+        if not response.ok:
+            # A router answers 500 while a model is unloaded; that says nothing
+            # new about the model, so anything known already stands.
+            return {'capabilities': remember_capabilities(url_idx, model_id, {})}
+
+        payload = await response.json(loads=JSONCodec.loads)
+    except Exception as e:
+        # A provider that is down, busy loading, or not serving this path is not
+        # an error here; anything learned earlier still stands.
+        log.debug('capability probe failed for %s: %s', model_id, e)
+        return {'capabilities': remember_capabilities(url_idx, model_id, {})}
+    finally:
+        await cleanup_response(response)
+
+    return {'capabilities': remember_capabilities(url_idx, model_id, derive_provider_capabilities(provider, payload))}
+
+
 class ProviderModelOperationForm(BaseModel):
     model: str
     model_config = ConfigDict(extra='allow')
@@ -1060,6 +1296,90 @@ class ConnectionVerificationForm(BaseModel):
     key: str
 
     config: dict | None = None
+
+
+# Toolset labels arrive with a leading emoji ("🔍 Web Search & Scraping"). The
+# name is what matters; the picture is drawn here from the icon set the rest of
+# the interface uses, so the two do not disagree.
+_LEADING_SYMBOLS = re.compile(r'^[^\w(]+', re.UNICODE)
+
+
+def clean_toolset_label(label: str, fallback: str) -> str:
+    if not isinstance(label, str):
+        return fallback
+    cleaned = _LEADING_SYMBOLS.sub('', label).strip()
+    return cleaned or fallback
+
+
+async def fetch_hermes_document(session, url: str, path: str, headers, cookies):
+    """Reads one Hermes document, or None when it is not available."""
+    try:
+        async with session.get(
+            url=f'{url.rstrip("/")}{path}',
+            headers=headers,
+            cookies=cookies,
+            ssl=AIOHTTP_CLIENT_SESSION_SSL,
+        ) as response:
+            if response.status != 200:
+                return None
+            return await response.json(loads=JSONCodec.loads)
+    except Exception as e:
+        log.debug('hermes %s unavailable: %s', path, e)
+        return None
+
+
+@router.post('/hermes/info')
+async def get_hermes_info(
+    request: Request,
+    form_data: ConnectionVerificationForm,
+    user=Depends(get_admin_user),
+):
+    """What a Hermes Agent server is and what it brings.
+
+    Answering this in the connection form turns "the URL responded" into
+    something a person can act on: which agent, which version, and which of its
+    toolsets are actually switched on over there.
+    """
+    url = form_data.url
+    api_config = form_data.config or {}
+
+    async with aiohttp.ClientSession(trust_env=True, timeout=_MODEL_LIST_TIMEOUT) as session:
+        headers, cookies = await get_headers_and_cookies(request, url, form_data.key, api_config, user=user)
+
+        # /health answers without a key, so the server identifies itself even
+        # before anyone has pasted one.
+        health = await fetch_hermes_document(session, url, '/health', headers, cookies)
+        if not isinstance(health, dict) or health.get('platform') != 'hermes-agent':
+            return {'hermes': False}
+
+        capabilities = await fetch_hermes_document(session, url, '/capabilities', headers, cookies)
+        toolsets_document = await fetch_hermes_document(session, url, '/toolsets', headers, cookies)
+
+    toolsets = []
+    for entry in (toolsets_document or {}).get('data') or []:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get('name')
+        if not isinstance(name, str) or not name:
+            continue
+        toolsets.append(
+            {
+                'name': name,
+                'label': clean_toolset_label(entry.get('label'), name),
+                'description': entry.get('description') or '',
+                'enabled': bool(entry.get('enabled')),
+                'configured': bool(entry.get('configured', True)),
+                'tool_count': len(entry.get('tools') or []),
+            }
+        )
+
+    return {
+        'hermes': True,
+        'version': health.get('version') or '',
+        'model': (capabilities or {}).get('model') or '',
+        'capabilities': derive_hermes_capabilities(capabilities or {}),
+        'toolsets': toolsets,
+    }
 
 
 @router.post('/verify')
@@ -1533,6 +1853,16 @@ async def generate_chat_completion(
 
     prefix_id = api_config.get('prefix_id', None)
     payload['model'] = strip_provider_model_prefix(payload['model'], prefix_id)
+
+    # llama.cpp reports how far it has read the prompt, but only when asked. The
+    # client uses it to show prefill progress instead of an idle spinner. Left
+    # alone if the caller already set it.
+    if (
+        api_config.get('provider') == 'llama.cpp'
+        and payload.get('stream')
+        and 'return_progress' not in payload
+    ):
+        payload['return_progress'] = True
 
     # Add user info to the payload if the model is a pipeline
     if 'pipeline' in model and model.get('pipeline'):

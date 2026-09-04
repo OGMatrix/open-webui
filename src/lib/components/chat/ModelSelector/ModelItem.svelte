@@ -1,8 +1,9 @@
 <script lang="ts">
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import { marked } from 'marked';
 
 	import { getContext, tick } from 'svelte';
-	import dayjs from '$lib/dayjs';
 
 	import { mobile, settings, user } from '$lib/stores';
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
@@ -10,14 +11,18 @@
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import { copyToClipboard, sanitizeResponseContent } from '$lib/utils';
 	import ArrowUpTray from '$lib/components/icons/ArrowUpTray.svelte';
+	import ArrowDownTray from '$lib/components/icons/ArrowDownTray.svelte';
+	import Spinner from '$lib/components/common/Spinner.svelte';
 	import Check from '$lib/components/icons/Check.svelte';
+	import LoadIndicator from './LoadIndicator.svelte';
 	import ModelItemMenu from './ModelItemMenu.svelte';
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
 	import { toast } from 'svelte-sonner';
 	import Tag from '$lib/components/icons/Tag.svelte';
 	import Label from '$lib/components/icons/Label.svelte';
+	import type { NameParts } from '$lib/utils/modelNames';
 
-	const i18n = getContext('i18n');
+	const i18n = getContext<Writable<i18nType>>('i18n');
 
 	export let selectedModelIdx: number = -1;
 	export let item: any = {};
@@ -27,9 +32,26 @@
 	export let compareEnabled = false;
 
 	export let unloadModelHandler: (model: any) => void = () => {};
+	export let loadModelHandler: (model: any) => void = () => {};
+	/** True when this model's connection can be told to load it. */
+	export let canLoad = false;
+	/** True while a load for this model is in flight. */
+	export let isLoading = false;
 	export let pinModelHandler: (modelId: string) => void = () => {};
 	export let deleteModelHandler: (model: any) => void = () => {};
 	export let selectionOnly = false;
+	/** The name already split into the part it shares with its neighbours and the rest. */
+	export let nameParts: NameParts | undefined = undefined;
+
+	/**
+	 * Which backend this row comes from, or empty when saying so adds nothing.
+	 *
+	 * The selector decides: it can see the whole list, and a provider that
+	 * every model shares is not a distinction.
+	 */
+	export let providerName = '';
+
+	$: parts = nameParts ?? { head: '', body: item.label ?? '', tail: '' };
 
 	export let onClick: () => void = () => {};
 
@@ -109,14 +131,46 @@
 			</div>
 
 			<div class="flex min-w-0 items-center">
-				<Tooltip content={`${item.label} (${item.value})`} placement="top-start">
-					<div class="line-clamp-1">
-						{item.label}
+				<Tooltip
+					content={`${item.label} (${item.value})`}
+					placement="top-start"
+					className="flex min-w-0"
+				>
+					<!--
+						The shared part of the name stays readable but steps back, so what
+						separates this model from the rest is what the eye lands on.
+
+						It is also the part that goes when the row runs out of room. What
+						tells qwen3.8-27b-mtp-256k from qwen3.8-27b-256k sits at the end,
+						exactly where a plain truncation cuts first, and four rows reading
+						"qwen3.8-27b-..." name nothing at all. The opening is muted and
+						already said by the heading above, so it gives way a thousand times
+						more readily than the part that does the telling.
+					-->
+					<div class="flex min-w-0 items-baseline whitespace-nowrap">
+						{#if parts.head}<span
+								class="name-head min-w-0 truncate text-gray-400 dark:text-gray-500"
+								>{parts.head}</span
+							>{/if}<span class="name-body min-w-0 truncate">{parts.body}</span
+						>{#if parts.tail}<span
+								class="name-tail min-w-0 truncate text-gray-400 dark:text-gray-500"
+								>{parts.tail}</span
+							>{/if}
 					</div>
 				</Tooltip>
 			</div>
 
 			<div class="flex shrink-0 items-center gap-1.5">
+				{#if providerName}
+					<Tooltip content={$i18n.t('Served by {{provider}}', { provider: providerName })}>
+						<span
+							class="shrink-0 rounded-sm bg-gray-100 px-1 py-px text-[0.625rem] font-medium whitespace-nowrap text-gray-500 dark:bg-white/[0.06] dark:text-gray-400"
+						>
+							{providerName}
+						</span>
+					</Tooltip>
+				{/if}
+
 				{#if item.model.owned_by === 'ollama'}
 					{#if (item.model.ollama?.details?.parameter_size ?? '') !== ''}
 						<div class="flex items-center translate-y-[0.5px]">
@@ -161,28 +215,7 @@
 					{/if}
 				{/if}
 
-				{#if item.model.loaded}
-					<div class="flex items-center px-0.5">
-						<Tooltip
-							content={item.model.ollama?.expires_at &&
-							new Date(item.model.ollama?.expires_at * 1000) > new Date()
-								? `${$i18n.t('Unloads {{FROM_NOW}}', {
-										FROM_NOW: dayjs(item.model.ollama?.expires_at * 1000).fromNow()
-									})}`
-								: `${$i18n.t('Loaded')}`}
-							className="self-end"
-						>
-							<div class=" flex items-center">
-								<span class="relative flex size-1.5">
-									<span
-										class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"
-									/>
-									<span class="relative inline-flex size-1.5 rounded-full bg-green-500" />
-								</span>
-							</div>
-						</Tooltip>
-					</div>
-				{/if}
+				<LoadIndicator model={item.model} />
 
 				<!-- {JSON.stringify(item.info)} -->
 
@@ -276,6 +309,30 @@
 	</div>
 
 	<div class="ml-auto flex shrink-0 items-center gap-1.5 pl-2">
+		{#if !selectionOnly && $user?.role === 'admin' && canLoad}
+			<Tooltip
+				content={isLoading ? `${$i18n.t('Loading')}` : `${$i18n.t('Load model')}`}
+				className="flex-shrink-0 {isLoading ? '' : 'group-hover/item:opacity-100 opacity-0'}"
+			>
+				<button
+					class="focus-ring flex disabled:opacity-50"
+					aria-label={$i18n.t('Load model')}
+					disabled={isLoading}
+					on:click={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						loadModelHandler(item.model);
+					}}
+				>
+					{#if isLoading}
+						<Spinner className="size-3" />
+					{:else}
+						<ArrowDownTray className="size-3" />
+					{/if}
+				</button>
+			</Tooltip>
+		{/if}
+
 		{#if !selectionOnly && $user?.role === 'admin' && item.model.loaded}
 			<Tooltip
 				content={`${$i18n.t('Eject')}`}
@@ -326,3 +383,26 @@
 		{/if}
 	</div>
 </button>
+
+<style>
+	/*
+	 * Which part of a name gives way when the row is too narrow.
+	 *
+	 * Flex shrinks each item in proportion to its factor, so these are an order
+	 * of priority rather than three sizes: the muted opening collapses first and
+	 * takes its own ellipsis, the shared ending next, and the part that actually
+	 * picks this model out is the last thing to go. A row too narrow for even
+	 * that still shows its beginning, which is the best that is left.
+	 */
+	.name-head {
+		flex: 0 1000 auto;
+	}
+
+	.name-tail {
+		flex: 0 10 auto;
+	}
+
+	.name-body {
+		flex: 0 1 auto;
+	}
+</style>

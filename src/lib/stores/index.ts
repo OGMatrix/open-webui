@@ -53,6 +53,13 @@ export const TTSWorker = writable(null);
 
 export const chatId = writable('');
 export const chatTitle = writable('');
+// Chat ids whose title the backend is still generating. Drives the placeholder
+// in the sidebar and the header until the generated title arrives.
+export const generatingTitleChatIds = writable<Set<string>>(new Set());
+// Chat ids are untyped at several call sites, so this takes the id as-is rather
+// than forcing those callers to prove it is a string.
+export const isGeneratingTitle = (ids: Set<string>, chatId: unknown) =>
+	ids.has(String(chatId ?? ''));
 
 export const channels = writable([]);
 export const channelId = writable(null);
@@ -109,6 +116,10 @@ export const pinnedModels = derived([settings, config], ([$settings, $config]) =
 		? ($config?.default_pinned_models ?? '').split(',').filter((id) => id)
 		: $settings.pinnedModels
 );
+
+// The models this user reaches for, newest first. Kept per user rather than per
+// device: it follows the person, the way their pins and defaults already do.
+export const recentModels = derived(settings, ($settings) => $settings?.recentModels ?? []);
 
 // Pins for models the user cannot see are kept in their settings but left out of the sidebar
 export const visiblePinnedModels = derived([pinnedModels, models], ([$pinnedModels, $models]) =>
@@ -216,6 +227,8 @@ type OllamaModelDetails = {
 
 type Settings = {
 	pinnedModels?: string[];
+	/** Model ids in the order they were last picked, newest first. */
+	recentModels?: string[];
 	toolServers?: never[];
 	detectArtifacts?: boolean;
 	showUpdateToast?: boolean;
@@ -267,6 +280,18 @@ type Settings = {
 	showUsername?: boolean;
 	notificationEnabled?: boolean;
 	highContrastMode?: boolean;
+	/** The animated frame on the input while a model answers. */
+	generationGlow?: 'off' | 'sweep' | 'pulse' | 'aurora' | 'nebula' | 'ripple' | 'meter';
+	/** Film grain over whichever style is running. */
+	generationGlowGrain?: boolean;
+	/** Multiplies its pace, 0.25 to 3. */
+	generationGlowSpeed?: number;
+	/** Scales its presence, 0 to 2. */
+	generationGlowIntensity?: number;
+	/** How far its light reaches past the frame, 0 to 2. */
+	generationGlowSpill?: number;
+	/** Hue in degrees, or absent to follow the theme. */
+	generationGlowHue?: number | null;
 	title?: TitleSettings;
 	showChatTitleInTab?: boolean;
 	splitLargeDeltas?: boolean;
@@ -277,6 +302,7 @@ type Settings = {
 	renderMarkdownInPreviews?: boolean;
 	renderMarkdownInUserMessages?: boolean;
 	renderMarkdownInAssistantMessages?: boolean;
+	showGenerationStats?: boolean;
 	recentEmojis?: string[];
 	pinnedMenuItems?: string[];
 	pinnedNotesOrder?: string[];
@@ -328,6 +354,12 @@ type Config = {
 	status: boolean;
 	name: string;
 	version: string;
+	/** This fork's own build, stated beside upstream's version rather than over it. */
+	fork?: {
+		version: string;
+		repo_url: string;
+		release_url: string;
+	};
 	default_locale: string;
 	default_models: string;
 	default_pinned_models?: string | null;

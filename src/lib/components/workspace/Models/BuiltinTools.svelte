@@ -57,6 +57,10 @@
 			label: $i18n.t('Code Interpreter'),
 			description: $i18n.t('Execute code')
 		},
+		diagrams: {
+			label: $i18n.t('Diagrams'),
+			description: $i18n.t('Check a diagram or chart before it is drawn in the chat')
+		},
 		tasks: {
 			label: $i18n.t('Task Management'),
 			description: $i18n.t('Break down complex requests into trackable steps')

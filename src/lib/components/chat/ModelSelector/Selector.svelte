@@ -1,4 +1,14 @@
 <script lang="ts">
+	import { emphasizeNames } from '$lib/utils/modelNames';
+	import { groupModels } from '$lib/utils/modelGroups';
+	import { promoteRecent, rememberModel } from '$lib/utils/recentModels';
+	import {
+		namedProviders,
+		normalizeProvider as normalizeProviderKey,
+		providerLabel as providerBadgeLabel
+	} from '$lib/utils/modelProviders';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import { marked } from 'marked';
 	import Fuse from 'fuse.js';
 
@@ -8,6 +18,8 @@
 
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
+	import LoadIndicator from './LoadIndicator.svelte';
+	import { loadState } from '$lib/utils/modelLoaded';
 	import { flyAndScale } from '$lib/utils/transitions';
 
 	import { createEventDispatcher, onMount, getContext, tick } from 'svelte';
@@ -19,7 +31,8 @@
 		downloadProviderModel,
 		getErrorMessage,
 		getOpenAIConfig,
-		getProviderModelDownloadStatus
+		getProviderModelDownloadStatus,
+		loadProviderModel
 	} from '$lib/apis/openai';
 
 	import {
@@ -27,6 +40,7 @@
 		MODEL_DOWNLOAD_POOL,
 		mobile,
 		models,
+		recentModels,
 		temporaryChatEnabled,
 		settings,
 		config,
@@ -48,7 +62,7 @@
 
 	import ModelItem from './ModelItem.svelte';
 
-	const i18n: any = getContext('i18n');
+	const i18n = getContext<Writable<i18nType>>('i18n');
 	const dispatch = createEventDispatcher();
 
 	export let id = '';
@@ -61,6 +75,14 @@
 	export let searchEnabled = true;
 	export let searchPlaceholder = $i18n.t('Search a model');
 	export let selectionOnly = false;
+
+	/**
+	 * Told when a model is picked, so the picker can learn what gets used.
+	 *
+	 * Left unset where a pick is not that kind of act — choosing a base model
+	 * for a preset is not reaching for something to talk to.
+	 */
+	export let onSelect: (modelId: string) => void = () => {};
 	export let includeHidden = false;
 
 	export let items: {
@@ -71,7 +93,15 @@
 		[key: string]: any;
 	}[] = [];
 
-	export let className = 'w-[20rem]';
+	/*
+	 * Wide enough for a model name to survive.
+	 *
+	 * At the twenty rem this used to be, a run of qwen3.8-flash-next-80b-a3b-*
+	 * lost everything past "80b-a3b" and four rows named nothing. Four more rem
+	 * carries the part that actually picks one, and the panel is still capped
+	 * against the viewport below.
+	 */
+	export let className = 'w-[24rem]';
 	export let triggerClassName = 'text-lg';
 	export let placement: 'top' | 'bottom' | 'auto' = 'bottom';
 	export let align: 'start' | 'end' = 'start';
@@ -248,6 +278,10 @@
 	$: selectedValues = values ?? (value ? [value] : []);
 	$: primaryValue = selectedValues[0] ?? value ?? '';
 	$: selectedModel = items.find((item) => item.value === primaryValue) ?? '';
+	// The same lookup without the `?? ''`. `selectedModel` is declared a string
+	// and then given an item, so reading a field off it is an error this file
+	// already carries; there is no reason to add another one for the indicator.
+	$: selectedEntry = items.find((item) => item.value === primaryValue);
 	$: selectedCount = selectedValues.filter(Boolean).length;
 	$: triggerLabel = selectedModel
 		? compareEnabled && selectedCount > 1
@@ -259,6 +293,7 @@
 
 	let selectedTag = '';
 	let selectedConnectionType = '';
+	let selectedState = '';
 	let selectedFilter = '';
 	let modelFilterItems = [];
 
@@ -320,7 +355,7 @@
 		updateFuse();
 	}
 
-	$: filteredItems = (
+	$: matchedItems = (
 		searchValue
 			? fuse
 					.search(searchValue)
@@ -336,6 +371,7 @@
 							.map((tag) => tag.name.toLowerCase())
 							.includes(selectedTag.toLowerCase());
 					})
+					.filter((item) => selectedState !== 'loaded' || loadState(item.model) === 'loaded')
 					.filter((item) => {
 						if (selectedConnectionType === '') {
 							return true;
@@ -356,6 +392,7 @@
 							.map((tag) => tag.name.toLowerCase())
 							.includes(selectedTag.toLowerCase());
 					})
+					.filter((item) => selectedState !== 'loaded' || loadState(item.model) === 'loaded')
 					.filter((item) => {
 						if (selectedConnectionType === '') {
 							return true;
@@ -368,6 +405,42 @@
 						}
 					})
 	).filter((item) => includeHidden || !(item.model?.info?.meta?.hidden ?? false));
+
+	// The models this user reaches for, lifted to the top — but not while a
+	// search is running. A search is a specific question and its ranking is the
+	// answer; reordering that would answer a different one.
+	$: promotion = searchValue.trim()
+		? { items: matchedItems, count: 0 }
+		: promoteRecent(matchedItems, (item) => item.value, $recentModels);
+	$: filteredItems = promotion.items;
+	$: recentCount = promotion.count;
+
+	// Each name against its own neighbours, so a family's shared opening steps back
+	// while an unrelated model stays whole. Recomputed as the search narrows, which
+	// is when it matters most.
+	$: nameParts = emphasizeNames(filteredItems.map((item) => item.label ?? ''));
+
+	// Decided across the whole list, not the filtered one: a badge that vanished
+	// the moment you searched for the very models it marks would be worse than
+	// none. Only a genuinely mixed deployment gets labels at all.
+	$: labelledProviders = namedProviders(items.map((item) => item.model?.provider));
+	$: providerNames = filteredItems.map((item) =>
+		labelledProviders.has(normalizeProviderKey(item.model?.provider))
+			? providerBadgeLabel(item.model?.provider)
+			: ''
+	);
+
+	// Headings sit in the same fixed-height grid as the models, so the virtual
+	// window keeps working on plain arithmetic. The list is not reordered: the
+	// runs are found where they already are.
+	$: grouped = groupModels(
+		filteredItems,
+		(item) => item.label ?? '',
+		undefined,
+		recentCount > 0 ? { count: recentCount, label: $i18n.t('Recent') } : undefined
+	);
+	$: listRows = grouped.rows;
+	$: rowIndexOfModel = grouped.rowIndexOfModel;
 
 	$: sanitizedSearchValue = searchValue.trim();
 	$: downloadTargets =
@@ -416,7 +489,21 @@
 		resetView();
 	}
 
+	$: loadedCount = items.filter((item) => loadState(item.model) === 'loaded').length;
+
 	$: modelFilterItems = [
+		/*
+		 * What is warm right now, across every connection, in one click.
+		 *
+		 * The count is in the label so the answer is there before anything is
+		 * clicked. On one graphics card this is the question that matters: a
+		 * title generation can evict the model you were talking to, and until
+		 * now the only way to find out was to scroll the whole list looking for
+		 * a green dot.
+		 */
+		...(loadedCount > 0
+			? [{ value: 'state:loaded', label: `${$i18n.t('Loaded')} · ${loadedCount}` }]
+			: []),
 		...(items.find((item) => item.model?.connection_type === 'local')
 			? [{ value: 'connection:local', label: $i18n.t('Local') }]
 			: []),
@@ -429,21 +516,29 @@
 		...tags.map((tag) => ({ value: `tag:${tag}`, label: tag }))
 	];
 
-	$: selectedFilter = selectedConnectionType
-		? `connection:${selectedConnectionType}`
-		: selectedTag
-			? `tag:${selectedTag}`
-			: '';
+	$: selectedFilter = selectedState
+		? `state:${selectedState}`
+		: selectedConnectionType
+			? `connection:${selectedConnectionType}`
+			: selectedTag
+				? `tag:${selectedTag}`
+				: '';
 
 	const setModelFilter = (filterValue: string) => {
+		// The three are exclusive: picking one clears the others, so the list
+		// never narrows by two things at once without saying so.
+		selectedConnectionType = '';
+		selectedTag = '';
+		selectedState = '';
+
 		if (!filterValue) {
-			selectedConnectionType = '';
-			selectedTag = '';
+			return;
+		}
+		if (filterValue.startsWith('state:')) {
+			selectedState = filterValue.replace('state:', '');
 		} else if (filterValue.startsWith('connection:')) {
 			selectedConnectionType = filterValue.replace('connection:', '');
-			selectedTag = '';
 		} else if (filterValue.startsWith('tag:')) {
-			selectedConnectionType = '';
 			selectedTag = filterValue.replace('tag:', '');
 		}
 	};
@@ -462,7 +557,9 @@
 		}
 
 		// Set the virtual scroll position so the selected item is rendered and centered
-		const targetScrollTop = Math.max(0, selectedModelIdx * ITEM_HEIGHT - 128 + ITEM_HEIGHT / 2);
+		// Counted in rows, because the headings occupy some of them.
+		const selectedRow = rowIndexOfModel[selectedModelIdx] ?? selectedModelIdx;
+		const targetScrollTop = Math.max(0, selectedRow * ITEM_HEIGHT - 128 + ITEM_HEIGHT / 2);
 		listScrollTop = targetScrollTop;
 
 		await tick();
@@ -488,6 +585,7 @@
 
 	const selectItem = (item, index: number) => {
 		selectedModelIdx = index;
+		onSelect(item.value);
 
 		if (values) {
 			if (compareEnabled) {
@@ -877,6 +975,40 @@
 		}
 	};
 
+	// Model ids currently being loaded, so the row can show progress and the
+	// button cannot be pressed twice.
+	let loadingModelIds = new Set<string>();
+
+	/** Whether this model's connection can be told to load it. */
+	const supportsLoading = (model: any) =>
+		model?.loaded === false &&
+		typeof model?.urlIdx === 'number' &&
+		MANAGEMENT_PROVIDERS.has(normalizeProvider(model?.provider ?? ''));
+
+	const loadModelHandler = async (model: any) => {
+		if (!supportsLoading(model) || loadingModelIds.has(model.id)) {
+			return;
+		}
+
+		loadingModelIds = new Set(loadingModelIds).add(model.id);
+		try {
+			await loadProviderModel(localStorage.token, model.urlIdx, model.id);
+			toast.success($i18n.t('Model loaded successfully'));
+			models.set(
+				await getModels(
+					localStorage.token,
+					$config?.features?.enable_direct_connections && ($settings?.directConnections ?? null)
+				)
+			);
+		} catch (error) {
+			toast.error($i18n.t('Error loading model: {{error}}', { error }));
+		} finally {
+			const next = new Set(loadingModelIds);
+			next.delete(model.id);
+			loadingModelIds = next;
+		}
+	};
+
 	let showDeleteConfirm = false;
 	let deleteModelTarget: any = null;
 
@@ -958,7 +1090,7 @@
 
 	$: visibleStart = Math.max(0, Math.floor(listScrollTop / ITEM_HEIGHT) - OVERSCAN);
 	$: visibleEnd = Math.min(
-		filteredItems.length,
+		listRows.length,
 		Math.ceil((listScrollTop + listViewportHeight) / ITEM_HEIGHT) + OVERSCAN
 	);
 </script>
@@ -1011,6 +1143,21 @@
 			}}
 		>
 			<span class="min-w-0 flex-1 truncate">{triggerLabel}</span>
+			{#if selectedCount === 1}
+				<!--
+					Whether the model is warm, without opening anything. Only when one
+					model is selected: with several, a single dot would be read as
+					speaking for all of them.
+
+					As fresh as the last fetch — which the hover above refreshes, so
+					pointing at the selector is also how you re-check it.
+				-->
+				<LoadIndicator
+					model={selectedEntry?.model}
+					showUnloaded={true}
+					className="shrink-0 self-center"
+				/>
+			{/if}
 			<ChevronDown className="ml-1 size-2.5 shrink-0 self-center" strokeWidth="2.5" />
 		</div>
 	</button>
@@ -1024,7 +1171,7 @@
 			<div
 				bind:this={panelElement}
 				class="z-40 {className ??
-					'w-[20rem]'} max-w-[calc(100vw-1rem)] justify-start rounded-xl border border-gray-100 bg-white p-0.5 shadow-lg outline-hidden dark:border-gray-800 dark:bg-gray-850 dark:text-white flex flex-col overflow-hidden"
+					'w-[24rem]'} max-w-[calc(100vw-1rem)] justify-start rounded-xl border border-gray-100 bg-white p-0.5 shadow-lg outline-hidden dark:border-gray-800 dark:bg-gray-850 dark:text-white flex flex-col overflow-hidden"
 				style={dropdownPosition.maxHeight ? `max-height: ${dropdownPosition.maxHeight}px;` : ''}
 				transition:flyAndScale
 			>
@@ -1169,25 +1316,40 @@
 								}}
 							>
 								<div style="height: {visibleStart * ITEM_HEIGHT}px;" />
-								{#each filteredItems.slice(visibleStart, visibleEnd) as item, i (item.value)}
-									{@const index = visibleStart + i}
-									<ModelItem
-										{selectedModelIdx}
-										{item}
-										{index}
-										value={primaryValue}
-										{pinModelHandler}
-										{unloadModelHandler}
-										{deleteModelHandler}
-										{selectionOnly}
-										{compareEnabled}
-										{selectedValues}
-										onClick={() => {
-											selectItem(item, index);
-										}}
-									/>
+								{#each listRows.slice(visibleStart, visibleEnd) as row (row.kind === 'header' ? row.key : row.item.value)}
+									{#if row.kind === 'header'}
+										<div
+											class="flex h-8 items-center px-2 text-[0.6875rem] font-medium tracking-wide text-gray-400 dark:text-gray-500"
+											role="presentation"
+										>
+											<span class="truncate">{row.label}</span>
+										</div>
+									{:else}
+										{@const item = row.item}
+										{@const index = row.modelIndex}
+										<ModelItem
+											{selectedModelIdx}
+											{item}
+											{index}
+											value={primaryValue}
+											{pinModelHandler}
+											{unloadModelHandler}
+											{loadModelHandler}
+											canLoad={supportsLoading(item.model)}
+											isLoading={loadingModelIds.has(item.model?.id)}
+											{deleteModelHandler}
+											nameParts={nameParts[index]}
+											providerName={providerNames[index] ?? ''}
+											{selectionOnly}
+											{compareEnabled}
+											{selectedValues}
+											onClick={() => {
+												selectItem(item, index);
+											}}
+										/>
+									{/if}
 								{/each}
-								<div style="height: {(filteredItems.length - visibleEnd) * ITEM_HEIGHT}px;" />
+								<div style="height: {(listRows.length - visibleEnd) * ITEM_HEIGHT}px;" />
 							</div>
 						{/if}
 
@@ -1357,7 +1519,7 @@
 					<div class="hidden w-[28rem]" />
 					<div class="hidden w-[24rem]" />
 					<div class="hidden w-[22rem]" />
-					<div class="hidden w-[20rem]" />
+					<div class="hidden w-[24rem]" />
 				</slot>
 			</div>
 		</div>

@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **Unofficial fork.** This project is a customized fork of Open WebUI. This
+> release is not affiliated with or maintained by the official Open WebUI team.
+> Report anything you find here to [this repository](https://github.com/OGMatrix/open-webui),
+> not to upstream. See [NOTICE-FORK.md](NOTICE-FORK.md) for what changed and
+> under which terms, and [CHANGELOG-FORK.md](CHANGELOG-FORK.md) for the releases.
+
 # Open WebUI 👋
 
 ![GitHub stars](https://img.shields.io/github/stars/open-webui/open-webui?style=social)

@@ -56,6 +56,8 @@
 	import { KokoroWorker } from '$lib/workers/KokoroWorker';
 	import FileItem from '$lib/components/common/FileItem.svelte';
 	import FollowUps from './ResponseMessage/FollowUps.svelte';
+	import GenerationStats from './ResponseMessage/GenerationStats.svelte';
+	import type { GenerationStats as GenerationStatsType } from '$lib/utils/generationStats';
 	import { fade } from 'svelte/transition';
 	import { flyAndScale } from '$lib/utils/transitions';
 	import RegenerateMenu from './ResponseMessage/RegenerateMenu.svelte';
@@ -113,6 +115,7 @@
 			load_duration?: number;
 			usage?: unknown;
 		};
+		generationStats?: GenerationStatsType;
 		annotation?: { type: string; rating: number };
 	}
 
@@ -191,6 +194,8 @@
 	$: visibleResponseContent =
 		getOutputText(message.output) || removeAllDetails(message.content ?? '');
 	$: hasResponseContent = Boolean((message.content ?? '').trim() || message.output?.length);
+	$: showGenerationStats =
+		($settings?.showGenerationStats ?? true) && Boolean(message.generationStats);
 
 	let edit = false;
 	let editedContent = '';
@@ -882,12 +887,22 @@
 								/>
 							{/if}
 
-							{#if !message.done && !message.error && (hasResponseContent || !hasVisibleStatus)}
+							<!-- Only when nothing else says a response is still coming. The live
+							     token/time/rate row below says the same thing with numbers, and the
+							     caret on its own line under a reasoning block read as a stray dash. -->
+							{#if !showGenerationStats && !message.done && !message.error && (hasResponseContent || !hasVisibleStatus)}
 								<div class="text-[0.9375rem] leading-relaxed">
 									<span
-										class="inline-block w-[0.125rem] h-3.5 bg-gray-400 dark:bg-gray-500 ml-0.5 animate-pulse align-text-bottom"
+										class="inline-block h-3.5 w-[0.125rem] animate-pulse bg-gray-400 align-text-bottom ml-0.5 dark:bg-gray-500"
 									></span>
 								</div>
+							{/if}
+
+							{#if showGenerationStats}
+								<GenerationStats
+									stats={message.generationStats}
+									streaming={!message.done && !message.error}
+								/>
 							{/if}
 
 							{#if message?.error}

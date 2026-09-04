@@ -3,6 +3,8 @@
 	import { marked } from 'marked';
 
 	import { toast } from 'svelte-sonner';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 
 	import { onMount, getContext } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -27,7 +29,7 @@
 	import SensitiveInput from '$lib/components/common/SensitiveInput.svelte';
 	import { redirect } from '@sveltejs/kit';
 
-	const i18n = getContext('i18n');
+	const i18n: Writable<i18nType> = getContext('i18n');
 
 	let loaded = false;
 
@@ -38,6 +40,17 @@
 	let name = '';
 	let email = '';
 	let password = '';
+
+	/*
+	 * The second factor, once the server says this account has one.
+	 *
+	 * The password is kept and re-sent with the code rather than traded for a
+	 * short-lived challenge token: one fewer credential to mint, expire and get
+	 * wrong, and it is already in this form either way.
+	 */
+	let secondFactorNeeded = false;
+	let secondFactorCode = '';
+	let secondFactorWrong = false;
 	let confirmPassword = '';
 
 	let ldapUsername = '';
@@ -70,9 +83,30 @@
 		}
 	};
 
+	// The two the server answers with instead of prose, so the wording is
+	// chosen here and in the reader's own language.
+	const SECOND_FACTOR_REQUIRED = 'second_factor_required';
+	const SECOND_FACTOR_INVALID = 'second_factor_invalid';
+
 	const signInHandler = async () => {
-		const sessionUser = await userSignIn(email, password).catch((error) => {
-			toast.error(`${error}`);
+		const sessionUser = await userSignIn(email, password, secondFactorCode).catch((error) => {
+			const detail = `${error}`;
+
+			if (detail === SECOND_FACTOR_REQUIRED || detail === SECOND_FACTOR_INVALID) {
+				secondFactorWrong = detail === SECOND_FACTOR_INVALID;
+				secondFactorNeeded = true;
+				secondFactorCode = '';
+				if (secondFactorWrong) {
+					toast.error($i18n.t('That code did not work. Codes change every 30 seconds.'));
+				}
+				return null;
+			}
+
+			// Anything else starts the sign-in over: a wrong password is not a
+			// state to stay in with a code box open.
+			secondFactorNeeded = false;
+			secondFactorCode = '';
+			toast.error(detail);
 			return null;
 		});
 
@@ -363,6 +397,40 @@
 												aria-required="true"
 											/>
 										</div>
+
+										{#if secondFactorNeeded && mode === 'signin'}
+											<!--
+												Only after the password was accepted. Until then the account
+												may not even exist, and an empty code box would be telling
+												anyone who asked which addresses are registered.
+											-->
+											<div class="mt-2">
+												<label for="second-factor" class="mb-1 block text-left text-sm font-normal">
+													{$i18n.t('Verification code')}
+												</label>
+												<input
+													bind:value={secondFactorCode}
+													id="second-factor"
+													name="one-time-code"
+													type="text"
+													inputmode="numeric"
+													autocomplete="one-time-code"
+													autocapitalize="characters"
+													spellcheck="false"
+													class="my-0.5 w-full bg-transparent text-sm outline-hidden placeholder:text-gray-300 dark:placeholder:text-gray-600"
+													placeholder="123456"
+													aria-describedby="second-factor-hint"
+													aria-invalid={secondFactorWrong}
+													required
+												/>
+												<div
+													id="second-factor-hint"
+													class="mt-1 text-xs text-gray-400 dark:text-gray-600"
+												>
+													{$i18n.t('From your authenticator app, or one of your recovery codes.')}
+												</div>
+											</div>
+										{/if}
 
 										{#if mode === 'signup' && $config?.features?.enable_signup_password_confirmation}
 											<div class="mt-2">

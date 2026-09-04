@@ -309,7 +309,7 @@ export const updateOAuthConfig = async (token: string, body: object) => {
 	return res;
 };
 
-export const userSignIn = async (email: string, password: string) => {
+export const userSignIn = async (email: string, password: string, code: string = '') => {
 	let error = null;
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/auths/signin`, {
@@ -320,7 +320,10 @@ export const userSignIn = async (email: string, password: string) => {
 		credentials: 'include',
 		body: JSON.stringify({
 			email: email,
-			password: password
+			password: password,
+			// Only when there is one. An empty field would be a wrong code
+			// rather than no code, and the server tells those apart.
+			...(code ? { code } : {})
 		})
 	})
 		.then(async (res) => {
@@ -659,3 +662,55 @@ export const deleteOAuthSession = async (token: string, provider: string) => {
 
 	return res;
 };
+
+/**
+ * The second factor, from the account that owns it.
+ *
+ * Every one of these re-asks for the password, except the two that already
+ * hold a code: a session says the browser was let in once, not that the person
+ * at it is the account holder, and these change how the account is defended.
+ */
+
+type ApiOptions = { method?: string; body?: unknown };
+
+const authRequest = async (token: string, path: string, options: ApiOptions = {}) => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/auths/${path}`, {
+		method: options.method ?? 'GET',
+		headers: {
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		},
+		...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {})
+	})
+		.then(async (response) => {
+			if (!response.ok) throw await response.json();
+			return response.json();
+		})
+		.catch((err) => {
+			console.error(err);
+			error = err?.detail ?? err;
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const getTotpStatus = async (token: string) => authRequest(token, 'totp');
+
+export const setupTotp = async (token: string, password: string) =>
+	authRequest(token, 'totp/setup', { method: 'POST', body: { password } });
+
+export const confirmTotp = async (token: string, code: string) =>
+	authRequest(token, 'totp/confirm', { method: 'POST', body: { code } });
+
+export const regenerateRecoveryCodes = async (token: string, password: string) =>
+	authRequest(token, 'totp/recovery-codes', { method: 'POST', body: { password } });
+
+export const disableTotp = async (token: string, password: string, code: string) =>
+	authRequest(token, 'totp/disable', { method: 'POST', body: { password, code } });

@@ -65,6 +65,11 @@ from open_webui.socket.main import sio
 from open_webui.tasks import stop_item_tasks
 from open_webui.tools.knowledge_fs import kb_exec  # noqa: F401 — re-exported
 from open_webui.utils.chat_id import is_saved_chat_id
+from open_webui.utils.ask_user import (
+    ASK_USER_REFUSALS,
+    normalize_ask_user_request,
+    read_ask_user_answers,
+)
 from open_webui.utils.json_codec import JSONCodec
 from open_webui.utils.notifications import notify_target
 from open_webui.utils.sanitize import sanitize_code
@@ -514,6 +519,9 @@ async def edit_image(
 # =============================================================================
 
 
+# The shapes a question can take. These follow the MCP elicitation schema
+# (string / number / boolean / single enum / multi enum), so a model that has
+# learned one interoperable way to ask a person something can use it here.
 async def ask_user(
     questions: list[dict],
     allow_other: bool = True,
@@ -521,68 +529,46 @@ async def ask_user(
     __event_call__: callable = None,
 ) -> str:
     """
-    Ask the user clarifying questions before continuing.
-    Use this when the next step depends on user intent, preference, or a tradeoff that cannot be inferred safely.
+    Ask the user something and wait for their answer before continuing.
 
-    :param questions: 1-3 question objects, each with id, header, question, and 2-3 options. Each option needs label and description.
-    :param allow_other: Whether users may enter a free-form answer instead of choosing one of the options
-    :param timeout_ms: How long the browser should keep the prompt open before cancelling it
-    :return: JSON with status and answers keyed by question id
+    Use this when the next step turns on the person's intent, preference, or a
+    tradeoff you cannot settle safely on your own. One good question beats a
+    wrong assumption; a question whose answer you could look up, infer from the
+    conversation, or pick a sensible default for is a question worth skipping.
+
+    Each question is an object with an `id`, a `header` (a couple of words), the
+    `question` itself, an optional `hint`, an optional `required` (default true),
+    and a `type`:
+
+    - "select": one of `options`. Each option is {label, description, value?}.
+      Put the option you would recommend first. Set `allow_other` to let the
+      person write their own answer instead.
+    - "multiselect": several of `options`, with optional `min_select` and
+      `max_select`.
+    - "text": free text. Optional `multiline`, `placeholder`, `min_length`,
+      `max_length`, and `format` ("email", "uri", "date", "date-time").
+    - "number": a number, with optional `minimum`, `maximum`, `unit`, and
+      `integer` for whole numbers only. A small integer range is shown as a
+      rating scale rather than a text field.
+    - "boolean": yes or no, with optional `true_label` and `false_label`.
+
+    Any type takes a `default`, which is filled in for the person up front.
+
+    Never ask for passwords, API keys, card numbers or any other credential: the
+    answer would travel back through your context and the chat log. Ask the
+    person to enter it where it belongs instead.
+
+    :param questions: 1-5 question objects.
+    :param allow_other: Default for whether choice questions also accept free text.
+    :param timeout_ms: How long the prompt stays open before it gives up, 60000-600000.
+    :return: JSON with a status of "answered", "declined" or "cancelled". When
+        answered, `values` holds the plain answer per question id, and `answers`
+        holds the same with the detail of what was picked.
     """
     try:
-        if not isinstance(questions, list) or not 1 <= len(questions) <= 3:
-            raise ValueError('ask_user requires 1-3 questions.')
-
-        normalized_questions = []
-        seen_ids = set()
-        for index, question in enumerate(questions):
-            if not isinstance(question, dict):
-                raise ValueError('Each question must be an object.')
-
-            question_id = str(question.get('id') or '').strip()[:64]
-            if not question_id:
-                raise ValueError('Each question requires a non-empty id.')
-            if question_id in seen_ids:
-                raise ValueError(f'Duplicate question id: {question_id}')
-            seen_ids.add(question_id)
-
-            options = question.get('options')
-            if not isinstance(options, list) or not 2 <= len(options) <= 3:
-                raise ValueError('Each question requires 2-3 options.')
-
-            normalized_options = []
-            for option in options:
-                if not isinstance(option, dict):
-                    raise ValueError('Each option must be an object.')
-
-                label = str(option.get('label') or '').strip()[:80]
-                description = str(option.get('description') or '').strip()[:240]
-                if not label or not description:
-                    raise ValueError('Each option requires a label and description.')
-
-                normalized_options.append(
-                    {
-                        'label': label,
-                        'description': description,
-                    }
-                )
-
-            question_text = str(question.get('question') or '').strip()[:500]
-            if not question_text:
-                raise ValueError('Each question requires question text.')
-
-            normalized_questions.append(
-                {
-                    'id': question_id,
-                    'header': str(question.get('header') or '').strip()[:48] or f'Question {index + 1}',
-                    'question': question_text,
-                    'options': normalized_options,
-                    'allow_other': bool(question.get('allow_other', allow_other)),
-                }
-            )
-
-        if isinstance(timeout_ms, bool) or not isinstance(timeout_ms, int) or not 60_000 <= timeout_ms <= 240_000:
-            timeout_ms = 120_000
+        request = normalize_ask_user_request(
+            {'questions': questions, 'allow_other': allow_other, 'timeout_ms': timeout_ms}
+        )
 
         if __event_call__ is None:
             return JSONCodec.dumps(
@@ -593,31 +579,28 @@ async def ask_user(
                 ensure_ascii=False,
             )
 
-        output = await __event_call__(
-            {
-                'type': 'request:user_input',
-                'data': {
-                    'questions': normalized_questions,
-                    'allow_other': allow_other,
-                    'timeout_ms': timeout_ms,
-                },
-            }
-        )
+        output = await __event_call__({'type': 'request:user_input', 'data': request})
 
         if not isinstance(output, dict):
             return JSONCodec.dumps({'status': 'error', 'error': 'Invalid user input response.'}, ensure_ascii=False)
         if output.get('error'):
             return JSONCodec.dumps({'status': 'error', 'error': output.get('error')}, ensure_ascii=False)
-        if output.get('status') == 'cancelled':
-            return JSONCodec.dumps({'status': 'cancelled', 'answers': {}}, ensure_ascii=False)
 
-        return JSONCodec.dumps(
-            {
-                'status': 'answered',
-                'answers': output.get('answers', {}),
-            },
-            ensure_ascii=False,
-        )
+        status = output.get('status')
+        if status in ASK_USER_REFUSALS:
+            return JSONCodec.dumps(
+                {'status': status, 'answers': {}, 'advice': ASK_USER_REFUSALS[status]},
+                ensure_ascii=False,
+            )
+
+        answers, values, problems = read_ask_user_answers(request['questions'], output.get('answers') or {})
+        if problems:
+            return JSONCodec.dumps(
+                {'status': 'error', 'error': 'Unusable answers: ' + '; '.join(problems)},
+                ensure_ascii=False,
+            )
+
+        return JSONCodec.dumps({'status': 'answered', 'values': values, 'answers': answers}, ensure_ascii=False)
     except Exception as e:
         log.exception(f'ask_user error: {e}')
         return JSONCodec.dumps({'status': 'error', 'error': str(e)}, ensure_ascii=False)
@@ -4517,3 +4500,223 @@ async def delete_calendar_event(
     except Exception as e:
         log.exception(f'delete_calendar_event error: {e}')
         return JSONCodec.dumps({'error': str(e)})
+
+
+####################
+#
+# Diagrams
+#
+####################
+
+# Fenced languages the chat renders as a diagram rather than as source. Kept in
+# step with CodeBlock.svelte, which is what actually draws them.
+DIAGRAM_LANGUAGES = ('mermaid', 'vega-lite', 'vega')
+
+# Bracket pairs that must balance. Mermaid node labels break silently when they
+# do not, which is the single most common way a generated diagram fails to draw.
+_BRACKET_PAIRS = {'(': ')', '[': ']', '{': '}'}
+_CLOSING_BRACKETS = {v: k for k, v in _BRACKET_PAIRS.items()}
+
+
+def _find_unbalanced(source: str) -> list[str]:
+    """Reports unbalanced brackets and quotes, ignoring anything inside a string.
+
+    Deliberately shallow: it does not parse the diagram grammar, so it cannot
+    reject a valid diagram it simply does not understand.
+    """
+    problems: list[str] = []
+    stack: list[tuple[str, int]] = []
+    in_quote: str | None = None
+    line = 1
+
+    for index, char in enumerate(source):
+        if char == '\n':
+            if in_quote:
+                problems.append(f'unterminated {in_quote} quote on line {line}')
+                in_quote = None
+            line += 1
+            continue
+
+        if in_quote:
+            if char == in_quote:
+                in_quote = None
+            continue
+
+        if char in ('"', "'"):
+            # An apostrophe inside a word is not a quote.
+            if char == "'" and index > 0 and source[index - 1].isalpha():
+                continue
+            in_quote = char
+        elif char in _BRACKET_PAIRS:
+            stack.append((char, line))
+        elif char in _CLOSING_BRACKETS:
+            if not stack:
+                problems.append(f'unexpected "{char}" on line {line}')
+            elif stack[-1][0] != _CLOSING_BRACKETS[char]:
+                opener, opened_at = stack[-1]
+                problems.append(f'"{opener}" from line {opened_at} closed by "{char}" on line {line}')
+                stack.pop()
+            else:
+                stack.pop()
+
+    if in_quote:
+        problems.append(f'unterminated {in_quote} quote')
+    for opener, opened_at in stack:
+        problems.append(f'"{opener}" on line {opened_at} is never closed')
+
+    return problems
+
+
+def _validate_mermaid(source: str) -> tuple[list[str], list[str]]:
+    """Returns (errors, hints) for a mermaid diagram."""
+    errors = _find_unbalanced(source)
+    hints: list[str] = []
+
+    lines = [line.strip() for line in source.splitlines()]
+    body = [line for line in lines if line and not line.startswith('%%')]
+    if not body:
+        errors.append('the diagram is empty')
+        return errors, hints
+
+    if len(body) == 1:
+        hints.append('the diagram declares a type but has no content')
+
+    if errors:
+        hints.append(
+            'Mermaid node labels cannot contain bare brackets or quotes. '
+            'Wrap such a label in double quotes, e.g. A["f(x)"].'
+        )
+
+    return errors, hints
+
+
+def _validate_vega(source: str, lite: bool) -> tuple[list[str], list[str]]:
+    """Returns (errors, hints) for a Vega or Vega-Lite specification."""
+    try:
+        spec = JSONCodec.loads(source)
+    except Exception as e:
+        return [f'not valid JSON: {e}'], ['A specification must be a single JSON object.']
+
+    if not isinstance(spec, dict):
+        return ['the specification must be a JSON object'], []
+
+    errors: list[str] = []
+    hints: list[str] = []
+
+    if lite:
+        # Any one of these makes it a renderable Vega-Lite spec.
+        composition = ('mark', 'layer', 'hconcat', 'vconcat', 'concat', 'facet', 'repeat', 'spec')
+        if not any(key in spec for key in composition):
+            errors.append('no "mark" and no composition key (' + ', '.join(composition[1:]) + ')')
+    elif 'marks' not in spec:
+        errors.append('a Vega specification needs "marks"')
+
+    if 'data' not in spec and 'datasets' not in spec:
+        hints.append('No "data" given, so the chart will draw nothing unless the mark supplies its own.')
+
+    return errors, hints
+
+
+async def _parse_in_browser(language: str, text: str, event_call) -> str | None:
+    """Asks the page to parse the diagram, returning the parser's complaint or None.
+
+    The structural check below cannot know a grammar; the library that will draw
+    the diagram does. It lives in the browser, so that is where the question
+    goes. Returns None when there is no page to ask, which leaves the structural
+    check as the only word on it.
+    """
+    if event_call is None:
+        return None
+    try:
+        reply = await asyncio.wait_for(
+            event_call({'type': 'request:diagram_check', 'data': {'diagram_type': language, 'source': text}}),
+            timeout=20,
+        )
+    except (asyncio.TimeoutError, Exception) as e:  # noqa: B014 - the page may be gone entirely
+        log.debug(f'diagram check unavailable: {e}')
+        return None
+
+    if not isinstance(reply, dict) or reply.get('ok'):
+        return None
+    return str(reply.get('error') or 'the diagram could not be parsed')
+
+
+async def create_diagram(
+    diagram_type: str,
+    source: str,
+    __event_call__: callable = None,
+) -> str:
+    """
+    Check a diagram and return it ready to place in your reply.
+
+    Use this whenever a diagram or chart would explain something better than
+    prose: flow charts, sequence diagrams, class diagrams, state machines, entity
+    relationships, Gantt charts, mind maps and the rest of Mermaid, or a chart
+    from a Vega-Lite specification.
+
+    Call it before writing the diagram into your answer. If it reports problems,
+    fix them and call again. On success it returns the finished fenced block:
+    copy that into your reply exactly as given, and it will be drawn for the user.
+
+    The diagram is handed to the same parser that will draw it, so a diagram this
+    reports as fine is one that renders. When no browser session is reachable it
+    falls back to a structural check, which is weaker.
+
+    :param diagram_type: One of "mermaid", "vega-lite" or "vega".
+    :param source: The diagram source. Mermaid text, or a JSON specification.
+    :return: The fenced block to include, or the problems to fix.
+    """
+    language = (diagram_type or '').strip().lower()
+    if language in ('vegalite', 'vega_lite'):
+        language = 'vega-lite'
+
+    if language not in DIAGRAM_LANGUAGES:
+        return JSONCodec.dumps(
+            {
+                'status': 'invalid',
+                'errors': [f'unknown diagram type "{diagram_type}"'],
+                'supported': list(DIAGRAM_LANGUAGES),
+            }
+        )
+
+    text = (source or '').strip()
+    if not text:
+        return JSONCodec.dumps({'status': 'invalid', 'errors': ['no diagram source was given']})
+
+    if language == 'mermaid':
+        errors, hints = _validate_mermaid(text)
+    else:
+        errors, hints = _validate_vega(text, lite=language == 'vega-lite')
+
+    # The real parser has the final say. It catches what balanced brackets cannot,
+    # such as a bare "(" inside a mermaid edge label, which is the single most
+    # common way a generated diagram fails to draw.
+    if not errors:
+        complaint = await _parse_in_browser(language, text, __event_call__)
+        if complaint:
+            errors.append(complaint)
+            if language == 'mermaid':
+                hints.append(
+                    'Mermaid labels cannot carry bare brackets, quotes or punctuation it parses as '
+                    'syntax. Wrap the label in double quotes, e.g. A["f(x)"] or -->|"fetch()"|.'
+                )
+
+    if errors:
+        return JSONCodec.dumps(
+            {
+                'status': 'invalid',
+                'errors': errors,
+                'hints': hints,
+                'advice': 'Fix these and call create_diagram again.',
+            }
+        )
+
+    result = {
+        'status': 'ok',
+        'block': f'```{language}\n{text}\n```',
+        'advice': 'Place this block in your reply exactly as given.',
+    }
+    if hints:
+        result['hints'] = hints
+
+    return JSONCodec.dumps(result)

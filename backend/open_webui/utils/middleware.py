@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import hashlib
 import base64
 import copy
 import inspect
@@ -85,7 +86,7 @@ from open_webui.utils.ask_user import stage_ask_user_tool_calls
 from open_webui.utils.chat import generate_chat_completion
 from open_webui.utils.chat_id import is_saved_chat_id
 from open_webui.utils.code_interpreter import execute_code_jupyter
-from open_webui.utils.context_compaction import compact_messages_for_request
+from open_webui.utils.context_compaction import compact_messages_for_request, enforce_context_window
 from open_webui.utils.files import (
     convert_markdown_base64_images,
     get_file_url_from_base64,
@@ -2175,9 +2176,18 @@ async def load_messages_from_db(chat_id: str, message_id: str) -> Optional[list[
     return [{k: v for k, v in msg.items() if k in MESSAGE_REPLAY_KEYS} for msg in db_messages]
 
 
-def get_reasoning_format(model: dict) -> str | None:
+def get_reasoning_format(model: dict, metadata: dict | None = None) -> str | None:
     """
     Determine how reasoning should be included in reconstructed messages.
+
+    A model may be told to send none of it back. Once a turn's thinking is in
+    the history, some models start imitating the tags they can see - nesting
+    them, inventing variants - until the frontend can no longer tell thinking
+    from answer. It is also the largest thing in a long chat that nobody reads
+    twice, so leaving it out buys back context as well.
+
+    Only Ollama and llama.cpp replay it at all; every other provider is already
+    given none, so the switch has nothing to do there.
 
     Returns:
         'thinking': Ollama expects reasoning in the native thinking field.
@@ -2185,6 +2195,9 @@ def get_reasoning_format(model: dict) -> str | None:
         'reasoning_content': llama.cpp supports reasoning_content as a top-level field.
         None: skip reasoning (safe default for strict providers).
     """
+    if ((metadata or {}).get('params') or {}).get('replay_reasoning') is False:
+        return None
+
     provider = model.get('provider', '')
     if model.get('owned_by') == 'ollama':
         return 'thinking'
@@ -2311,16 +2324,127 @@ def strip_skill_mentions(messages: list[dict]) -> None:
                         part['text'] = SKILL_MENTION_STRIP_RE.sub(label, text).strip()
 
 
+# How long a server's tool list is trusted before it is fetched again. Tool
+# lists change when someone edits the server, not between two messages.
+MCP_SPEC_CACHE_TTL = 300
+
+# (server id, user id, server fingerprint) -> (expires at, specs). The
+# fingerprint is part of the key on purpose: editing the connection changes it,
+# so a stale list cannot survive a configuration change.
+_mcp_spec_cache: dict[tuple[str, str, str], tuple[float, list[dict]]] = {}
+
+
+def clear_mcp_spec_cache(server_id: str | None = None) -> int:
+    """Forgets cached tool lists, for one server or all of them."""
+    global _mcp_spec_cache
+    if server_id is None:
+        count = len(_mcp_spec_cache)
+        _mcp_spec_cache = {}
+        return count
+
+    stale = [key for key in _mcp_spec_cache if key[0] == server_id]
+    for key in stale:
+        del _mcp_spec_cache[key]
+    return len(stale)
+
+
+def _mcp_server_fingerprint(connection: dict, headers: dict | None) -> str:
+    """Identifies the configuration a cached tool list was read under."""
+    material = JSONCodec.dumps(
+        {
+            'url': connection.get('url', ''),
+            'config': connection.get('config', {}),
+            'auth_type': connection.get('auth_type', ''),
+            # Headers carry the identity the server answers for, and a server may
+            # hand different callers different tools.
+            'headers': sorted((headers or {}).items()),
+        },
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(material.encode('utf-8')).hexdigest()
+
+
+class LazyMCPClient:
+    """Opens the connection the first time a tool is actually called.
+
+    Nearly every turn that has an MCP server enabled never calls one of its
+    tools, and the handshake for those turns bought nothing while being paid on
+    every single message. The connection is still created and torn down inside
+    the one request task, which is what the anyio cancel scopes require.
+    """
+
+    def __init__(self, url: str, headers: dict | None):
+        self._url = url
+        self._headers = headers
+        self._client: MCPClient | None = None
+        self._lock = asyncio.Lock()
+
+    async def _ensure(self) -> MCPClient:
+        async with self._lock:
+            if self._client is None:
+                client = MCPClient()
+                await client.connect(url=self._url, headers=self._headers)
+                self._client = client
+        return self._client
+
+    async def list_tool_specs(self) -> Optional[list]:
+        client = await self._ensure()
+        return await client.list_tool_specs()
+
+    async def call_tool(self, function_name: str, function_args: dict):
+        client = await self._ensure()
+        return await client.call_tool(function_name, function_args=function_args)
+
+    async def disconnect(self):
+        # Never connected means nothing to tear down, which is the common case.
+        if self._client is not None:
+            client, self._client = self._client, None
+            await client.disconnect()
+
+
+# Named SSE events that report a tool starting or finishing. Hermes Agent is the
+# one that emits these today; the shape is verified against a live 0.20.6 server.
+PROVIDER_TOOL_PROGRESS_EVENTS = {'hermes.tool.progress'}
+
+
+def normalize_tool_progress(payload: dict) -> dict | None:
+    """Turns a provider's tool-progress frame into what the chat can render.
+
+    Hermes sends the tool name along with an emoji and a sentence describing
+    what it is doing with it, which is far better than anything that could be
+    invented here: "web_search" is what ran, the label is what it ran for.
+    """
+    name = payload.get('tool') or payload.get('name')
+    status = payload.get('status')
+    if not isinstance(name, str) or not name or status not in ('running', 'completed', 'failed'):
+        return None
+
+    progress = {'name': name, 'status': status}
+    for key in ('emoji', 'label'):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            progress[key] = value
+
+    call_id = payload.get('toolCallId') or payload.get('tool_call_id')
+    if isinstance(call_id, str) and call_id:
+        progress['call_id'] = call_id
+
+    return progress
+
+
 async def connect_mcp_server(
     request,
     server_id: str,
     user,
     metadata: dict,
     extra_params: dict,
-) -> tuple[MCPClient, list[dict]] | None:
-    """Resolve an MCP server connection, authenticate, and return (client, tool_specs).
+) -> tuple[LazyMCPClient, list[dict]] | None:
+    """Resolve an MCP server connection and return (client, tool_specs).
 
-    Returns None if the server is not found or access is denied.
+    The tool list comes from a short-lived cache, and the client only dials the
+    server once a tool is called. Returns None if the server is not found or
+    access is denied.
     """
     mcp_server_connection = None
     for server_connection in await Config.get('tool_server.connections', []):
@@ -2345,11 +2469,12 @@ async def connect_mcp_server(
         extra_params=extra_params,
     )
 
-    client = MCPClient()
-    await client.connect(
-        url=mcp_server_connection.get('url', ''),
-        headers=headers if headers else None,
-    )
+    client = LazyMCPClient(mcp_server_connection.get('url', ''), headers if headers else None)
+
+    cache_key = (server_id, str(user.id), _mcp_server_fingerprint(mcp_server_connection, headers))
+    cached = _mcp_spec_cache.get(cache_key)
+    if cached and cached[0] > time.monotonic():
+        return client, cached[1]
 
     function_name_filter_list = mcp_server_connection.get('config', {}).get('function_name_filter_list', '')
     if isinstance(function_name_filter_list, str):
@@ -2359,6 +2484,7 @@ async def connect_mcp_server(
     if function_name_filter_list:
         tool_specs = [spec for spec in tool_specs if is_string_allowed(spec['name'], function_name_filter_list)]
 
+    _mcp_spec_cache[cache_key] = (time.monotonic() + MCP_SPEC_CACHE_TTL, tool_specs)
     return client, tool_specs
 
 
@@ -2496,7 +2622,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     form_data['messages'] = process_messages_with_output(
         form_data.get('messages', []),
-        reasoning_format=get_reasoning_format(model),
+        reasoning_format=get_reasoning_format(model, metadata),
     )
     form_data['messages'] = sanitize_tool_pairs(form_data['messages'])
 
@@ -3114,6 +3240,12 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     form_data = normalize_messages_for_model(form_data)
 
+    # Everything above may have added to the payload: knowledge, web results,
+    # skills, tool schemas. Compaction ran before any of it, so this is the
+    # first point at which the request can be measured as it will actually be
+    # sent.
+    await enforce_context_window(request, form_data, model, metadata)
+
     return form_data, metadata, events
 
 
@@ -3150,26 +3282,52 @@ async def build_chat_response_context(request, form_data, user, model, metadata,
     }
 
 
+def coerce_tool_params(tool_args) -> dict | None:
+    """The arguments a model sent, as a mapping, or None when they are not one.
+
+    A model can emit arguments that are valid JSON and still unusable: a bare
+    string, a number, a list. Everything downstream reads them as a mapping of
+    parameter names, so one that is not a mapping reached `.items()` outside any
+    try and took the whole response down with it, partial answer included —
+    reported against this exact version as open-webui#29323, and seen where one
+    reply carries several tool calls at once.
+
+    One function for both call sites, so the check cannot be added in one and
+    forgotten in the other, which is how it came to be missing in the first
+    place.
+    """
+    if not tool_args or not str(tool_args).strip():
+        return {}
+
+    parsed = None
+    try:
+        parsed = JSONCodec.loads(tool_args)
+    except Exception:
+        try:
+            parsed = ast.literal_eval(tool_args)
+        except Exception as e:
+            log.debug('tool arguments could not be parsed: %s', e)
+            return None
+
+    if not isinstance(parsed, dict):
+        log.debug('tool arguments parsed to %s rather than an object', type(parsed).__name__)
+        return None
+
+    return parsed
+
+
 async def execute_tool_call_for_output(request, form_data, user, metadata, event_caller, event_emitter, tool_call):
     tools = metadata.get('tools', {})
     name = tool_call.get('function', {}).get('name', '')
-    tool_args = tool_call.get('function', {}).get('arguments', '{}')
-    params = {}
-    if tool_args and tool_args.strip():
-        try:
-            params = JSONCodec.loads(tool_args)
-        except Exception:
-            try:
-                params = ast.literal_eval(tool_args)
-            except Exception as e:
-                log.debug(e)
-                return {
-                    'tool_call_id': tool_call.get('id', ''),
-                    'content': (
-                        'Error: Tool call arguments could not be parsed. '
-                        'The model generated malformed or incomplete JSON.'
-                    ),
-                }
+    params = coerce_tool_params(tool_call.get('function', {}).get('arguments', '{}'))
+    if params is None:
+        return {
+            'tool_call_id': tool_call.get('id', ''),
+            'content': (
+                'Error: Tool call arguments could not be read as an object. '
+                'The model generated malformed JSON, or a value that is not a set of parameters.'
+            ),
+        }
     tool_call.setdefault('function', {})['arguments'] = JSONCodec.dumps(params)
 
     tool = tools.get(name)
@@ -3398,7 +3556,7 @@ async def drain_approved_tool_calls(request, form_data, user, model, metadata) -
 
             form_data['messages'] = process_messages_with_output(
                 db_messages,
-                reasoning_format=get_reasoning_format(model),
+                reasoning_format=get_reasoning_format(model, metadata),
             )
             form_data['messages'] = sanitize_tool_pairs(form_data['messages'])
 
@@ -4799,12 +4957,21 @@ async def streaming_chat_response_handler(response, ctx):
 
                     filter_extra_params = {'__body__': form_data, **extra_params} if filter_functions else None
 
+                    # An SSE frame may name its event on a line of its own. Only the
+                    # data line was ever read, so a provider reporting something
+                    # that is not a completion chunk had no way to say so.
+                    sse_event_name = None
+
                     async for line in response.body_iterator:
                         line = line.decode('utf-8', 'replace') if isinstance(line, bytes) else line
                         data = line
 
                         # Skip empty lines
                         if not data or data.isspace():
+                            continue
+
+                        if data.startswith('event:'):
+                            sse_event_name = data[6:].strip()
                             continue
 
                         # "data:" is the prefix for each event
@@ -4835,8 +5002,17 @@ async def streaming_chat_response_handler(response, ctx):
                         # Remove the "data:" prefix
                         data = data[5:].strip()
 
+                        # The name belongs to this one frame and nothing after it.
+                        frame_event, sse_event_name = sse_event_name, None
+
                         try:
                             data = JSONCodec.loads(data)
+
+                            if frame_event in PROVIDER_TOOL_PROGRESS_EVENTS and isinstance(data, dict):
+                                progress = normalize_tool_progress(data)
+                                if progress:
+                                    await event_emitter({'type': 'chat:tool:progress', 'data': progress})
+                                continue
 
                             if filter_functions:
                                 data, _ = await process_filter_functions(
@@ -4950,6 +5126,18 @@ async def streaming_chat_response_handler(response, ctx):
                                     choices = data.get('choices', [])
 
                                     # Normalize usage data to standard format
+                                    # Prefill progress, where the provider reports it. Sent on its own so
+                                    # it reaches the client while the prompt is still being read, long
+                                    # before any usage figures exist.
+                                    prompt_progress = data.get('prompt_progress')
+                                    if isinstance(prompt_progress, dict):
+                                        await event_emitter(
+                                            {
+                                                'type': 'chat:completion',
+                                                'data': {'prompt_progress': prompt_progress},
+                                            }
+                                        )
+
                                     raw_usage = data.get('usage', {}) or {}
                                     raw_usage.update(data.get('timings', {}))  # llama.cpp
                                     if raw_usage:
@@ -5654,17 +5842,9 @@ async def streaming_chat_response_handler(response, ctx):
                     results = []
 
                     def parse_tool_params(tool_call):
-                        tool_args = tool_call.get('function', {}).get('arguments', '{}')
-                        params = {}
-                        if tool_args and tool_args.strip():
-                            try:
-                                params = JSONCodec.loads(tool_args)
-                            except Exception:
-                                try:
-                                    params = ast.literal_eval(tool_args)
-                                except Exception as e:
-                                    log.debug(e)
-                                    return None
+                        params = coerce_tool_params(tool_call.get('function', {}).get('arguments', '{}'))
+                        if params is None:
+                            return None
                         tool_call.setdefault('function', {})['arguments'] = JSONCodec.dumps(params)
                         return params
 
@@ -5672,7 +5852,18 @@ async def streaming_chat_response_handler(response, ctx):
                         name = tool_call.get('function', {}).get('name', '')
                         params = parse_tool_params(tool_call)
                         if params is None:
-                            return {}, None, None, None, False
+                            # Told, not skipped: a call that vanishes without a
+                            # result leaves the model waiting on one.
+                            return (
+                                {},
+                                (
+                                    f'Error: Tool "{name}" was called with arguments that are not an '
+                                    'object. Send the parameters as a JSON object and try again.'
+                                ),
+                                None,
+                                None,
+                                False,
+                            )
                         tool = tools.get(name)
                         if not tool:
                             return params, f'Error: Tool "{name}" not found.', None, None, False
@@ -5936,14 +6127,14 @@ async def streaming_chat_response_handler(response, ctx):
                             new_form_data['messages'] = (
                                 [system_message] if system_message else []
                             ) + convert_output_to_messages(
-                                output, raw=True, reasoning_format=get_reasoning_format(model)
+                                output, raw=True, reasoning_format=get_reasoning_format(model, metadata)
                             )
                             new_form_data['previous_response_id'] = last_response_id
                         else:
                             tool_messages = convert_output_to_messages(
                                 output,
                                 raw=True,
-                                reasoning_format=get_reasoning_format(model),
+                                reasoning_format=get_reasoning_format(model, metadata),
                                 flatten_tool_images=True,
                             )
 
@@ -5990,6 +6181,13 @@ async def streaming_chat_response_handler(response, ctx):
                             )
 
                         new_form_data = normalize_messages_for_model(new_form_data)
+
+                        # Tool results accumulate across iterations of this
+                        # loop, and until now nothing looked at the total
+                        # again after the turn began -- which is how a long
+                        # agentic turn walks past the window while working,
+                        # and fails on an iteration that had been going fine.
+                        await enforce_context_window(request, new_form_data, model, metadata)
 
                         res = await generate_chat_completion(
                             request,
@@ -6193,7 +6391,7 @@ async def streaming_chat_response_handler(response, ctx):
                                     *convert_output_to_messages(
                                         output,
                                         raw=True,
-                                        reasoning_format=get_reasoning_format(model),
+                                        reasoning_format=get_reasoning_format(model, metadata),
                                         flatten_tool_images=True,
                                     ),
                                 ],

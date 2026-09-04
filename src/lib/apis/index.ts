@@ -1500,6 +1500,33 @@ export const getBackendConfig = async () => {
 	return res;
 };
 
+/**
+ * What this fork changed, as opposed to what Open WebUI changed.
+ *
+ * A separate call because they are separate projects' release notes; showing
+ * them as one list would attribute this fork's work to upstream.
+ */
+export const getForkChangelog = async () => {
+	const res = await fetch(`${WEBUI_BASE_URL}/api/changelog/fork`, {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json'
+		}
+	})
+		.then(async (response) => {
+			if (!response.ok) throw await response.json();
+			return response.json();
+		})
+		.catch((err) => {
+			// A build with no release cut yet has nothing to show, and that is not
+			// a failure worth putting in front of anyone.
+			console.error(err);
+			return null;
+		});
+
+	return res;
+};
+
 export const getChangelog = async () => {
 	let error = null;
 

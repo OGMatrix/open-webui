@@ -60,6 +60,18 @@ from open_webui.models.users import (
     UserStatus,
 )
 from open_webui.utils.access_control import get_permissions, has_permission
+from open_webui.utils.totp import (
+    generate_recovery_codes,
+    generate_secret,
+    provisioning_uri,
+    verify as verify_totp,
+)
+from open_webui.utils.two_factor import (
+    hash_recovery_codes,
+    open_secret,
+    seal_secret,
+    take_recovery_code,
+)
 from open_webui.utils.auth import (
     create_api_key,
     create_token,
@@ -825,6 +837,13 @@ async def signin(
             lambda pw: verify_password(form_data.password, pw),
             db=db,
         )
+
+    if user and auth_source == 'password':
+        # Only the password path. A trusted header means the proxy in front of
+        # this already decided who the caller is, and WEBUI_AUTH=False means
+        # nobody is being asked anything - a code prompt in either would be
+        # asking the wrong party for the wrong thing.
+        await require_second_factor(user, form_data.code, db=db)
 
     if user:
         return await create_session_response(request, user, db, response, set_cookie=True, source=auth_source)
@@ -1732,3 +1751,227 @@ async def token_exchange(
         )
 
     return await create_session_response(request, user, db, source='oauth')
+
+
+############################
+# Two-Factor Authentication
+############################
+
+
+class TotpStatusResponse(BaseModel):
+    enabled: bool
+    recovery_codes_left: int
+
+
+class TotpPasswordForm(BaseModel):
+    password: str
+
+
+class TotpSetupResponse(BaseModel):
+    secret: str
+    uri: str
+
+
+class TotpConfirmForm(BaseModel):
+    code: str
+
+
+class TotpConfirmResponse(BaseModel):
+    recovery_codes: list[str]
+
+
+class TotpDisableForm(BaseModel):
+    password: str
+    code: str
+
+
+#: Tokens, not prose.
+#:
+#: These two do not go in front of anyone: they tell the sign-in form which of
+#: its states to be in, and it says the rest in the reader's own language. Every
+#: other error here is a message, and stays one.
+SECOND_FACTOR_REQUIRED = 'second_factor_required'
+SECOND_FACTOR_INVALID = 'second_factor_invalid'
+
+
+def _totp_available() -> None:
+    """Refuse where a second factor would be meaningless or unreachable.
+
+    Under a trusted header the proxy decides who the caller is and never sees
+    this endpoint; with password auth off there is no first factor to be second
+    to. Both are configuration, not user error, so they say so plainly.
+    """
+    if WEBUI_AUTH_TRUSTED_EMAIL_HEADER or not ENABLE_PASSWORD_AUTH:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.ACTION_PROHIBITED)
+
+
+async def require_second_factor(user, code: str | None, db: AsyncSession) -> None:
+    """Stop a sign-in that has the password but not the second factor.
+
+    Raises rather than returns: there is exactly one way past here, and a
+    function that could be ignored at the call site would be a way past it.
+
+    Guessing at the code is already rate limited: every attempt is another POST
+    to sign-in, and that path counts each one before it gets here. Counting
+    again from inside would charge a single attempt twice.
+    """
+    enabled, sealed, recovery = await Auths.get_two_factor_by_id(user.id, db=db)
+    if not enabled:
+        return
+
+    if not code:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=SECOND_FACTOR_REQUIRED)
+
+    secret = open_secret(sealed)
+    if secret and verify_totp(secret, code, time.time()):
+        return
+
+    # Then a recovery code, which is spent on use.
+    remaining = await take_recovery_code(code, recovery)
+    if remaining is not None:
+        await Auths.set_recovery_codes_by_id(user.id, remaining, db=db)
+        log.info('user %s signed in with a recovery code; %d left', user.id, len(remaining))
+        return
+
+    raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=SECOND_FACTOR_INVALID)
+
+
+@router.get('/totp', response_model=TotpStatusResponse)
+async def get_totp_status(
+    session_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    enabled, _sealed, recovery = await Auths.get_two_factor_by_id(session_user.id, db=db)
+    return TotpStatusResponse(enabled=enabled, recovery_codes_left=len(recovery))
+
+
+@router.post('/totp/setup', response_model=TotpSetupResponse)
+async def setup_totp(
+    request: Request,
+    form_data: TotpPasswordForm,
+    session_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Stage a secret and hand back what an authenticator needs to take it.
+
+    The password is asked for again because a session is not proof that the
+    person at the keyboard is the account holder, and this changes how the
+    account is defended.
+
+    Nothing is enforced yet: the secret is stored but the factor stays off
+    until a code proves the app actually received it. Enabling here would lock
+    out anyone whose scan silently failed.
+    """
+    _totp_available()
+
+    if not await Auths.authenticate_user(
+        session_user.email,
+        lambda pw: verify_password(form_data.password, pw),
+        db=db,
+    ):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_PASSWORD)
+
+    secret = generate_secret()
+    if not await Auths.start_two_factor_by_id(session_user.id, seal_secret(secret), db=db):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT())
+
+    issuer = getattr(request.app.state, 'WEBUI_NAME', None) or 'Open WebUI'
+    return TotpSetupResponse(secret=secret, uri=provisioning_uri(secret, session_user.email, issuer))
+
+
+@router.post('/totp/confirm', response_model=TotpConfirmResponse)
+async def confirm_totp(
+    form_data: TotpConfirmForm,
+    session_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Turn it on, and hand over the recovery codes once.
+
+    The codes are returned here and nowhere else: they are stored hashed, so
+    this is the only moment they exist in readable form. Showing them again
+    later would mean keeping them readable, which is the thing hashing them was
+    for.
+    """
+    _totp_available()
+
+    enabled, sealed, _recovery = await Auths.get_two_factor_by_id(session_user.id, db=db)
+    if enabled:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.ACTION_PROHIBITED)
+
+    secret = open_secret(sealed)
+    if not secret:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.TOTP_NOT_ENABLED)
+
+    if not verify_totp(secret, form_data.code, time.time()):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.TOTP_INVALID)
+
+    codes = generate_recovery_codes()
+    if not await Auths.enable_two_factor_by_id(session_user.id, await hash_recovery_codes(codes), db=db):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT())
+
+    return TotpConfirmResponse(recovery_codes=codes)
+
+
+@router.post('/totp/recovery-codes', response_model=TotpConfirmResponse)
+async def regenerate_recovery_codes(
+    form_data: TotpPasswordForm,
+    session_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """A fresh set, when the old ones have been spent or seen by someone else.
+
+    Replacing rather than adding: a code that was on a list someone else has
+    read is not made safe by being joined by new ones.
+    """
+    _totp_available()
+
+    enabled, _sealed, _recovery = await Auths.get_two_factor_by_id(session_user.id, db=db)
+    if not enabled:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.TOTP_NOT_ENABLED)
+
+    if not await Auths.authenticate_user(
+        session_user.email,
+        lambda pw: verify_password(form_data.password, pw),
+        db=db,
+    ):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_PASSWORD)
+
+    codes = generate_recovery_codes()
+    await Auths.set_recovery_codes_by_id(session_user.id, await hash_recovery_codes(codes), db=db)
+    return TotpConfirmResponse(recovery_codes=codes)
+
+
+@router.post('/totp/disable', response_model=bool)
+async def disable_totp(
+    form_data: TotpDisableForm,
+    session_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Turn it off - password *and* a current code.
+
+    The password alone would mean a stolen session could strip the protection
+    it was stolen past. A recovery code counts, which is the way back for
+    someone whose authenticator is gone; if those are gone too, the row in the
+    auth table is the last resort and an administrator has to clear it.
+    """
+    _totp_available()
+
+    enabled, sealed, recovery = await Auths.get_two_factor_by_id(session_user.id, db=db)
+    if not enabled:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.TOTP_NOT_ENABLED)
+
+    if not await Auths.authenticate_user(
+        session_user.email,
+        lambda pw: verify_password(form_data.password, pw),
+        db=db,
+    ):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_PASSWORD)
+
+    secret = open_secret(sealed)
+    accepted = bool(secret and verify_totp(secret, form_data.code, time.time()))
+    if not accepted:
+        accepted = await take_recovery_code(form_data.code, recovery) is not None
+    if not accepted:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.TOTP_INVALID)
+
+    return await Auths.disable_two_factor_by_id(session_user.id, db=db)
