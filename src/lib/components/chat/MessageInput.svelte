@@ -93,6 +93,7 @@
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte';
 	import { sumChatUsage } from '$lib/utils/tokenUsage';
 	import { getContextWindow } from '$lib/utils/contextWindow';
+	import { estimateMessagesTokens, estimateTokens } from '$lib/utils/tokenEstimate';
 	import { getModelPricing } from '$lib/utils/cost';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import ModelSelector from './ModelSelector.svelte';
@@ -589,29 +590,6 @@
 
 	const trimNumber = (value: number) =>
 		value >= 10 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, '');
-
-	const estimateTokens = (value) => {
-		if (value === null || value === undefined || value === '') {
-			return 0;
-		}
-		if (typeof value !== 'string') {
-			try {
-				value = JSON.stringify(value);
-			} catch {
-				value = String(value);
-			}
-		}
-		return Math.max(1, Math.floor(value.length / 4));
-	};
-
-	const estimateMessagesTokens = (messages) =>
-		messages.reduce((total, message) => {
-			let next = total + 4 + estimateTokens(message.content);
-			next += estimateTokens(message.output);
-			next += estimateTokens(message.tool_calls);
-			next += estimateTokens(message.files);
-			return next;
-		}, 0);
 
 	// Takes the history as an argument rather than closing over it: a reactive
 	// statement only tracks what it references itself, so reading `history`

@@ -1304,7 +1304,7 @@ async def compact_chat_by_id(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='No model found for context compaction.')
 
     result = await compact_chat_branch(request, user, chat, model_id, request.app.state.MODELS)
-    result['context_usage'] = await get_chat_context_usage(chat, model_id)
+    result['context_usage'] = await get_chat_context_usage(chat, model_id, request)
     if result.get('compacted'):
         await publish_event(
             request,
@@ -1340,7 +1340,7 @@ async def get_chat_by_id(
             data,
             await get_response_streams_by_chat_id(request.app.state.redis, id),
         )
-        data['context_usage'] = await get_chat_context_usage(chat)
+        data['context_usage'] = await get_chat_context_usage(chat, request=request)
         return data
 
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND)

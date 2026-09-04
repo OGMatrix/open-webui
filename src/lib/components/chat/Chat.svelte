@@ -67,6 +67,8 @@
 		initMermaid,
 		renderVegaVisualization
 	} from '$lib/utils';
+	import { getContextWindow } from '$lib/utils/contextWindow';
+	import { estimateMessagesTokens, estimateTokens } from '$lib/utils/tokenEstimate';
 	import { AudioQueue } from '$lib/utils/audio';
 	import {
 		applyGenerationUsage,
@@ -241,31 +243,17 @@
 		}
 	}
 
-	const estimateTokens = (value) => {
-		if (value === null || value === undefined || value === '') {
-			return 0;
-		}
-		if (typeof value !== 'string') {
-			try {
-				value = JSON.stringify(value);
-			} catch {
-				value = String(value);
-			}
-		}
-		return Math.max(1, Math.floor(value.length / 4));
-	};
-
-	const estimateMessagesTokens = (messages) =>
-		messages.reduce((total, message) => {
-			let next = total + 4 + estimateTokens(message.content);
-			next += estimateTokens(message.output);
-			next += estimateTokens(message.tool_calls);
-			next += estimateTokens(message.files);
-			return next;
-		}, 0);
-
 	$: contextCompactionEnabled = Boolean($config?.features?.enable_context_compaction);
 
+	/**
+	 * What the meter fills against.
+	 *
+	 * An explicit threshold wins, because someone chose it. Failing that it is
+	 * the model's own context window, which is also what the server budgets
+	 * compaction against — so the bar and the decision agree. Compaction being
+	 * switched off does not make the window unknowable, and a user watching a
+	 * chat fill up wants the number either way.
+	 */
 	const getContextThreshold = () => {
 		const chatThreshold = Number(params?.compact_token_threshold);
 		if (Number.isFinite(chatThreshold) && chatThreshold > 0) {
@@ -275,7 +263,11 @@
 		const modelId = atSelectedModel?.id ?? selectedModels.find((id) => id);
 		const model = $models.find((item) => item.id === modelId);
 		const threshold = Number(model?.info?.params?.compact_token_threshold);
-		return Number.isFinite(threshold) && threshold > 0 ? threshold : null;
+		if (Number.isFinite(threshold) && threshold > 0) {
+			return threshold;
+		}
+
+		return getContextWindow(model, { ...$settings?.params, ...params });
 	};
 
 	const getContextUsage = () => {
@@ -284,9 +276,7 @@
 		}
 
 		const messages = createMessagesList(history, history.currentId);
-		const threshold = contextCompactionEnabled
-			? (getContextThreshold() ?? serverContextUsage?.threshold ?? null)
-			: null;
+		const threshold = getContextThreshold() ?? serverContextUsage?.threshold ?? null;
 		const systemTokens = estimateTokens($settings?.system ?? '');
 		let estimatedTokens = systemTokens;
 		let hasUsageCheckpoint = false;

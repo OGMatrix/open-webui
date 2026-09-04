@@ -45,9 +45,9 @@
 
 	let chatConfig = {
 		CONTEXT_COMPACTION_MODEL: '',
-		ENABLE_CONTEXT_COMPACTION: false,
-		CONTEXT_COMPACTION_TOKEN_THRESHOLD: 80000,
-		CONTEXT_COMPACTION_TOKEN_CAP: 80000,
+		ENABLE_CONTEXT_COMPACTION: true,
+		CONTEXT_COMPACTION_TOKEN_THRESHOLD: 0,
+		CONTEXT_COMPACTION_TOKEN_CAP: 0,
 		CONTEXT_COMPACTION_RETENTION_PERCENTAGE: 40,
 		CONTEXT_COMPACTION_PROMPT_TEMPLATE: '',
 		ENABLE_TOOL_PERMISSIONS: false
@@ -271,7 +271,7 @@
 				<AdminSettingRow
 					label={$i18n.t('Context Compaction')}
 					description={$i18n.t(
-						'Summarize older chat history when the conversation context grows large.'
+						"Keep long chats going by summarizing older turns before they outgrow the model's context window."
 					)}
 					let:labelId
 				>
@@ -308,14 +308,15 @@
 					<AdminSettingField
 						label={$i18n.t('Token Threshold')}
 						description={$i18n.t(
-							'Older messages are summarized when estimated context exceeds this token limit.'
+							"Leave at 0 to work this out from each model's own context window, which is the only figure that is right for more than one model. A number here overrides that for every model."
 						)}
 					>
 						<input
 							type="number"
-							min="1"
+							min="0"
 							step="1"
 							class={inputClass}
+							placeholder={$i18n.t('Automatic')}
 							bind:value={chatConfig.CONTEXT_COMPACTION_TOKEN_THRESHOLD}
 						/>
 					</AdminSettingField>
@@ -323,22 +324,23 @@
 					<AdminSettingField
 						label={$i18n.t('Token Cap')}
 						description={$i18n.t(
-							'Model-specific context compaction thresholds cannot exceed this token limit.'
+							'An upper limit no per-model threshold may exceed. Leave at 0 for none.'
 						)}
 					>
 						<input
 							type="number"
-							min="1"
+							min="0"
 							step="1"
 							class={inputClass}
+							placeholder={$i18n.t('None')}
 							bind:value={chatConfig.CONTEXT_COMPACTION_TOKEN_CAP}
 						/>
 					</AdminSettingField>
 
 					<AdminSettingField
-						label={$i18n.t('Retained Messages')}
+						label={$i18n.t('Retained Context')}
 						description={$i18n.t(
-							'Percentage of recent messages to keep after older messages are summarized.'
+							'Share of the usable context kept as recent turns, word for word, after a compaction. What is left over is the room the next several turns grow into.'
 						)}
 					>
 						<input

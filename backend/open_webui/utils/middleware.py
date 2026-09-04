@@ -86,7 +86,7 @@ from open_webui.utils.ask_user import stage_ask_user_tool_calls
 from open_webui.utils.chat import generate_chat_completion
 from open_webui.utils.chat_id import is_saved_chat_id
 from open_webui.utils.code_interpreter import execute_code_jupyter
-from open_webui.utils.context_compaction import compact_messages_for_request
+from open_webui.utils.context_compaction import compact_messages_for_request, enforce_context_window
 from open_webui.utils.files import (
     convert_markdown_base64_images,
     get_file_url_from_base64,
@@ -3240,6 +3240,12 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     form_data = normalize_messages_for_model(form_data)
 
+    # Everything above may have added to the payload: knowledge, web results,
+    # skills, tool schemas. Compaction ran before any of it, so this is the
+    # first point at which the request can be measured as it will actually be
+    # sent.
+    await enforce_context_window(request, form_data, model, metadata)
+
     return form_data, metadata, events
 
 
@@ -6175,6 +6181,13 @@ async def streaming_chat_response_handler(response, ctx):
                             )
 
                         new_form_data = normalize_messages_for_model(new_form_data)
+
+                        # Tool results accumulate across iterations of this
+                        # loop, and until now nothing looked at the total
+                        # again after the turn began -- which is how a long
+                        # agentic turn walks past the window while working,
+                        # and fails on an iteration that had been going fine.
+                        await enforce_context_window(request, new_form_data, model, metadata)
 
                         res = await generate_chat_completion(
                             request,

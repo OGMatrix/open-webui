@@ -1083,6 +1083,15 @@ def remember_capabilities(url_idx: int, model_id: str, capabilities: dict) -> di
     return _capability_memory.get(key, {})
 
 
+def recall_capabilities(url_idx: int, model_id: str) -> dict:
+    """What was remembered, without asking the provider again.
+
+    Read by anything that needs a probed fact -- the context window, above all
+    -- outside the request that probed for it.
+    """
+    return _capability_memory.get((url_idx, model_id), {})
+
+
 def forget_capabilities() -> int:
     """Drops everything remembered, for when a provider was reconfigured."""
     count = len(_capability_memory)
