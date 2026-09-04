@@ -11,6 +11,7 @@
 	import MicSolid from '$lib/components/icons/MicSolid.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import VoiceRecording from '$lib/components/chat/MessageInput/VoiceRecording.svelte';
+	import { currentOrigin, mediaAccessMessage, requestMicrophone } from '$lib/utils/mediaAccess';
 	export let show = false;
 
 	let name = $i18n.t('Untitled');
@@ -99,26 +100,15 @@
 								class=" p-2 bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-white transition rounded-full"
 								type="button"
 								on:click={async () => {
-									try {
-										let stream = await navigator.mediaDevices
-											.getUserMedia({ audio: true })
-											.catch(function (err) {
-												toast.error(
-													$i18n.t(`Permission denied when accessing microphone: {{error}}`, {
-														error: err
-													})
-												);
-												return null;
-											});
-
-										if (stream) {
-											voiceInput = true;
-											const tracks = stream.getTracks();
-											tracks.forEach((track) => track.stop());
-										}
-										stream = null;
-									} catch {
-										toast.error($i18n.t('Permission denied when accessing microphone'));
+									const microphone = await requestMicrophone({ audio: true });
+									if ('stream' in microphone) {
+										voiceInput = true;
+										microphone.stream.getTracks().forEach((track) => track.stop());
+									} else {
+										// Says which of the two it was: refused, or never asked because
+										// the page is not a secure context and the API is not there.
+										const denial = mediaAccessMessage(microphone.reason, currentOrigin());
+										toast.error($i18n.t(denial.key, denial.params));
 									}
 								}}
 							>

@@ -136,6 +136,7 @@
 	import QueuedMessageItem from './MessageInput/QueuedMessageItem.svelte';
 	import PromptStatusBar from './MessageInput/PromptStatusBar.svelte';
 	import ScrollToBottom from './ScrollToBottom.svelte';
+	import { currentOrigin, mediaAccessMessage, requestMicrophone } from '$lib/utils/mediaAccess';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
 
@@ -2873,29 +2874,18 @@
 														class=" text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition rounded-full p-1.5 self-center mr-0.5"
 														type="button"
 														on:click={async () => {
-															try {
-																let stream = await navigator.mediaDevices
-																	.getUserMedia({ audio: true })
-																	.catch(function (err) {
-																		toast.error(
-																			$i18n.t(
-																				`Permission denied when accessing microphone: {{error}}`,
-																				{
-																					error: err
-																				}
-																			)
-																		);
-																		return null;
-																	});
-
-																if (stream) {
-																	recording = true;
-																	const tracks = stream.getTracks();
-																	tracks.forEach((track) => track.stop());
-																}
-																stream = null;
-															} catch {
-																toast.error($i18n.t('Permission denied when accessing microphone'));
+															const microphone = await requestMicrophone({ audio: true });
+															if ('stream' in microphone) {
+																recording = true;
+																microphone.stream.getTracks().forEach((track) => track.stop());
+															} else {
+																// Says which of the two it was: refused, or never asked because
+																// the page is not a secure context and the API is not there.
+																const denial = mediaAccessMessage(
+																	microphone.reason,
+																	currentOrigin()
+																);
+																toast.error($i18n.t(denial.key, denial.params));
 															}
 														}}
 														aria-label={$i18n.t('Voice Input')}
@@ -2927,19 +2917,19 @@
 
 																return;
 															}
-															// check if user has access to getUserMedia
+															// A call needs the microphone, so find out before opening
+															// the overlay -- and say which of the two went wrong.
 															try {
-																let stream = await navigator.mediaDevices.getUserMedia({
-																	audio: true
-																});
-																// If the user grants the permission, proceed to show the call overlay
-
-																if (stream) {
-																	const tracks = stream.getTracks();
-																	tracks.forEach((track) => track.stop());
+																const microphone = await requestMicrophone({ audio: true });
+																if ('reason' in microphone) {
+																	const denial = mediaAccessMessage(
+																		microphone.reason,
+																		currentOrigin()
+																	);
+																	toast.error($i18n.t(denial.key, denial.params));
+																	return;
 																}
-
-																stream = null;
+																microphone.stream.getTracks().forEach((track) => track.stop());
 
 																if ($settings.audio?.tts?.engine === 'browser-kokoro') {
 																	// If the user has not initialized the TTS worker, initialize it

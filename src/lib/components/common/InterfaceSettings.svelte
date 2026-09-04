@@ -5,6 +5,7 @@
 	import { updateUserInfo } from '$lib/apis/users';
 	import { getUserPosition } from '$lib/utils';
 	import { normalizeAppFontFamily, setAppFontFamily, setTextScale } from '$lib/utils/text-scale';
+	import { canWriteClipboard } from '$lib/utils/mediaAccess';
 
 	import Minus from '$lib/components/icons/Minus.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
@@ -214,25 +215,21 @@
 			return;
 		}
 
-		const permission = await navigator.clipboard
-			.readText()
-			.then(() => {
-				return 'granted';
-			})
-			.catch(() => {
-				return '';
-			});
-
-		if (permission === 'granted') {
+		// Asked what it needs, which is whether the clipboard can be written to.
+		//
+		// It used to call `navigator.clipboard.readText()` and take a rejection
+		// as proof that writing was refused. Reading is a far more sensitive
+		// permission than writing -- Chrome prompts with "see text and images you
+		// have copied", Firefox does not offer it to pages at all -- so the check
+		// failed on browsers where copying works perfectly well, and reported it
+		// as a denied permission the user had never been asked for.
+		if (canWriteClipboard()) {
 			saveSettings({ responseAutoCopy: responseAutoCopy });
-		} else {
-			responseAutoCopy = false;
-			toast.error(
-				$i18n.t(
-					'Clipboard write permission denied. Please check your browser settings to grant the necessary access.'
-				)
-			);
+			return;
 		}
+
+		responseAutoCopy = false;
+		toast.error($i18n.t('This browser cannot copy to the clipboard.'));
 	};
 
 	const toggleChangeChatDirection = async () => {

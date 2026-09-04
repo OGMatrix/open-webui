@@ -91,6 +91,7 @@
 	import ArrowUturnRight from '../icons/ArrowUturnRight.svelte';
 	import Sidebar from '../icons/Sidebar.svelte';
 	import ChatBubbleOval from '../icons/ChatBubbleOval.svelte';
+	import { currentOrigin, mediaAccessMessage, requestMicrophone } from '$lib/utils/mediaAccess';
 
 	export let id: null | string = null;
 
@@ -1137,26 +1138,15 @@ ${content}
 										onRecord={async () => {
 											displayMediaRecord = false;
 
-											try {
-												let stream = await navigator.mediaDevices
-													.getUserMedia({ audio: true })
-													.catch(function (err) {
-														toast.error(
-															$i18n.t(`Permission denied when accessing microphone: {{error}}`, {
-																error: err
-															})
-														);
-														return null;
-													});
-
-												if (stream) {
-													recording = true;
-													const tracks = stream.getTracks();
-													tracks.forEach((track) => track.stop());
-												}
-												stream = null;
-											} catch {
-												toast.error($i18n.t('Permission denied when accessing microphone'));
+											const microphone = await requestMicrophone({ audio: true });
+											if ('stream' in microphone) {
+												recording = true;
+												microphone.stream.getTracks().forEach((track) => track.stop());
+											} else {
+												// Says which of the two it was: refused, or never asked because
+												// the page is not a secure context and the API is not there.
+												const denial = mediaAccessMessage(microphone.reason, currentOrigin());
+												toast.error($i18n.t(denial.key, denial.params));
 											}
 										}}
 										onCaptureAudio={async () => {

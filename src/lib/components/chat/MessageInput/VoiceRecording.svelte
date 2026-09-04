@@ -3,6 +3,7 @@
 	import { tick, getContext, onMount, onDestroy } from 'svelte';
 	import { config, settings } from '$lib/stores';
 	import { blobToFile, calculateSHA256, extractCurlyBraceWords } from '$lib/utils';
+	import { currentOrigin, mediaAccessMessage, requestMicrophone } from '$lib/utils/mediaAccess';
 
 	import { transcribeAudio } from '$lib/apis/audio';
 	import XMark from '$lib/components/icons/XMark.svelte';
@@ -222,13 +223,25 @@
 					track.stop();
 				}
 			} else {
-				stream = await navigator.mediaDevices.getUserMedia({
+				const microphone = await requestMicrophone({
 					audio: {
 						echoCancellation: echoCancellation,
 						noiseSuppression: noiseSuppression,
 						autoGainControl: autoGainControl
 					}
 				});
+
+				if ('reason' in microphone) {
+					// Which of the two it was: refused, or never asked because the
+					// page is not a secure context and the API is not there.
+					const denial = mediaAccessMessage(microphone.reason, currentOrigin());
+					toast.error($i18n.t(denial.key, denial.params));
+					loading = false;
+					recording = false;
+					return;
+				}
+
+				stream = microphone.stream;
 			}
 		} catch (err) {
 			console.error('Error accessing media devices.', err);
