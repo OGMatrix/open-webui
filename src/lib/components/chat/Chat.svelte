@@ -69,7 +69,6 @@
 	} from '$lib/utils';
 	import { getContextWindow } from '$lib/utils/contextWindow';
 	import { estimateMessagesTokens, estimateTokens } from '$lib/utils/tokenEstimate';
-	import ScrollToBottom from './ScrollToBottom.svelte';
 	import { AudioQueue } from '$lib/utils/audio';
 	import {
 		applyGenerationUsage,
@@ -4716,23 +4715,8 @@
 							{:else}
 								<div
 									id={embedded ? messageInputDropzoneId : undefined}
-									class="relative pb-2 {dragged ? 'z-0' : 'z-10'}"
+									class=" pb-2 {dragged ? 'z-0' : 'z-10'}"
 								>
-									<!--
-										Scrolling up to read something earlier detaches the view,
-										which is right; nothing then said the answer had moved on,
-										and getting back meant dragging to the end of a
-										conversation that was still growing.
-									-->
-									<ScrollToBottom
-										attached={autoScroll}
-										{generating}
-										onClick={() => {
-											autoScroll = true;
-											scrollToBottom('smooth');
-										}}
-									/>
-
 									<MessageInput
 										bind:this={messageInput}
 										{history}
@@ -4758,6 +4742,10 @@
 										{contextUsage}
 										{contextCompactionEnabled}
 										{contextCompaction}
+										onScrollToBottom={() => {
+											autoScroll = true;
+											scrollToBottom('smooth');
+										}}
 										{embedded}
 										compactHandler={handleManualCompact}
 										statusHandler={handleStatusCommand}

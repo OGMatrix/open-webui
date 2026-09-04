@@ -112,6 +112,29 @@ class TestWhenItFires:
         assert compacted is False
         assert len(result) == 16
 
+    async def test_fires_on_two_turns_when_they_do_not_fit(self, stubbed):
+        # The failure this catches: a chat that has already been compacted once
+        # resumes from its checkpoint, so only a turn or two sit behind it. If
+        # the guard against trivially short chats also refuses those, the one
+        # case the feature exists for -- a conversation past its window --
+        # is the one it does nothing about.
+        messages = [user('first ' + big(600)), assistant('a'), user('second ' + big(600)), assistant('b')]
+        result, summary, compacted = await compact(messages, window=8192)
+        assert compacted is True
+        assert summary.startswith('NOTE:')
+        assert result[0]['content'].startswith('second')
+
+    async def test_still_leaves_a_genuinely_short_chat_alone(self, stubbed):
+        # The trigger, not the turn count, is what keeps a small chat whole.
+        messages = [user('hello'), assistant('hi'), user('again'), assistant('sure')]
+        _, _, compacted = await compact(messages, window=200_000)
+        assert compacted is False
+
+    async def test_a_single_turn_cannot_be_compacted(self, stubbed):
+        # Nothing to summarise: there is no older turn, only the question.
+        _, _, compacted = await compact([user(big(2000)), assistant('a')], window=8192)
+        assert compacted is False
+
     async def test_switched_off_means_switched_off(self, monkeypatch, stubbed):
         async def disabled():
             return {'enable': False}

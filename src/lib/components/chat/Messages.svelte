@@ -57,6 +57,17 @@
 	export let contextCompaction: { state: 'running' | 'failed'; startedAt: number } | null = null;
 	export let messagesContainerId = 'messages-container';
 
+	/**
+	 * The column a message occupies.
+	 *
+	 * Anything rendered beside a message has to match it, or it sits against the
+	 * left edge of the window while the conversation runs down the middle. Kept
+	 * in step with the wrapper in Messages/Message.svelte.
+	 */
+	$: messageColumnClass = `mx-auto w-full px-3.5 ${
+		($settings?.widescreenMode ?? null) ? 'max-w-full' : 'max-w-[58rem]'
+	}`;
+
 	export let onSelect = (e) => {};
 	export let onInsertToNote: ((content: string) => void) | null = null;
 
@@ -550,11 +561,13 @@
 									Compaction is otherwise invisible: the chat stops remembering
 									things it was told and nothing says why.
 								-->
-								<ContextCompactedMarker
-									id={message.id}
-									summary={message.contextSummary ?? message.context_summary}
-									detail={message.contextCompaction ?? null}
-								/>
+								<div class={messageColumnClass}>
+									<ContextCompactedMarker
+										id={message.id}
+										summary={message.contextSummary ?? message.context_summary}
+										detail={message.contextCompaction ?? null}
+									/>
+								</div>
 							{/if}
 							<Message
 								{chatId}
@@ -596,10 +609,12 @@
 							Where the row will be once it finishes: the finished marker
 							replaces this one in place, built alike so nothing jumps.
 						-->
-						<ContextCompactingRow
-							state={contextCompaction.state}
-							startedAt={contextCompaction.startedAt}
-						/>
+						<div class={messageColumnClass}>
+							<ContextCompactingRow
+								state={contextCompaction.state}
+								startedAt={contextCompaction.startedAt}
+							/>
+						</div>
 					{/if}
 				</section>
 				<div class="pb-18" />

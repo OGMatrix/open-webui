@@ -25,7 +25,13 @@
 </script>
 
 {#if !attached}
-	<div class="pointer-events-none absolute inset-x-0 -top-11 z-20 flex justify-center">
+	<!--
+		Anchored to the top edge of the composer itself, not to the top of
+		everything stacked above it. With a task list open, the stack is tall, and
+		a button meant to say "the conversation moved on down here" would sit up
+		in the message flow.
+	-->
+	<div class="pointer-events-none absolute inset-x-0 bottom-full z-20 mb-2 flex justify-center">
 		<div transition:fly={{ y: 8, duration: 150 }} class="pointer-events-auto">
 			<Tooltip content={$i18n.t('Follow the conversation again')} placement="top">
 				<button

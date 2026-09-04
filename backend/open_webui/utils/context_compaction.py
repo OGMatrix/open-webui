@@ -142,9 +142,17 @@ What remains, in the order it matters.
 {{RECENT_MESSAGES}}"""
 
 
-# Compaction needs enough conversation to be worth doing. Below this there is
-# no older half to summarise into a note.
-_MINIMUM_TURNS = 3
+# Compaction needs an older turn to summarise and a newer one to keep, and that
+# is the whole requirement.
+#
+# It used to ask for three, which quietly broke the case the feature exists for.
+# A chat that has been compacted once resumes from its checkpoint, so only a
+# turn or two sit behind it -- and a single agentic turn can be most of a
+# window on its own. Asking for three meant refusing to compact exactly when a
+# conversation had gone past its limit. Nothing is lost by dropping to two: a
+# small chat is kept whole by the trigger, which is the check that is actually
+# about whether there is a problem.
+_MINIMUM_TURNS = 2
 
 
 async def compact_messages_for_request(
