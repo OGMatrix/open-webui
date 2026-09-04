@@ -117,7 +117,7 @@
 
 <div class="markdown-table group relative my-2.5 w-full">
 	<div
-		class="table-frame relative overflow-hidden rounded-xl ring-1 ring-gray-100 dark:ring-gray-850"
+		class="table-frame relative overflow-hidden rounded-xl ring-1 ring-gray-200/80 dark:ring-white/10"
 		class:is-start={atStart}
 		class:is-end={atEnd}
 	>
@@ -126,7 +126,16 @@
 			bind:this={scroller}
 			on:scroll={updateScrollEdges}
 		>
-			<table class="w-full border-collapse text-start text-sm" dir="auto">
+			<!--
+				Sized by its content, never below the frame.
+
+				`width: 100%` made every table fit the pane, which sounds right and
+				reads badly: a column of file paths gets crushed to a few characters
+				and each one breaks mid-path. The frame scrolls, so a wide table can
+				be wide; cells cap their own width so one long paragraph cannot make
+				it absurd.
+			-->
+			<table class="markdown-table-grid border-collapse text-start" dir="auto">
 				<thead class={sticky ? 'sticky top-0 z-10' : ''}>
 					<tr>
 						{#each header as cell, column}
@@ -137,7 +146,7 @@
 										? 'ascending'
 										: 'descending'
 									: 'none'}
-								class="border-b border-gray-100 bg-gray-50/80 px-3 py-2 text-start text-xs font-medium whitespace-nowrap text-gray-600 backdrop-blur-sm dark:border-gray-850 dark:bg-gray-900/80 dark:text-gray-300"
+								class="border-b border-gray-200 bg-gray-100/90 px-3.5 py-2.5 text-start text-[0.6875rem] font-semibold tracking-wide whitespace-nowrap text-gray-600 uppercase backdrop-blur-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
 								style={alignments[column] ? `text-align: ${alignments[column]}` : ''}
 							>
 								<button
@@ -175,11 +184,11 @@
 				<tbody>
 					{#each rowOrder as rowIndex (rowIndex)}
 						<tr
-							class="transition-colors odd:bg-transparent even:bg-gray-50/50 hover:bg-gray-100/60 dark:even:bg-white/[0.02] dark:hover:bg-white/[0.05]"
+							class="transition-colors even:bg-gray-50/70 hover:bg-gray-100/70 dark:even:bg-white/[0.035] dark:hover:bg-white/[0.07]"
 						>
 							{#each rows[rowIndex] ?? [] as cell, column}
 								<td
-									class="px-3 py-2 align-top text-xs text-gray-900 dark:text-gray-100"
+									class="px-3.5 py-2.5 align-top text-[0.8125rem] leading-relaxed text-gray-800 dark:text-gray-200"
 									class:tabular-nums={!!numericColumns[column]}
 									style={alignments[column] ? `text-align: ${alignments[column]}` : ''}
 								>
@@ -231,6 +240,60 @@
 </div>
 
 <style>
+	/*
+	 * As wide as its content, and never narrower than the frame.
+	 *
+	 * The table used to be width:100%, which reads as "fits the pane" and
+	 * behaves as "crush every column until it does". A column of file paths ends
+	 * up a few characters wide with each path broken across three lines. The
+	 * frame scrolls, so the honest answer is to let the table be as wide as it
+	 * needs and scroll it.
+	 */
+	.markdown-table-grid {
+		width: max-content;
+		min-width: 100%;
+	}
+
+	/*
+	 * One cell cannot make the table absurd. Past this a paragraph wraps, which
+	 * is right for prose and far past anything a label or a path needs.
+	 */
+	.markdown-table-grid :global(th),
+	.markdown-table-grid :global(td) {
+		max-width: 32rem;
+	}
+
+	/*
+	 * A hairline between columns. With two columns of unlike things -- a label
+	 * and a paragraph about it -- the eye needs to know where one ends, and
+	 * relying on the gap alone stops working as soon as a cell wraps.
+	 */
+	.markdown-table-grid :global(th + th),
+	.markdown-table-grid :global(td + td) {
+		border-inline-start: 1px solid var(--table-rule, rgba(0, 0, 0, 0.06));
+	}
+
+	:global(.dark) .markdown-table-grid {
+		--table-rule: rgba(255, 255, 255, 0.07);
+	}
+
+	/*
+	 * Inline code stays in one piece.
+	 *
+	 * A codespan is a chip with its own background, so half of one at the end of
+	 * a line and half at the start of the next reads as two different things.
+	 * Sizing by content already stops paths being crushed, but a chip with a
+	 * space in it -- `POST /models/unload` -- still breaks at that space, which
+	 * is where it looks worst.
+	 *
+	 * The cost is bounded and was measured: a single token wide enough to beat
+	 * the cell cap above overruns it, by 27px for a hundred-character path. That
+	 * is inside a frame that scrolls, and it is the rarer of the two failures.
+	 */
+	.markdown-table-grid :global(.codespan) {
+		white-space: nowrap;
+	}
+
 	/*
 	 * Fades at the scrollable edges: without them a table that continues past the
 	 * right edge looks like a table that simply ends there.
