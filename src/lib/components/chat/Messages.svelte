@@ -550,6 +550,7 @@
 								<ContextCompactedMarker
 									id={message.id}
 									summary={message.contextSummary ?? message.context_summary}
+									detail={message.contextCompaction ?? null}
 								/>
 							{/if}
 							<Message

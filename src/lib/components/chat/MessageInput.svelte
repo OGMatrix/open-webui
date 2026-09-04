@@ -247,10 +247,23 @@
 	const reasoningHintCache = new Map<string, ReasoningHints>();
 	/** When a model that told us nothing may be asked again. */
 	const reasoningHintRetryAt = new Map<string, number>();
+	/** When each model last actually answered, so a stale window can be noticed. */
+	const reasoningHintAskedAt = new Map<string, number>();
 	let reasoningHints: ReasoningHints | null = null;
 
 	/** A provider that has not loaded a model cannot describe it yet. */
 	const REASONING_PROBE_RETRY_MS = 20_000;
+
+	/**
+	 * How long a reported context window is taken as still true.
+	 *
+	 * The rest of what a probe returns is immutable under a running server -- a
+	 * chat template does not change -- so it is kept for good. The window is
+	 * not: a llama.cpp router unloads a model and loads it again with a
+	 * different --ctx-size, and the meter would go on filling against a number
+	 * from the previous load for the rest of the session.
+	 */
+	const CONTEXT_WINDOW_FRESH_MS = 60_000;
 
 	const loadReasoningHints = async (
 		model:
@@ -274,10 +287,12 @@
 			return;
 		}
 
-		// An answer worth having is kept for good: a chat template does not change
-		// under a running server. An empty one only means "could not say yet".
+		// An answer worth having is kept for good -- except the context window,
+		// which the serving process can change under us by reloading the model.
+		// An empty answer only ever means "could not say yet".
 		const known = reasoningHintCache.get(id);
-		if (known && Object.keys(known).length > 0) {
+		const windowStale = Date.now() - (reasoningHintAskedAt.get(id) ?? 0) > CONTEXT_WINDOW_FRESH_MS;
+		if (known && Object.keys(known).length > 0 && !windowStale) {
 			return;
 		}
 		if ((reasoningHintRetryAt.get(id) ?? 0) > Date.now()) {
@@ -317,15 +332,26 @@
 		}
 
 		if (Object.keys(hints).length > 0) {
-			reasoningHintCache.set(id, hints);
+			// Merge rather than replace: a re-probe for a fresh window must not
+			// throw away template facts an earlier, better-timed probe learned.
+			const merged = { ...(reasoningHintCache.get(id) ?? {}), ...hints };
+			reasoningHintCache.set(id, merged);
+			reasoningHintAskedAt.set(id, Date.now());
 			reasoningHintRetryAt.delete(id);
+			hints = merged;
 		}
 		if (activeReasoningModel?.id === id) {
 			reasoningHints = hints;
 		}
 	};
 
+	// Asked again when the model changes, when a response finishes -- a
+	// generation is what loads a model, and what it loaded with is only knowable
+	// afterwards -- and whenever the context panel is opened to be read.
 	$: loadReasoningHints(activeReasoningModel);
+	$: if (!generating) {
+		loadReasoningHints(activeReasoningModel);
+	}
 	$: reasoningMode = getReasoningMode(activeReasoningModel, reasoningHints);
 	$: reasoningLevel = readReasoningLevel(params, reasoningMode);
 	// What a message would actually be sent with: this chat's setting if it has
@@ -680,6 +706,19 @@
 				{ ...$settings?.params, ...params },
 				probedContextLength
 			);
+	// Where that number came from, in the same order it was resolved. Worth
+	// saying: a model card and the process actually serving it disagree often
+	// enough -- a 256k model started with --ctx-size 32768 is the usual case --
+	// that a bare figure invites doubt.
+	$: contextWindowSource = (
+		{ ...$settings?.params, ...params }?.num_ctx
+			? 'setting'
+			: probedContextLength
+				? 'server'
+				: contextThresholdValue
+					? 'model'
+					: null
+	) as 'server' | 'model' | 'setting' | null;
 	// Open WebUI estimates the window from message text until a turn reports usage.
 	$: contextIsEstimated =
 		!statusContextUsage?.tokens && Boolean(statusContextUsage?.estimated_tokens);
@@ -1993,6 +2032,7 @@
 											tokens={contextTokenCount}
 											threshold={contextThresholdValue}
 											estimated={contextIsEstimated}
+											windowSource={contextWindowSource}
 											usage={chatTokenUsage}
 											pricing={modelPricing}
 										/>
@@ -2628,6 +2668,7 @@
 												tokens={contextTokenCount}
 												threshold={contextThresholdValue}
 												estimated={contextIsEstimated}
+												windowSource={contextWindowSource}
 												usage={chatTokenUsage}
 												pricing={modelPricing}
 											/>

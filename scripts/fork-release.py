@@ -156,6 +156,30 @@ def notes(version: str, previous: str | None, upstream: str) -> str:
     return '\n'.join(lines).rstrip() + '\n'
 
 
+#: Where a new entry goes in the changelog. The file states this in a comment
+#: of its own so that hand edits above it survive a release.
+CHANGELOG = 'CHANGELOG-FORK.md'
+MARKER = '<!-- fork-release: new entries are inserted directly below this line -->'
+
+
+def insert_entry(entry: str, path: str = CHANGELOG) -> int:
+    """Put a release entry at the top of the changelog.
+
+    Here rather than inline in the workflow because two jobs need it: the one
+    that builds the image, so the running build can name itself, and the one
+    that commits. Two copies of this would be two chances to disagree.
+    """
+    file = Path(path)
+    text = file.read_text(encoding='utf-8')
+    if MARKER not in text:
+        raise SystemExit(f'{path} has lost its insertion marker')
+
+    head, tail = text.split(MARKER, 1)
+    entry = entry.strip()
+    file.write_text(f'{head}{MARKER}\n\n{entry}\n{tail.lstrip()}', encoding='utf-8', newline='\n')
+    return len(entry)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -173,10 +197,19 @@ def main() -> None:
     )
     notes_cmd.add_argument('--upstream', default='upstream/dev')
 
+    insert_cmd = sub.add_parser('insert', help='insert an entry into the fork changelog')
+    insert_cmd.add_argument('--notes', required=True, help='file holding the entry, or - for stdin')
+    insert_cmd.add_argument('--path', default=CHANGELOG)
+
     args = parser.parse_args()
 
     if args.command == 'version':
         print(next_version(args.base or base_version()))
+        return
+
+    if args.command == 'insert':
+        entry = sys.stdin.read() if args.notes == '-' else Path(args.notes).read_text(encoding='utf-8')
+        print(f'inserted {insert_entry(entry, args.path)} characters into {args.path}')
         return
 
     previous = args.previous

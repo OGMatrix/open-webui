@@ -27,6 +27,7 @@ first; see utils/context_fitting.py.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from fastapi.responses import JSONResponse
@@ -206,14 +207,29 @@ async def compact_messages_for_request(
         reduced, _ = fit_messages_to_window([*system_messages, *body], budget.usable - reserved_tokens, model_id)
         return reduced, previous_summary, False
 
-    await _checkpoint(metadata, recent, summary, len(compacted), len(recent))
-    await emit(
-        'Context compacted',
-        done=True,
-        tokens=_measure(recent, model_id) + overhead + count_text_tokens(summary, model_id),
-        budget=budget,
-        dropped=len(compacted),
-    )
+    after = _measure(recent, model_id) + overhead + count_text_tokens(summary, model_id)
+    record = {
+        'summary': summary,
+        'droppedMessages': len(compacted),
+        'keptMessages': len(recent),
+        'tokensBefore': tokens,
+        'tokensAfter': after,
+        'tokensFreed': max(0, tokens - after),
+        'window': budget.window,
+        'windowSource': budget.source,
+        'model': model_id,
+        'at': int(time.time()),
+    }
+
+    try:
+        await _checkpoint(metadata, recent, summary, record)
+    except Exception:
+        # The note exists and is about to be used; only writing it down failed.
+        # The cost is that the next turn compacts again, which is wasteful --
+        # and far cheaper than losing an answer that is already paid for.
+        log.exception('context compaction could not record its checkpoint')
+
+    await emit('Context compacted', done=True, tokens=after, budget=budget, dropped=len(compacted))
     return [*system_messages, *recent], summary, True
 
 
@@ -308,12 +324,16 @@ async def _make_emitter(metadata: dict):
     return emit
 
 
-async def _checkpoint(metadata: dict, recent: list[dict], summary: str, dropped: int, kept: int) -> None:
-    """Record the note against the message the kept history now starts at.
+async def _checkpoint(metadata: dict, recent: list[dict], summary: str, record: dict) -> None:
+    """Record the note, and what it cost, against the message the history now starts at.
 
     Anchoring it to a message rather than to the chat is what lets a branch,
     a regeneration or an edit further up rebuild the same context: the note
     belongs to a point in the history, not to the conversation as a whole.
+
+    The figures are stored beside the note rather than only logged. Compaction
+    is a thing that happened to someone's conversation, and afterwards the only
+    honest answer to "what did I lose here" is one the chat itself can give.
     """
     chat_id = metadata.get('chat_id')
     checkpoint_id = recent[0].get('id') or metadata.get('user_message_id') or metadata.get('message_id')
@@ -321,14 +341,19 @@ async def _checkpoint(metadata: dict, recent: list[dict], summary: str, dropped:
         return
 
     await Chats.upsert_message_to_chat_by_id_and_message_id(
-        chat_id, checkpoint_id, {'contextSummary': summary}, touch=False
-    )
-    log.info(
-        'compacted chat=%s checkpoint=%s dropped=%d kept=%d note_chars=%d',
         chat_id,
         checkpoint_id,
-        dropped,
-        kept,
+        # contextSummary stays for the older readers that look for it.
+        {'contextSummary': summary, 'contextCompaction': record},
+        touch=False,
+    )
+    log.info(
+        'compacted chat=%s checkpoint=%s dropped=%d kept=%d freed=%d note_chars=%d',
+        chat_id,
+        checkpoint_id,
+        record['droppedMessages'],
+        record['keptMessages'],
+        record['tokensFreed'],
         len(summary),
     )
 

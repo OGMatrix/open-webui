@@ -16,6 +16,7 @@
 	export let estimated = false;
 	export let usage: ChatUsage | null = null;
 	export let pricing: ModelPricing | null = null;
+	export let windowSource: 'server' | 'model' | 'setting' | null = null;
 
 	let show = false;
 
@@ -89,7 +90,7 @@
 			<div
 				class="w-72 rounded-xl border border-gray-100 bg-white p-3 text-gray-900 shadow-lg dark:border-gray-800 dark:bg-gray-850 dark:text-white"
 			>
-				<ContextPanel {tokens} {threshold} {estimated} {usage} {pricing} />
+				<ContextPanel {tokens} {threshold} {estimated} {usage} {pricing} {windowSource} />
 			</div>
 		</div>
 	</Dropdown>

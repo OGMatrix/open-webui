@@ -44,6 +44,14 @@ on:
       latest:
         type: boolean
         default: true
+      changelog_artifact:
+        description: >-
+          Artifact holding a CHANGELOG-FORK.md to build with, instead of the
+          one at `ref`. The release workflow builds the image before it writes
+          the entry down, so without this the image ships the changelog of the
+          release before it and the What's New dialog is always one behind.
+        type: string
+        default: ''
     outputs:
       image:
         description: 'Fully qualified image reference that was pushed'
@@ -76,6 +84,26 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ref }}
+
+      # The entry for this very release is not committed yet when the image is
+      # built, on purpose: nothing is written down until the image exists. The
+      # file still has to be right inside the image, so the release workflow
+      # hands over the changelog it is about to write.
+      - name: Take the changelog the release is about to write
+        if: inputs.changelog_artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.changelog_artifact }}
+          path: ${{ runner.temp }}/changelog
+
+      - name: Put it in place
+        if: inputs.changelog_artifact != ''
+        env:
+          SOURCE: ${{ runner.temp }}/changelog/CHANGELOG-FORK.md
+        run: |
+          test -s "${SOURCE}" || { echo "::error::${SOURCE} is missing or empty"; exit 1; }
+          cp "${SOURCE}" CHANGELOG-FORK.md
+          head -20 CHANGELOG-FORK.md
 
       - name: Work out names
         id: names
@@ -174,6 +202,7 @@ jobs:
           provenance: mode=max
           build-args: |
             BUILD_HASH=${{ steps.names.outputs.sha }}
+            FORK_BUILD_VERSION=${{ inputs.version }}
 
       - name: Report
         env:

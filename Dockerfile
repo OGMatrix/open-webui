@@ -19,6 +19,11 @@ ARG USE_AUXILIARY_EMBEDDING_MODEL=TaylorAI/bge-micro-v2
 ARG USE_TIKTOKEN_ENCODING_NAME="cl100k_base"
 
 ARG BUILD_HASH=dev-build
+
+# What the release that produced this image called itself. The fork changelog
+# is copied in as well, but it is written down only after the image is built --
+# so without this the image would spend its life naming the release before it.
+ARG FORK_BUILD_VERSION=""
 # Override at your own risk - non-root configurations are untested
 ARG UID=0
 ARG GID=0
@@ -230,6 +235,13 @@ USER $UID:$GID
 
 ARG BUILD_HASH
 ENV WEBUI_BUILD_VERSION=${BUILD_HASH}
+
+# Stated by the build rather than read back out of a file it shipped, so an
+# image can always name its own release even when the changelog inside it was
+# written before the entry existed. See backend/open_webui/utils/fork.py.
+ARG FORK_BUILD_VERSION
+ENV FORK_BUILD_VERSION=${FORK_BUILD_VERSION}
+
 ENV DOCKER=true
 
 CMD [ "bash", "start.sh"]

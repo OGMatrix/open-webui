@@ -173,6 +173,20 @@ jobs:
             echo "FORK_RELEASE_NOTES"
           } >> "$GITHUB_OUTPUT"
 
+      # Built here and carried to the image job rather than committed, so the
+      # image can ship a changelog that names itself while nothing is written
+      # down until the image actually exists.
+      - name: Prepare the changelog the image will carry
+        run: python scripts/fork-release.py insert --notes "${RUNNER_TEMP}/notes.md"
+
+      - name: Hand it to the image build
+        uses: actions/upload-artifact@v4
+        with:
+          name: fork-changelog-${{ github.run_id }}
+          path: CHANGELOG-FORK.md
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Preview
         env:
           DRY_RUN: ${{ inputs.dry_run }}
@@ -194,6 +208,7 @@ jobs:
     with:
       ref: ${{ needs.prepare.outputs.sha }}
       version: ${{ needs.prepare.outputs.version }}
+      changelog_artifact: fork-changelog-${{ github.run_id }}
       # Compared rather than forwarded: the called workflow declares this a
       # boolean, and a string would either be coerced behind our back or
       # rejected. A comparison is a boolean whatever came in.
@@ -221,27 +236,12 @@ jobs:
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
+      # The same insertion the image was built with, so the committed file and
+      # the one inside the image cannot disagree.
       - name: Insert the entry into CHANGELOG-FORK.md
         env:
           NOTES: ${{ needs.prepare.outputs.notes }}
-        run: |
-          python - <<'PY'
-          import os
-
-          MARKER = "<!-- fork-release: new entries are inserted directly below this line -->"
-          PATH = "CHANGELOG-FORK.md"
-
-          with open(PATH, encoding="utf-8") as handle:
-              text = handle.read()
-          if MARKER not in text:
-              raise SystemExit(f"{PATH} has lost its insertion marker")
-
-          head, tail = text.split(MARKER, 1)
-          entry = os.environ["NOTES"].strip()
-          with open(PATH, "w", encoding="utf-8", newline="\n") as handle:
-              handle.write(f"{head}{MARKER}\n\n{entry}\n{tail.lstrip()}")
-          print(f"inserted {len(entry)} characters")
-          PY
+        run: printf '%s\n' "${NOTES}" | python scripts/fork-release.py insert --notes -
 
       - name: Commit, tag and push
         env:

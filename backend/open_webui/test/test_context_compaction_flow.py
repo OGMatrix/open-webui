@@ -46,8 +46,8 @@ def stubbed(monkeypatch):
             raise RuntimeError('the task model is unreachable')
         return 'NOTE: the user is called Ada and wants answers in German.'
 
-    async def checkpoint(metadata, recent, summary, dropped, kept):
-        state['checkpoints'].append({'summary': summary, 'dropped': dropped, 'kept': kept})
+    async def checkpoint(metadata, recent, summary, record):
+        state['checkpoints'].append(record)
 
     async def make_emitter(_metadata):
         async def emit(description, done, **extra):
@@ -149,10 +149,37 @@ class TestWhatItKeeps:
         assert count_messages_tokens(result) + len(summary) // 4 < budget.usable
 
     async def test_records_a_checkpoint_against_the_kept_history(self, stubbed):
-        await compact(conversation(turns=8, size=200))
+        await compact(conversation(turns=8, size=200), window=8192)
         assert len(stubbed['checkpoints']) == 1
-        assert stubbed['checkpoints'][0]['dropped'] > 0
-        assert stubbed['checkpoints'][0]['kept'] > 0
+        record = stubbed['checkpoints'][0]
+        assert record['droppedMessages'] > 0
+        assert record['keptMessages'] > 0
+
+    async def test_the_checkpoint_says_what_it_cost(self, stubbed):
+        # Stored beside the note rather than only logged: afterwards, the only
+        # honest answer to "what did I lose here" is one the chat can give.
+        await compact(conversation(turns=8, size=200), window=8192)
+        record = stubbed['checkpoints'][0]
+        assert record['tokensBefore'] > record['tokensAfter']
+        assert record['tokensFreed'] == record['tokensBefore'] - record['tokensAfter']
+        assert record['window'] == 8192
+        assert record['windowSource'] == 'model'
+        assert record['model'] == 'test-model'
+        assert record['at'] > 0
+        assert record['summary'].startswith('NOTE:')
+
+    async def test_a_failed_checkpoint_does_not_cost_the_turn(self, monkeypatch, stubbed):
+        # The note exists and is about to be used; only writing it down failed.
+        # The next turn compacts again, which is wasteful and far cheaper than
+        # losing an answer that has already been paid for.
+        async def broken(*args, **kwargs):
+            raise RuntimeError('the database is unreachable')
+
+        monkeypatch.setattr(cc, '_checkpoint', broken)
+        result, summary, compacted = await compact(conversation(turns=8, size=200), window=8192)
+        assert compacted is True
+        assert summary.startswith('NOTE:')
+        assert result
 
 
 @pytest.mark.anyio

@@ -76,8 +76,18 @@ def _parse(content: str) -> dict:
 
 FORK_CHANGELOG = _parse(_read_changelog())
 
+#: What the release that produced this build called itself.
+#:
+#: Set at image build time, and it outranks the changelog because it cannot be
+#: stale: the file is a snapshot taken when the image was assembled, and an
+#: image built before its own entry was written down would otherwise spend its
+#: whole life claiming to be the release before it.
+FORK_BUILD_VERSION = os.environ.get('FORK_BUILD_VERSION', '').strip()
+
 #: The newest release named in the changelog, or empty before the first one.
-FORK_VERSION = next(iter(FORK_CHANGELOG), '')
+FORK_CHANGELOG_VERSION = next(iter(FORK_CHANGELOG), '')
+
+FORK_VERSION = FORK_BUILD_VERSION or FORK_CHANGELOG_VERSION
 
 
 def release_url(version: str = '') -> str:

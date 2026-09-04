@@ -26,6 +26,12 @@
 	export let usage: ChatUsage | null = null;
 	/** Published rates, where the provider has any. Local models have none. */
 	export let pricing: ModelPricing | null = null;
+	/**
+	 * Where the window figure came from: what the serving process reported, the
+	 * model's own card, or a setting someone pinned. Worth saying, because the
+	 * three disagree often enough that a bare number invites doubt.
+	 */
+	export let windowSource: 'server' | 'model' | 'setting' | null = null;
 
 	let showDetails = false;
 
@@ -33,15 +39,29 @@
 	$: percent = hasThreshold
 		? Math.min(100, Math.max(0, (tokens / (threshold as number)) * 100))
 		: 0;
+	// Over, not merely full. Clamping to "100% used, 0 remaining" is true and
+	// useless: it hides how far past the window the conversation already is,
+	// which is the one number that says how much has to go.
+	$: over = hasThreshold ? Math.max(0, tokens - (threshold as number)) : 0;
 	$: remaining = hasThreshold ? Math.max(0, (threshold as number) - tokens) : 0;
 
 	// The bar earns attention only as the window actually fills.
-	$: barTone =
-		percent >= 90
+	$: barTone = over
+		? 'bg-red-500 dark:bg-red-400'
+		: percent >= 90
 			? 'bg-red-500 dark:bg-red-400'
 			: percent >= 70
 				? 'bg-amber-500 dark:bg-amber-400'
 				: 'bg-gray-400 dark:bg-gray-500';
+
+	$: sourceLabel =
+		windowSource === 'server'
+			? $i18n.t('reported by the server')
+			: windowSource === 'setting'
+				? $i18n.t('from your settings')
+				: windowSource === 'model'
+					? $i18n.t("from the model's card")
+					: '';
 
 	$: hasDetails = Boolean(
 		usage && (usage.turns > 0 || usage.tokensPerSecond !== null || usage.lastTurn)
@@ -81,10 +101,22 @@
 			<span class="tabular-nums"
 				>{$i18n.t('{{percent}}% used', { percent: Math.round(percent) })}</span
 			>
-			<span class="shrink-0 tabular-nums">
-				{$i18n.t('{{tokens}} remaining', { tokens: formatTokenCount(remaining) })}
-			</span>
+			{#if over}
+				<span class="shrink-0 tabular-nums font-medium text-red-500 dark:text-red-400">
+					{$i18n.t('{{tokens}} over', { tokens: formatTokenCount(over) })}
+				</span>
+			{:else}
+				<span class="shrink-0 tabular-nums">
+					{$i18n.t('{{tokens}} remaining', { tokens: formatTokenCount(remaining) })}
+				</span>
+			{/if}
 		</div>
+
+		{#if sourceLabel}
+			<div class="mt-0.5 text-[0.625rem] text-gray-300 dark:text-gray-600">
+				{$i18n.t('Window size')} · {sourceLabel}
+			</div>
+		{/if}
 	{/if}
 
 	{#if hasDetails && usage}
