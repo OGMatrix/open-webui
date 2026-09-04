@@ -627,6 +627,7 @@
 	"Compact: shorten older messages so this chat can keep going.": "",
 	"Compacting context": "",
 	"Compacting context...": "",
+	"compacting in about {{tokens}} tokens": "",
 	"Compare": "",
 	"Comparing with knowledge base...": "",
 	"Completions": "",
@@ -2087,6 +2088,7 @@
 	"Okay, Let's Go!": "",
 	"Older messages are summarized when estimated context exceeds this token limit.": "",
 	"Older turns were summarized to make room. The note is kept with the chat.": "",
+	"older turns were trimmed instead": "",
 	"OLED Dark": "",
 	"Ollama": "",
 	"Ollama API": "",
@@ -2817,6 +2819,7 @@
 	"Summarize older chat history when the conversation context grows large.": "",
 	"Summarize this note.": "",
 	"Summarized": "",
+	"summarizing older turns to make room": "",
 	"Support": "",
 	"Support this plugin:": "",
 	"Supported Media MIME Types": "",
@@ -3322,6 +3325,7 @@
 	"Zoom out": "",
 	"{{count}} messages summarized": "",
 	"{{count}} recovery codes left": "",
+	"{{percent}}% of the window": "",
 	"{{tokens}} freed": "",
 	"{{tokens}} over": ""
 }

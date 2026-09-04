@@ -219,6 +219,10 @@ async def compact_messages_for_request(
         'windowSource': budget.source,
         'model': model_id,
         'at': int(time.time()),
+        # Which message the note now hangs on. The client needs it to put the
+        # finished row in the right place without reloading the whole chat --
+        # a reload mid-answer would throw away what is still streaming.
+        'messageId': _checkpoint_id(metadata, recent),
     }
 
     try:
@@ -229,8 +233,13 @@ async def compact_messages_for_request(
         # and far cheaper than losing an answer that is already paid for.
         log.exception('context compaction could not record its checkpoint')
 
-    await emit('Context compacted', done=True, tokens=after, budget=budget, dropped=len(compacted))
+    await emit('Context compacted', done=True, tokens=after, budget=budget, record=record)
     return [*system_messages, *recent], summary, True
+
+
+def _checkpoint_id(metadata: dict, recent: list[dict]) -> str | None:
+    """The message the kept history starts at, which the note belongs to."""
+    return recent[0].get('id') or metadata.get('user_message_id') or metadata.get('message_id')
 
 
 async def enforce_context_window(
@@ -336,7 +345,7 @@ async def _checkpoint(metadata: dict, recent: list[dict], summary: str, record: 
     honest answer to "what did I lose here" is one the chat itself can give.
     """
     chat_id = metadata.get('chat_id')
-    checkpoint_id = recent[0].get('id') or metadata.get('user_message_id') or metadata.get('message_id')
+    checkpoint_id = _checkpoint_id(metadata, recent)
     if not (is_saved_chat_id(chat_id) and checkpoint_id):
         return
 

@@ -377,7 +377,15 @@
 	let generating = false;
 	let dragged = false;
 	let generationController = null;
-	let contextCompactionToastId = null;
+
+	/**
+	 * Compaction while it is happening, or the fact that it failed.
+	 *
+	 * Only the transient half lives here. Once it succeeds the record goes onto
+	 * the message it belongs to and stays there, so a chat reopened tomorrow
+	 * still says where its history went.
+	 */
+	let contextCompaction: { state: 'running' | 'failed'; startedAt: number } | null = null;
 
 	let chat = null;
 	let tags = [];
@@ -1191,40 +1199,57 @@
 		}
 	};
 
-	const dismissContextCompactionToast = () => {
-		if (contextCompactionToastId !== null) {
-			toast.dismiss(contextCompactionToastId);
-			contextCompactionToastId = null;
-		}
+	/** A turn ended, one way or another; nothing is being compacted now. */
+	const clearContextCompaction = () => {
+		contextCompaction = null;
 	};
 
+	/**
+	 * Compaction, shown where it happens.
+	 *
+	 * It used to be a toast in the corner: it appeared away from the thing it
+	 * was describing, said nothing about what it cost, and was gone before
+	 * anyone had read it. Compaction changes the conversation, so it belongs in
+	 * the conversation — a row while it runs, replaced in place by the record
+	 * of what it did.
+	 */
 	const handleContextCompactionStatus = (status) => {
 		if (status?.action !== 'context_compaction') {
 			return;
 		}
 
-		if (status?.done) {
-			if (contextCompactionToastId !== null) {
-				if (status?.error) {
-					toast.error($i18n.t('Context compaction failed'), {
-						id: contextCompactionToastId,
-						duration: 3000
-					});
-				} else {
-					toast.success($i18n.t('Context compacted'), {
-						id: contextCompactionToastId,
-						duration: 1800
-					});
-				}
-				contextCompactionToastId = null;
-			}
+		if (!status?.done) {
+			contextCompaction = { state: 'running', startedAt: Date.now() };
 			return;
 		}
 
-		if (contextCompactionToastId === null) {
-			contextCompactionToastId = toast.loading($i18n.t('Compacting context'), {
-				duration: Infinity
-			});
+		if (status?.error) {
+			contextCompaction = {
+				state: 'failed',
+				startedAt: contextCompaction?.startedAt ?? Date.now()
+			};
+			return;
+		}
+
+		contextCompaction = null;
+
+		// The note was written to a message in the database. Applying it here
+		// too means the row appears immediately and the meter drops to the
+		// post-compaction count, without reloading a chat that is still
+		// streaming its answer.
+		const record = status?.record;
+		const messageId = record?.messageId;
+		if (record && messageId && history?.messages?.[messageId]) {
+			history.messages[messageId] = {
+				...history.messages[messageId],
+				contextSummary: record.summary,
+				contextCompaction: record
+			};
+			history = history;
+		} else if (record) {
+			// The checkpoint landed on a message this branch does not hold, so
+			// the only way to see it is to read the chat back.
+			loadChat();
 		}
 	};
 
@@ -1306,7 +1331,7 @@
 				} else if (type === 'chat:completion') {
 					chatCompletionEventHandler(data, message, event.chat_id);
 				} else if (type === 'chat:tasks:cancel') {
-					dismissContextCompactionToast();
+					clearContextCompaction();
 					if (event.message_id === history.currentId) {
 						taskIds = null;
 						// Set all response messages to done
@@ -1759,7 +1784,7 @@
 				$socket?.off('events', chatEventHandler);
 				$socket?.off('connect', handleSocketConnect);
 				document.removeEventListener('visibilitychange', handleVisibilityChange);
-				dismissContextCompactionToast();
+				clearContextCompaction();
 				audioQueueInstance?.destroy();
 				audioQueue.set(null);
 			} catch (e) {
@@ -4677,6 +4702,7 @@
 										bottomPadding={files.length > 0}
 										{onSelect}
 										{onInsertToNote}
+										{contextCompaction}
 									/>
 								</div>
 							</div>
@@ -4731,6 +4757,7 @@
 										chatId={$chatId}
 										{contextUsage}
 										{contextCompactionEnabled}
+										{contextCompaction}
 										{embedded}
 										compactHandler={handleManualCompact}
 										statusHandler={handleStatusCommand}

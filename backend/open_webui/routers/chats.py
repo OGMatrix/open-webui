@@ -1340,7 +1340,21 @@ async def get_chat_by_id(
             data,
             await get_response_streams_by_chat_id(request.app.state.redis, id),
         )
-        data['context_usage'] = await get_chat_context_usage(chat, request=request)
+
+        # Resolve model for context_usage so the meter has a real threshold
+        history = (chat.chat or {}).get('history') or {}
+        messages_map = await Chats.get_messages_map_by_chat_id(id)
+        current_message_id = chat.current_message_id or history.get('currentId')
+        message_list = get_message_list(messages_map or history.get('messages') or {}, current_message_id)
+        model_id = next(
+            (message.get('model') for message in reversed(message_list) if message.get('model')),
+            None,
+        )
+        if not model_id:
+            chat_models = (chat.chat or {}).get('models') or []
+            model_id = chat_models[0] if chat_models else None
+
+        data['context_usage'] = await get_chat_context_usage(chat, model_id, request=request)
         return data
 
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND)

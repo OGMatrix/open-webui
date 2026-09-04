@@ -104,3 +104,23 @@ export const getContextWindow = (
 		model?.info?.meta?.context_length
 	);
 };
+
+/**
+ * How much the model may generate, which the input has to leave room for.
+ *
+ * Mirrors get_max_output_tokens in backend/open_webui/utils/context_window.py.
+ * Ollama's -1 ("until the model stops") is not a budget, and firstWindow drops
+ * it with everything else that is not a positive number.
+ */
+export const getMaxOutputTokens = (
+	params: Record<string, any> | null = null,
+	model: ModelLike = null
+): number | null =>
+	firstWindow(
+		params?.max_tokens,
+		params?.max_completion_tokens,
+		params?.num_predict,
+		model?.info?.params?.max_tokens,
+		model?.max_output_tokens,
+		model?.top_provider?.max_completion_tokens
+	);

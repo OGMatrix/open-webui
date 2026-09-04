@@ -11,6 +11,7 @@
 
 	import Message from './Messages/Message.svelte';
 	import ContextCompactedMarker from './Messages/ContextCompactedMarker.svelte';
+	import ContextCompactingRow from './Messages/ContextCompactingRow.svelte';
 	import Loader from '../common/Loader.svelte';
 	import Spinner from '../common/Spinner.svelte';
 
@@ -52,6 +53,8 @@
 	export let topPadding = false;
 	export let bottomPadding = false;
 	export let autoScroll;
+	/** Compaction while it runs, so it is seen where it happens. */
+	export let contextCompaction: { state: 'running' | 'failed'; startedAt: number } | null = null;
 	export let messagesContainerId = 'messages-container';
 
 	export let onSelect = (e) => {};
@@ -587,6 +590,17 @@
 							/>
 						{/each}
 					</ul>
+
+					{#if contextCompaction}
+						<!--
+							Where the row will be once it finishes: the finished marker
+							replaces this one in place, built alike so nothing jumps.
+						-->
+						<ContextCompactingRow
+							state={contextCompaction.state}
+							startedAt={contextCompaction.startedAt}
+						/>
+					{/if}
 				</section>
 				<div class="pb-18" />
 				{#if bottomPadding}

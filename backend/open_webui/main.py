@@ -1264,6 +1264,7 @@ async def chat_completion(
             'model': model,
             'direct': model_item.get('direct', False),
             'params': {
+                **form_data.get('params', {}),
                 'stream_delta_chunk_size': stream_delta_chunk_size,
                 'reasoning_tags': reasoning_tags,
                 'compact_token_threshold': compact_token_threshold,

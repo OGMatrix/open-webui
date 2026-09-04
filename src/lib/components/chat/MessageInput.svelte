@@ -92,8 +92,9 @@
 	import ContextIndicator from './MessageInput/ContextIndicator.svelte';
 	import InfoCircle from '$lib/components/icons/InfoCircle.svelte';
 	import { sumChatUsage } from '$lib/utils/tokenUsage';
-	import { getContextWindow } from '$lib/utils/contextWindow';
+	import { getContextWindow, getMaxOutputTokens } from '$lib/utils/contextWindow';
 	import { estimateMessagesTokens, estimateTokens } from '$lib/utils/tokenEstimate';
+	import { compactionTrigger } from '$lib/utils/contextBudget';
 	import { getModelPricing } from '$lib/utils/cost';
 	import VoiceRecording from './MessageInput/VoiceRecording.svelte';
 	import ModelSelector from './ModelSelector.svelte';
@@ -133,7 +134,7 @@
 	import InputModal from '../common/InputModal.svelte';
 	import Expand from '../icons/Expand.svelte';
 	import QueuedMessageItem from './MessageInput/QueuedMessageItem.svelte';
-	import TaskList from './Messages/ResponseMessage/TaskList.svelte';
+	import PromptStatusBar from './MessageInput/PromptStatusBar.svelte';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
 
@@ -158,6 +159,8 @@
 	export let chatId = '';
 	export let contextUsage = null;
 	export let contextCompactionEnabled = false;
+	/** Compaction while it runs, so the strip can say so. */
+	export let contextCompaction: { state: 'running' | 'failed'; startedAt: number } | null = null;
 	export let embedded = false;
 
 	export let autoScroll = false;
@@ -719,6 +722,16 @@
 					? 'model'
 					: null
 	) as 'server' | 'model' | 'setting' | null;
+	// Where compaction will actually fire. Not the window and not the usable
+	// budget: the server keeps room for the answer and for being wrong about the
+	// count, then fires at a fraction of what is left. Anything else would
+	// promise a compaction at the wrong moment.
+	$: compactionAt = contextCompactionEnabled
+		? compactionTrigger(
+				contextThresholdValue,
+				getMaxOutputTokens({ ...$settings?.params, ...params }, activeReasoningModel)
+			)
+		: null;
 	// Open WebUI estimates the window from message text until a turn reports usage.
 	$: contextIsEstimated =
 		!statusContextUsage?.tokens && Boolean(statusContextUsage?.estimated_tokens);
@@ -1957,12 +1970,20 @@
 							</div>
 						{/if}
 
-						<!-- Task list display -->
-						{#if isActive && chatTasks.length > 0}
-							<div class="mx-1">
-								<TaskList tasks={chatTasks} />
-							</div>
-						{/if}
+						<!--
+							The strip that grows out of the top of the prompt box: what
+							is true right now and worth knowing before typing. The task
+							list used to float above the input as a card of its own; it
+							belongs here, beside the warning that the conversation is
+							about to be compacted.
+						-->
+						<PromptStatusBar
+							tasks={chatTasks}
+							showTasks={isActive}
+							tokens={contextTokenCount}
+							compactAt={compactionAt}
+							compacting={contextCompaction?.state === 'running'}
+						/>
 
 						<!-- Queued messages display -->
 						{#if messageQueue.length > 0}

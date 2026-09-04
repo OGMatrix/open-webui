@@ -627,6 +627,7 @@
 	"Compact: shorten older messages so this chat can keep going.": "",
 	"Compacting context": "Kontext wird verdichtet",
 	"Compacting context...": "Kontext wird verdichtet...",
+	"compacting in about {{tokens}} tokens": "Verdichtung in etwa {{tokens}} Token",
 	"Compare": "Vergleichen",
 	"Comparing with knowledge base...": "Vergleich mit Wissensspeicher...",
 	"Completions": "Vervollständigungen",
@@ -2087,6 +2088,7 @@
 	"Okay, Let's Go!": "Okay, los geht's!",
 	"Older messages are summarized when estimated context exceeds this token limit.": "Ältere Nachrichten werden zusammengefasst, wenn der geschätzte Kontext dieses Token-Limit überschreitet.",
 	"Older turns were summarized to make room. The note is kept with the chat.": "Ältere Runden wurden zusammengefasst, um Platz zu schaffen. Die Notiz bleibt beim Chat.",
+	"older turns were trimmed instead": "ältere Runden wurden stattdessen gekürzt",
 	"OLED Dark": "OLED Dunkel",
 	"Ollama": "Ollama",
 	"Ollama API": "Ollama-API",
@@ -2817,6 +2819,7 @@
 	"Summarize older chat history when the conversation context grows large.": "Fasst ältere Teile des Chatverlaufs zusammen, wenn der Kontext der Unterhaltung zu groß wird.",
 	"Summarize this note.": "Diese Notiz zusammenfassen.",
 	"Summarized": "Zusammengefasst",
+	"summarizing older turns to make room": "fasst ältere Runden zusammen, um Platz zu schaffen",
 	"Support": "Unterstützung",
 	"Support this plugin:": "Unterstützen Sie dieses Plugin:",
 	"Supported Media MIME Types": "Unterstützte Medien-MIME-Typen",
@@ -3322,6 +3325,7 @@
 	"Zoom out": "Verkleinern",
 	"{{count}} messages summarized": "{{count}} Nachrichten zusammengefasst",
 	"{{count}} recovery codes left": "{{count}} Wiederherstellungscodes übrig",
+	"{{percent}}% of the window": "{{percent}}% des Fensters",
 	"{{tokens}} freed": "{{tokens}} freigemacht",
 	"{{tokens}} over": "{{tokens}} darüber"
 }

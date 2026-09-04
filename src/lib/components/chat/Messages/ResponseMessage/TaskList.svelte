@@ -8,6 +8,13 @@
 	const i18n = getContext('i18n');
 
 	export let tasks: Array<{ id: string; content: string; status: string }> = [];
+	/**
+	 * The surface it sits on. Its own card by default; the strip above the
+	 * prompt box passes a flat one so the two do not read as a card inside
+	 * a card.
+	 */
+	export let className =
+		'my-2 rounded-2xl border border-gray-50 dark:border-gray-850 bg-white dark:bg-gray-900';
 
 	let collapsed = false;
 
@@ -17,10 +24,7 @@
 </script>
 
 {#if tasks.length > 0 && hasActive}
-	<div
-		class="my-2 rounded-2xl border border-gray-50 dark:border-gray-850 bg-white dark:bg-gray-900"
-		transition:slide={{ duration: 200 }}
-	>
+	<div class={className} transition:slide={{ duration: 200 }}>
 		<!-- Header -->
 		<div class="flex items-center justify-between px-3.5 py-2">
 			<div class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
