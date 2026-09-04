@@ -5,6 +5,7 @@
 	import Selector from './ModelSelector/Selector.svelte';
 
 	import { updateUserSettings } from '$lib/apis/users';
+	import { resolveLocalizedModelName } from '$lib/utils/localizedContent';
 	import equal from 'fast-deep-equal';
 	import { rememberModel } from '$lib/utils/recentModels';
 	const i18n = getContext('i18n');
@@ -85,7 +86,7 @@
 					placeholder={$i18n.t('Select a model')}
 					items={$models.map((model) => ({
 						value: model.id,
-						label: model.name,
+						label: resolveLocalizedModelName(model, $i18n.language),
 						model: model
 					}))}
 					{pinModelHandler}

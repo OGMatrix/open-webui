@@ -4,6 +4,7 @@ import type { ModelConfig } from '$lib/apis';
 import type { Banner } from '$lib/types';
 import type { Socket } from 'socket.io-client';
 import type { AudioQueue } from '$lib/utils/audio';
+import type { I18nOverrides } from '$lib/utils/translationDictionary';
 
 import emojiShortCodes from '$lib/emoji-shortcodes.json';
 
@@ -361,9 +362,11 @@ type Config = {
 		release_url: string;
 	};
 	default_locale: string;
+	i18n?: I18nOverrides;
 	default_models: string;
 	default_pinned_models?: string | null;
 	default_prompt_suggestions: PromptSuggestion[];
+	default_prompt_suggestions_i18n?: Record<string, { suggestion_prompts: PromptSuggestion[] }>;
 	features: {
 		auth: boolean;
 		auth_trusted_header: boolean;

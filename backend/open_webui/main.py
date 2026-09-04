@@ -2265,7 +2265,9 @@ async def get_app_config(request: Request):
         'ui.default_models',
         'ui.default_pinned_models',
         'ui.default_interface_settings',
+        'ui.i18n',
         'ui.prompt_suggestions',
+        'ui.prompt_suggestions_i18n',
         'code_execution.engine',
         'code_interpreter.engine',
         'audio.tts.engine',
@@ -2290,6 +2292,7 @@ async def get_app_config(request: Request):
         # Stated beside upstream's version, never in place of it.
         'fork': fork_info(),
         'default_locale': str(DEFAULT_LOCALE),
+        'i18n': config.get('ui.i18n') or {},
         'oauth': {
             # Hide providers (and thus the login buttons / auto-redirect) when OAuth
             # is disabled, without clearing the admin's provider configuration.
@@ -2368,6 +2371,7 @@ async def get_app_config(request: Request):
                 'default_models': config.get('ui.default_models'),
                 'default_pinned_models': config.get('ui.default_pinned_models'),
                 'default_prompt_suggestions': config.get('ui.prompt_suggestions'),
+                'default_prompt_suggestions_i18n': config.get('ui.prompt_suggestions_i18n'),
                 **({'user_count': user_count} if user_count is not None else {}),
                 'code': {
                     'engine': config.get('code_execution.engine'),
