@@ -13,6 +13,20 @@ Releases are produced by the `Fork · Release` workflow, which writes this file.
 
 <!-- fork-release: new entries are inserted directly below this line -->
 
+## [0.11.3-ogm.4] - 2026-09-04
+
+Built on Open WebUI `0.11.3` (`upstream/dev` at `bd0b3875b`), fork commit `50ed2900f`.
+
+Upstream: 10 commit(s) merged from open-webui/open-webui, still 0.11.3.
+
+### Added
+
+- Show compaction where it happens, and say when it is coming (163c1fb66)
+- Fold an agentic turn back into something readable (bcd3a9c7d)
+
+### Changed
+
+- Read a tool-call group's tokens once instead of nine times (d1b7dcc05)
 ## [0.11.3-ogm.3] - 2026-09-04
 
 Built on Open WebUI `0.11.3` (`upstream/dev` at `18a48cffb`), fork commit `5e494c37c`.
