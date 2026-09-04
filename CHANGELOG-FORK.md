@@ -13,6 +13,17 @@ Releases are produced by the `Fork · Release` workflow, which writes this file.
 
 <!-- fork-release: new entries are inserted directly below this line -->
 
+## [0.11.3-ogm.3] - 2026-09-04
+
+Built on Open WebUI `0.11.3` (`upstream/dev` at `18a48cffb`), fork commit `5e494c37c`.
+
+Upstream: 19 commit(s) merged from open-webui/open-webui, still 0.11.3.
+
+### Added
+
+- Compact a chat before it stops fitting, not after (6a163509a)
+- Say what compaction cost, and stop the build misnaming itself (4ed7115fa)
+- Pre token usage in context window (df9434b15)
 ## [0.11.3-ogm.2] - 2026-09-03
 
 Built on Open WebUI `0.11.3` (`upstream/dev` at `0cf48a04c`), fork commit `62279696f`.
