@@ -133,7 +133,6 @@
 										{#if messageIdx === pinnedMessages.length - 1 && !allItemsLoaded}
 											<Loader
 												on:visible={(e) => {
-													console.log('visible');
 													if (!loading) {
 														page += 1;
 														getPinnedMessages();
