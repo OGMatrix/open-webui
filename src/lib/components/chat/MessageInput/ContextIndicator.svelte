@@ -29,8 +29,12 @@
 	$: visible = tokens > 0;
 
 	// A ring reads as "how full" at a glance, where a number needs reading.
-	// Geometry matches the sibling icons: a 24 viewBox at stroke 1.75, so it sits
-	// at the same size and weight as the buttons either side of it.
+	//
+	// It used to match the icons either side of it exactly -- a 24 viewBox at
+	// stroke 1.75 -- which made it about one pixel of line at 16px, over a track
+	// at a quarter opacity. On a dark ground that is a smudge, and the one number
+	// worth knowing sat in a tooltip nobody hovers. It is bigger and heavier now,
+	// and carries the figure beside it.
 	const RADIUS = 9;
 	const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 	// A hair of arc even at 1%, so a nearly empty window reads as "barely used"
@@ -39,14 +43,30 @@
 	$: fill = hasThreshold ? Math.max(percent / 100, MIN_ARC) : 1;
 	$: dash = fill * CIRCUMFERENCE;
 
+	// Quiet until there is a reason not to be. A bar that shouts from the first
+	// message is one that gets ignored by the time it matters.
+	$: level = percent >= 90 ? 'critical' : percent >= 70 ? 'warn' : 'calm';
+
 	$: tone =
-		percent >= 90
-			? 'text-red-500 dark:text-red-400'
-			: percent >= 70
+		level === 'critical'
+			? 'text-red-600 dark:text-red-400'
+			: level === 'warn'
 				? 'text-amber-600 dark:text-amber-400'
 				: 'text-gray-500 dark:text-gray-400';
 
-	// The pill is icon-only, so the numbers live in the tooltip.
+	// The surface carries the same warning as the colour, so the control is
+	// findable in a row of icons rather than being one more grey glyph.
+	$: surface =
+		level === 'critical'
+			? 'bg-red-500/10 hover:bg-red-500/15 dark:bg-red-400/10 dark:hover:bg-red-400/20'
+			: level === 'warn'
+				? 'bg-amber-500/10 hover:bg-amber-500/15 dark:bg-amber-400/10 dark:hover:bg-amber-400/20'
+				: 'bg-gray-50 hover:bg-gray-100 dark:bg-white/[0.06] dark:hover:bg-white/10';
+
+	// The percentage where a window is known, the count where it is not. Both
+	// are short enough to sit in the row, and both beat hovering for them.
+	$: label = hasThreshold ? `${Math.round(percent)}%` : formatTokenCount(tokens);
+
 	$: tooltip = hasThreshold
 		? `${$i18n.t('Context')}: ${formatTokenCount(tokens)} / ${formatTokenCount(
 				threshold as number
@@ -59,20 +79,23 @@
 		<Tooltip content={tooltip} placement="top">
 			<button
 				type="button"
-				aria-label={$i18n.t('Context')}
-				class="group flex max-w-full items-center gap-1.5 overflow-hidden rounded-full p-[0.375rem] text-sm transition-colors duration-300 focus:outline-hidden {show
-					? 'bg-gray-50 dark:bg-gray-800'
-					: 'bg-transparent hover:bg-gray-50 dark:hover:bg-gray-800'} {tone}"
+				aria-label={tooltip}
+				class="group flex max-w-full items-center gap-1 overflow-hidden rounded-full py-1 pr-2 pl-1.5 transition-colors duration-300 focus:outline-hidden {surface} {tone}"
 			>
 				<svg
 					viewBox="0 0 24 24"
-					class="size-4 shrink-0"
+					class="size-[1.125rem] shrink-0"
 					fill="none"
 					stroke="currentColor"
-					stroke-width="1.75"
+					stroke-width="3"
 					aria-hidden="true"
 				>
-					<circle cx="12" cy="12" r={RADIUS} opacity="0.25" />
+					<!--
+						The track gets its own colour rather than the arc's at low
+						opacity: on a dark ground a quarter-opacity grey is not a track,
+						it is nothing.
+					-->
+					<circle cx="12" cy="12" r={RADIUS} class="stroke-gray-300 dark:stroke-white/20" />
 					<circle
 						cx="12"
 						cy="12"
@@ -83,6 +106,7 @@
 						style="transition: stroke-dasharray 500ms"
 					/>
 				</svg>
+				<span class="text-xs font-medium tabular-nums">{label}</span>
 			</button>
 		</Tooltip>
 
