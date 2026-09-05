@@ -24,6 +24,8 @@
 	import Artifacts from './Artifacts.svelte';
 	import Embeds from './ChatControls/Embeds.svelte';
 	import FileNav from './FileNav.svelte';
+	import McpFileTree from './McpFileTree.svelte';
+	import { getMCPFilesystemServers, type MCPFilesystemServer } from '$lib/apis/tools';
 	import PyodideFileNav from './PyodideFileNav.svelte';
 	import Overview from './Overview.svelte';
 	import { isSavedChatId } from '$lib/utils/chatId';
@@ -80,8 +82,37 @@
 			(!selectedSystemTerminal &&
 				($user?.role === 'admin' || ($user?.permissions?.features?.direct_tool_servers ?? true))))
 	);
+	/**
+	 * The filesystem MCP servers this user can browse.
+	 *
+	 * Asked for here rather than inside the tree, because the tab that holds the
+	 * tree is only drawn when there is something to put in it -- and the tree
+	 * lives inside that tab, so it cannot be what answers the question.
+	 *
+	 * Asked only once the panel is opened. Finding out means dialling every
+	 * connected MCP server, which is not work to do for someone who never looks.
+	 */
+	let mcpServers: MCPFilesystemServer[] = [];
+	let mcpProbed = false;
+
+	$: mcpFilesAvailable = mcpServers.length > 0;
+
+	$: if ($showControls && !mcpProbed) {
+		mcpProbed = true;
+		getMCPFilesystemServers(localStorage.token)
+			.then((servers) => {
+				mcpServers = servers ?? [];
+			})
+			.catch(() => {
+				// A server that cannot be reached simply offers no tree; the panel
+				// carries on with whatever else it has.
+				mcpServers = [];
+			});
+	}
+
 	$: showFilesTab =
 		terminalFilesAvailable ||
+		mcpFilesAvailable ||
 		(codeInterpreterEnabled && $config?.code?.interpreter_engine !== 'jupyter');
 	$: showOverviewTab = hasMessages;
 
@@ -294,6 +325,8 @@
 								/>
 							{:else if activeTab === 'files' && terminalFilesAvailable && $selectedTerminalId}
 								<FileNav {chatId} />
+							{:else if activeTab === 'files' && mcpFilesAvailable}
+								<McpFileTree servers={mcpServers} />
 							{:else if activeTab === 'files' && codeInterpreterEnabled}
 								<PyodideFileNav />
 							{:else}
@@ -422,6 +455,8 @@
 								/>
 							{:else if activeTab === 'files' && terminalFilesAvailable && $selectedTerminalId}
 								<FileNav overlay={dragged} {chatId} />
+							{:else if activeTab === 'files' && mcpFilesAvailable}
+								<McpFileTree servers={mcpServers} />
 							{:else if activeTab === 'files' && codeInterpreterEnabled}
 								<PyodideFileNav overlay={dragged} />
 							{:else}

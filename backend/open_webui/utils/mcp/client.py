@@ -122,6 +122,27 @@ class MCPClient:
         else:
             return result_content
 
+    async def call_tool_result(self, function_name: str, function_args: dict) -> dict:
+        """The whole result of a tool call, not only its content blocks.
+
+        `call_tool` returns content alone, which is what the chat loop needs:
+        it relays the answer to a model. A caller that has to *understand* the
+        answer needs `structuredContent` as well, which newer servers use to
+        send a real object instead of text shaped for reading.
+        """
+        if not self.session:
+            raise RuntimeError('MCP client is not connected.')
+
+        result = await self.session.call_tool(function_name, function_args)
+        if not result:
+            raise Exception('No result returned from MCP tool call.')
+
+        result_dict = result.model_dump(mode='json')
+        if result.isError:
+            raise Exception(result_dict.get('content'))
+
+        return result_dict
+
     async def list_resources(self, cursor: Optional[str] = None) -> Optional[dict]:
         if not self.session:
             raise RuntimeError('MCP client is not connected.')

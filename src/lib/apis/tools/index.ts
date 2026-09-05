@@ -486,3 +486,89 @@ export const updateUserValvesById = async (token: string, id: string, valves: ob
 
 	return res;
 };
+
+/** A filesystem MCP server the current user is allowed to browse. */
+export type MCPFilesystemServer = {
+	id: string;
+	name: string;
+	/** Directories the server is willing to show, when it says. */
+	roots: string[];
+	/** Which read operations this particular server can serve. */
+	operations: string[];
+};
+
+export const getMCPFilesystemServers = async (
+	token: string = ''
+): Promise<MCPFilesystemServer[]> => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/tools/mcp/filesystem/servers`, {
+		method: 'GET',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			authorization: `Bearer ${token}`
+		}
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail ?? err;
+			console.error(err);
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res ?? [];
+};
+
+/**
+ * Run one read operation against a filesystem MCP server.
+ *
+ * The operations are a closed set on the server side, mapping only onto tools
+ * that cannot change anything; there is no way to reach a write from here.
+ */
+export const callMCPFilesystem = async (
+	token: string,
+	serverId: string,
+	operation: 'roots' | 'list' | 'tree' | 'read' | 'info' | 'search',
+	options: { path?: string; pattern?: string } = {}
+) => {
+	let error = null;
+
+	const res = await fetch(
+		`${WEBUI_API_BASE_URL}/tools/mcp/filesystem/${encodeURIComponent(serverId)}`,
+		{
+			method: 'POST',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				authorization: `Bearer ${token}`
+			},
+			body: JSON.stringify({
+				operation,
+				path: options.path ?? null,
+				pattern: options.pattern ?? null
+			})
+		}
+	)
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail ?? err;
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};

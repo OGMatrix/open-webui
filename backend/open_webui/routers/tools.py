@@ -28,6 +28,7 @@ from open_webui.models.tools import (
 from open_webui.utils.access_control import (
     filter_allowed_access_grants,
     has_access,
+    has_connection_access,
     has_permission,
 )
 from open_webui.utils.auth import get_admin_user, get_verified_user
@@ -38,7 +39,8 @@ from open_webui.utils.plugin import (
     replace_imports,
     resolve_valves_schema_options,
 )
-from open_webui.utils.tools import get_tool_servers, get_tool_specs
+from open_webui.utils.mcp import filesystem as mcp_filesystem
+from open_webui.utils.tools import build_tool_server_headers, get_tool_servers, get_tool_specs
 from pydantic import BaseModel, HttpUrl
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -987,3 +989,151 @@ async def update_tools_user_valves_by_id(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=ERROR_MESSAGES.NOT_FOUND,
         )
+
+
+############################
+# Browsing a filesystem MCP server
+############################
+
+
+class MCPFilesystemServer(BaseModel):
+    id: str
+    name: str
+    #: The directories the server is willing to show, when it says.
+    roots: list[str]
+    #: Which of the read operations this particular server can serve.
+    operations: list[str]
+
+
+class MCPFilesystemForm(BaseModel):
+    operation: str
+    path: str | None = None
+    pattern: str | None = None
+
+
+async def _mcp_filesystem_connection(request: Request, user, server_id: str) -> tuple[dict, dict, list[dict]]:
+    """Resolve a server the user is allowed to browse.
+
+    Returns the connection, the headers to reach it with, and its tool list.
+    """
+    connection = mcp_filesystem.find_connection(await Config.get('tool_server.connections', []), server_id)
+    if not connection:
+        raise HTTPException(status_code=404, detail=ERROR_MESSAGES.NOT_FOUND)
+
+    if not await has_connection_access(user, connection):
+        raise HTTPException(status_code=401, detail=ERROR_MESSAGES.ACCESS_PROHIBITED)
+
+    headers, _ = await build_tool_server_headers(connection, request, user, server_id=server_id)
+    specs = await mcp_filesystem.fetch_specs(connection.get('url', ''), headers or None, (server_id, str(user.id)))
+    return connection, headers, specs
+
+
+@router.get('/mcp/filesystem/servers', response_model=list[MCPFilesystemServer])
+async def get_mcp_filesystem_servers(request: Request, user=Depends(get_verified_user)):
+    """The MCP servers this user may browse a filesystem on.
+
+    Every enabled MCP server is asked what tools it has, and the ones that can
+    list a directory are offered. A server that cannot be reached is left out
+    rather than failing the whole list: one unreachable connection should not
+    take the file browser away from the others.
+    """
+    servers = []
+
+    for connection in mcp_filesystem.mcp_connections(await Config.get('tool_server.connections', [])):
+        info = connection.get('info') or {}
+        server_id = info.get('id')
+        if not server_id or not await has_connection_access(user, connection):
+            continue
+
+        try:
+            headers, _ = await build_tool_server_headers(connection, request, user, server_id=server_id)
+            specs = await mcp_filesystem.fetch_specs(
+                connection.get('url', ''), headers or None, (server_id, str(user.id))
+            )
+        except Exception as e:
+            log.debug('Could not read tools from MCP server %s: %s', server_id, e)
+            continue
+
+        if not mcp_filesystem.is_filesystem_server(specs):
+            continue
+
+        tools = mcp_filesystem.resolve_tools(specs)
+
+        roots = []
+        if 'roots' in tools:
+            try:
+                result = await mcp_filesystem.call(connection.get('url', ''), headers or None, tools['roots'], {})
+                roots = mcp_filesystem.parse_allowed_directories(result.get('content'), result.get('structuredContent'))
+            except Exception as e:
+                # A server that will not say where its roots are can still be
+                # browsed; the caller asks for a path instead.
+                log.debug('Could not read roots from MCP server %s: %s', server_id, e)
+
+        servers.append(
+            MCPFilesystemServer(
+                id=server_id,
+                name=info.get('name') or 'MCP Server',
+                roots=roots,
+                operations=sorted(tools.keys()),
+            )
+        )
+
+    return servers
+
+
+@router.post('/mcp/filesystem/{server_id}')
+async def call_mcp_filesystem(
+    request: Request,
+    server_id: str,
+    form_data: MCPFilesystemForm,
+    user=Depends(get_verified_user),
+):
+    """Run one read operation against a filesystem MCP server.
+
+    The operation names are a closed set that maps only onto tools which cannot
+    change anything. A server offering `write_file` or `move_file` has them
+    reachable from a chat, where the user approves each call -- never from here.
+    """
+    connection, headers, specs = await _mcp_filesystem_connection(request, user, server_id)
+    tools = mcp_filesystem.resolve_tools(specs)
+
+    tool_name = tools.get(form_data.operation)
+    if not tool_name:
+        raise HTTPException(status_code=400, detail=f"This server cannot '{form_data.operation}'.")
+
+    arguments: dict = {}
+    if form_data.operation in ('list', 'tree', 'read', 'info', 'search'):
+        if not form_data.path:
+            raise HTTPException(status_code=400, detail='A path is required.')
+        arguments['path'] = form_data.path
+    if form_data.operation == 'search':
+        arguments['pattern'] = form_data.pattern or ''
+
+    try:
+        result = await mcp_filesystem.call(connection.get('url', ''), headers or None, tool_name, arguments)
+    except Exception as e:
+        # The reason is what makes this fixable: a path outside the allowed
+        # roots and a server that is down look identical without it.
+        log.debug('MCP filesystem %s failed on %s: %s', form_data.operation, server_id, e)
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    content = result.get('content')
+    structured = result.get('structuredContent')
+
+    if form_data.operation == 'list':
+        return {'operation': 'list', 'tool': tool_name, **mcp_filesystem.parse_directory_listing(content, structured)}
+    if form_data.operation == 'roots':
+        return {
+            'operation': 'roots',
+            'tool': tool_name,
+            'roots': mcp_filesystem.parse_allowed_directories(content, structured),
+        }
+    if form_data.operation == 'info':
+        return {'operation': 'info', 'tool': tool_name, 'info': mcp_filesystem.parse_file_info(content, structured)}
+
+    return {
+        'operation': form_data.operation,
+        'tool': tool_name,
+        'text': mcp_filesystem.result_text(content),
+        'structured': structured,
+    }
