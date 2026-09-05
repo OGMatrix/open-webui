@@ -130,6 +130,7 @@
 	import MessageInput from '$lib/components/chat/MessageInput.svelte';
 	import Messages from '$lib/components/chat/Messages.svelte';
 	import FindInChat from '$lib/components/chat/FindInChat.svelte';
+	import ChatOutline from '$lib/components/chat/ChatOutline.svelte';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
 	import ChatControls from './ChatControls.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
@@ -4685,6 +4686,22 @@
 								onNavigate={() => {
 									// Jumping to a hit and being dragged back to the bottom by a
 									// streaming answer would make the feature unusable mid-run.
+									autoScroll = false;
+								}}
+							/>
+						</div>
+
+						<!--
+							Pinned to the edge rather than laid out in the column: it reports
+							on the conversation without taking width away from it.
+						-->
+						<div class="pointer-events-none absolute right-1 top-1/2 z-30 -translate-y-1/2">
+							<ChatOutline
+								{history}
+								renderAll={async () => {
+									await messagesRef?.renderAll();
+								}}
+								onNavigate={() => {
 									autoScroll = false;
 								}}
 							/>

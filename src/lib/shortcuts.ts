@@ -26,6 +26,8 @@ export enum Shortcut {
 	NAVIGATE_CHAT_UP = 'navigateChatUp',
 	NAVIGATE_CHAT_DOWN = 'navigateChatDown',
 	FIND_IN_CHAT = 'findInChat',
+	NAVIGATE_TURN_UP = 'navigateTurnUp',
+	NAVIGATE_TURN_DOWN = 'navigateTurnDown',
 
 	//Global
 	SEARCH = 'search',
@@ -66,6 +68,8 @@ export const CONFIGURABLE_SHORTCUTS = [
 	Shortcut.NAVIGATE_CHAT_UP,
 	Shortcut.NAVIGATE_CHAT_DOWN,
 	Shortcut.FIND_IN_CHAT,
+	Shortcut.NAVIGATE_TURN_UP,
+	Shortcut.NAVIGATE_TURN_DOWN,
 	Shortcut.SEARCH,
 	Shortcut.OPEN_SETTINGS,
 	Shortcut.SHOW_SHORTCUTS,
@@ -93,6 +97,8 @@ export const DEFAULT_KEYBINDINGS: KeybindingsMap = {
 	[Shortcut.NAVIGATE_CHAT_UP]: '',
 	[Shortcut.NAVIGATE_CHAT_DOWN]: '',
 	[Shortcut.FIND_IN_CHAT]: 'Cmd+F',
+	[Shortcut.NAVIGATE_TURN_UP]: 'Alt+ArrowUp',
+	[Shortcut.NAVIGATE_TURN_DOWN]: 'Alt+ArrowDown',
 	[Shortcut.SEARCH]: 'Cmd+K',
 	[Shortcut.OPEN_SETTINGS]: 'Cmd+.',
 	[Shortcut.SHOW_SHORTCUTS]: 'Cmd+/',
@@ -254,6 +260,19 @@ export const shortcuts: ShortcutRegistry = {
 		keys: ['mod', 'F'],
 		category: 'Chat',
 		tooltip: 'Searches the conversation on screen, including messages not yet loaded.',
+		configurable: true
+	},
+	[Shortcut.NAVIGATE_TURN_UP]: {
+		name: 'Navigate to Previous Turn',
+		keys: ['alt', 'ArrowUp'],
+		category: 'Chat',
+		tooltip: 'Moves between the questions in the conversation, past everything they set running.',
+		configurable: true
+	},
+	[Shortcut.NAVIGATE_TURN_DOWN]: {
+		name: 'Navigate to Next Turn',
+		keys: ['alt', 'ArrowDown'],
+		category: 'Chat',
 		configurable: true
 	},
 	[Shortcut.NAVIGATE_CHAT_DOWN]: {
