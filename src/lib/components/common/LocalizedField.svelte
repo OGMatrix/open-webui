@@ -12,6 +12,7 @@
 	export let rows = 3;
 	export let required = false;
 	export let disabled = false;
+	export let showControls = true;
 	$: translated = translations?.[locale]?.[field] ?? '';
 	$: fallback = resolveLocalizedString(value, translations, locale, field);
 	const update = (next: string) => {
@@ -52,11 +53,10 @@
 			on:input={(e) => update(e.currentTarget.value)}
 		/>
 	{/if}
-	{#if locale}
+	{#if locale && showControls && (translated || fallback)}
 		<div
 			class="mt-1 flex flex-wrap items-center gap-3 text-[0.6875rem] text-gray-400 dark:text-gray-600"
 		>
-			<span>{translated ? $i18n.t('Translated') : $i18n.t('Using default')}</span>
 			{#if translated}<button
 					type="button"
 					class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
