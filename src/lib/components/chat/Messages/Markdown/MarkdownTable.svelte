@@ -135,7 +135,16 @@
 				be wide; cells cap their own width so one long paragraph cannot make
 				it absurd.
 			-->
-			<table class="markdown-table-grid border-collapse text-start" dir="auto">
+			<!--
+				not-prose, because the typography plugin has its own table rules and
+				they win. `.markdown-prose` is declared unlayered in app.css, so
+				everything it generates outranks Tailwind's layered utilities however
+				specific those are -- including the rule that zeroes the padding of the
+				first and last cell in every row, which is what put the text against
+				the border. Opting out is the escape hatch those rules are written to
+				honour, and it hands the styling here back to this component.
+			-->
+			<table class="markdown-table-grid not-prose border-collapse text-start" dir="auto">
 				<thead class={sticky ? 'sticky top-0 z-10' : ''}>
 					<tr>
 						{#each header as cell, column}

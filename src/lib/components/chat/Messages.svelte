@@ -12,7 +12,7 @@
 	import Message from './Messages/Message.svelte';
 	import ContextCompactedMarker from './Messages/ContextCompactedMarker.svelte';
 	import ContextCompactingRow from './Messages/ContextCompactingRow.svelte';
-	import { isNearBottom } from '$lib/utils/scrollPosition';
+	import { isNearBottom, shouldFollow } from '$lib/utils/scrollPosition';
 	import Loader from '../common/Loader.svelte';
 	import Spinner from '../common/Spinner.svelte';
 
@@ -80,6 +80,7 @@
 
 	onDestroy(() => {
 		cancelAnimationFrame(pendingRebuild);
+		cancelAnimationFrame(followScheduled);
 	});
 
 	const loadMoreMessages = async () => {
@@ -152,12 +153,54 @@
 
 	$: handleHistoryChange(history.currentId, history.messages);
 
-	$: if (autoScroll && bottomPadding) {
-		(async () => {
-			await tick();
-			scrollToBottom();
-		})();
-	}
+	/**
+	 * Keep the view at the end of a growing answer.
+	 *
+	 * Watching the content rather than the history: an answer grows for reasons
+	 * the message list never hears about -- a code block laying out, an image
+	 * arriving, a tool call opening -- and all of them move the bottom away.
+	 *
+	 * The reader is followed only while they are still at the end. Scrolling up
+	 * stops it, and the scroll handler that sets `autoScroll` is what notices.
+	 */
+	let contentElement: HTMLElement | null = null;
+	let followScheduled = 0;
+	let lastHeight = 0;
+
+	const follow = () => {
+		const container = getMessagesContainer();
+		if (!container) return;
+
+		const grewBy = container.scrollHeight - lastHeight;
+		lastHeight = container.scrollHeight;
+
+		// Between two frames the pane grows by whatever arrived, which leaves the
+		// reader short of the end without them having moved. Allowing for that is
+		// the difference between following an answer and stopping at its first
+		// paragraph.
+		if (!autoScroll || !shouldFollow(container, grewBy)) return;
+		container.scrollTop = container.scrollHeight;
+	};
+
+	onMount(() => {
+		const container = getMessagesContainer();
+		lastHeight = container?.scrollHeight ?? 0;
+
+		if (typeof ResizeObserver === 'undefined' || !contentElement) return;
+
+		const observer = new ResizeObserver(() => {
+			// A resize observer can fire several times for one frame of growth;
+			// scrolling once per frame is enough and avoids fighting the browser.
+			cancelAnimationFrame(followScheduled);
+			followScheduled = requestAnimationFrame(follow);
+		});
+		observer.observe(contentElement);
+
+		return () => {
+			cancelAnimationFrame(followScheduled);
+			observer.disconnect();
+		};
+	});
 
 	const scrollToBottom = () => {
 		const element = getMessagesContainer();
@@ -540,7 +583,7 @@
 	};
 </script>
 
-<div class={className}>
+<div bind:this={contentElement} class={className}>
 	{#if Object.keys(history?.messages ?? {}).length == 0}
 		<ChatPlaceholder modelIds={selectedModels} {atSelectedModel} {onSelect} />
 	{:else}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NEAR_BOTTOM_SLACK, isNearBottom } from './scrollPosition';
+import { NEAR_BOTTOM_SLACK, isNearBottom, shouldFollow } from './scrollPosition';
 
 /** A pane 600 tall holding `content`, scrolled to `top`. */
 const pane = (content: number, top: number) => ({
@@ -44,5 +44,33 @@ describe('deciding whether the view is still following', () => {
 	it('takes a wider slack when asked', () => {
 		expect(isNearBottom(pane(2000, 1200))).toBe(false);
 		expect(isNearBottom(pane(2000, 1200), 250)).toBe(true);
+	});
+});
+
+describe('following a pane that is growing', () => {
+	it('follows when the reader is at the end', () => {
+		expect(shouldFollow(pane(2000, 1400), 0)).toBe(true);
+	});
+
+	it('follows when the only reason they are short is that it grew', () => {
+		// The failure this exists for: a hundred pixels of answer arrive between
+		// two frames, which puts the reader a hundred pixels from the end without
+		// them touching anything. Judged by the plain check they have "scrolled
+		// away", and the view stops following for the rest of the answer.
+		expect(shouldFollow(pane(2000, 1200), 200)).toBe(true);
+	});
+
+	it('stops when they scrolled further than it grew', () => {
+		expect(shouldFollow(pane(2000, 900), 200)).toBe(false);
+	});
+
+	it('ignores a negative growth', () => {
+		// Content can shrink -- a collapsible closing -- and that must not widen
+		// the window backwards.
+		expect(shouldFollow(pane(2000, 1000), -500)).toBe(false);
+	});
+
+	it('has nothing to follow without a pane', () => {
+		expect(shouldFollow(null, 100)).toBe(false);
 	});
 });

@@ -126,6 +126,8 @@
 	export let canvasTitle = '';
 	/** What the reader has selected in it, so an instruction can refer to it. */
 	export let canvasSelection = '';
+	/** Closing is the chat's business: it also stops remembering the document. */
+	export let onCanvasClose: () => void = () => {};
 
 	// Tab fallback: if active tab becomes hidden, switch to next available
 	$: if (!showOverviewTab && activeTab === 'overview') activeTab = 'controls';
@@ -357,7 +359,7 @@
 									bind:title={canvasTitle}
 									bind:selectedText={canvasSelection}
 									onClose={() => {
-										canvasNoteId.set(null);
+										onCanvasClose();
 										activeTab = 'controls';
 									}}
 								/>
@@ -508,7 +510,7 @@
 									bind:title={canvasTitle}
 									bind:selectedText={canvasSelection}
 									onClose={() => {
-										canvasNoteId.set(null);
+										onCanvasClose();
 										activeTab = 'controls';
 									}}
 								/>

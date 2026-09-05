@@ -394,7 +394,9 @@
 	 */
 	let contextCompaction: { state: 'running' | 'failed'; startedAt: number } | null = null;
 
-	let chat = null;
+	// The saved chat as the server returns it: a wrapper whose `chat` field is
+	// the body. Typed loosely because that body is an open dictionary.
+	let chat: any = null;
 	let tags = [];
 
 	// Read-only when viewing someone else's chat (e.g. via shared folder access)
@@ -857,6 +859,34 @@
 		canvasSelection = '';
 		canvasNoteId.set(note.id);
 		showControls.set(true);
+		void saveCanvas(note.id);
+	};
+
+	/**
+	 * Remember which document this conversation has open.
+	 *
+	 * A temporary chat has nowhere to keep it, and an unsaved one has no id yet;
+	 * in both cases the canvas simply lasts as long as the page does.
+	 */
+	const saveCanvas = async (noteId: string | null) => {
+		if (!$chatId || $temporaryChatEnabled) return;
+		if ((chat?.chat?.canvas_note_id ?? null) === noteId) return;
+
+		const res = await updateChatById(localStorage.token, $chatId, {
+			canvas_note_id: noteId
+		}).catch((error) => {
+			console.error('[canvas] could not remember the open document', error);
+			return null;
+		});
+		if (res) chat = res;
+	};
+
+	/** Close the document, and stop the conversation remembering it. */
+	const closeCanvas = () => {
+		canvasNoteId.set(null);
+		canvasTitle = '';
+		canvasSelection = '';
+		void saveCanvas(null);
 	};
 
 	/** Everything the model should know about what is open beside the chat. */
@@ -2459,8 +2489,9 @@
 	};
 
 	const loadChat = async () => {
-		// A document belongs to the conversation it was opened from; carrying
-		// it into the next one would name a note the new chat has never seen.
+		// Cleared here and restored below from what the chat carries: a document
+		// belongs to the conversation it was opened from, so the one on screen must
+		// not survive into the next chat, and the one that chat saved must return.
 		canvasNoteId.set(null);
 		canvasTitle = '';
 		canvasSelection = '';
@@ -2549,6 +2580,13 @@
 				params = structuredClone(chatContent?.params ?? {});
 				delete params.note_id;
 				chatFiles = structuredClone(chatContent?.files ?? []);
+
+				// The document this conversation had open, if it still exists. Stored on
+				// the chat rather than in this browser, so it comes back wherever the
+				// conversation is opened next.
+				canvasNoteId.set(chatContent?.canvas_note_id ?? null);
+				canvasTitle = '';
+				canvasSelection = '';
 
 				// Load tasks from chat-level DB field
 				chatTasks = chat?.tasks ?? [];
@@ -5065,6 +5103,7 @@
 						{codeInterpreterEnabled}
 						bind:canvasTitle
 						bind:canvasSelection
+						onCanvasClose={closeCanvas}
 					/>
 				{/if}
 			</div>

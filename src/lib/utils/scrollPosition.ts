@@ -31,3 +31,22 @@ export const isNearBottom = (element: Scrollable | null | undefined, slack = NEA
 	const { scrollHeight = 0, scrollTop = 0, clientHeight = 0 } = element;
 	return scrollHeight - scrollTop <= clientHeight + slack;
 };
+
+/**
+ * Whether a growing pane should be pulled back to its end.
+ *
+ * Following a streaming answer is not the same question as being at the bottom.
+ * The pane grows between frames, so by the time the growth is measured the
+ * reader is already a little short of the end through no act of their own --
+ * and the amount they are short by is exactly how much arrived. Anything up to
+ * that, plus the usual slack, is still following.
+ *
+ * Scrolling up by hand is what stops it, and that is the one case this must not
+ * swallow: a reader who moved further than the content grew has left.
+ */
+export const shouldFollow = (
+	element: Scrollable | null | undefined,
+	/** How much taller the pane became since it was last measured. */
+	grewBy = 0,
+	slack = NEAR_BOTTOM_SLACK
+) => isNearBottom(element, slack + Math.max(0, grewBy));
