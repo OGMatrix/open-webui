@@ -75,6 +75,16 @@ code {
 	@apply opacity-100 pointer-events-auto;
 }
 
+/* A touch screen has no hover, and pointer-events-none means tapping where the
+   control ought to be does nothing either -- so on a device that cannot hover,
+   everything revealed this way is simply shown. Nineteen components rely on
+   this class; fixing it here fixes all of them. */
+@media (hover: none) {
+	.hover-reveal {
+		@apply opacity-100 pointer-events-auto;
+	}
+}
+
 .marked a {
 	@apply underline;
 }

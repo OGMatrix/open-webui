@@ -780,6 +780,9 @@
 				}}
 			>
 				<button
+					type="button"
+					aria-label={folders[folderId]?.name ?? $i18n.t('Folder')}
+					aria-expanded={open}
 					class="text-gray-600 dark:text-gray-400 transition-all p-1 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-lg"
 					on:click={(e) => {
 						e.stopPropagation();
@@ -789,11 +792,18 @@
 					}}
 				>
 					{#if folders[folderId]?.meta?.icon}
-						<div class="flex group-hover:hidden transition-all">
+						<!--
+							The chevron replaces the icon on hover, and now on focus too: it
+							is the only thing that says the row can be opened, and a keyboard
+							had no way to make it appear.
+						-->
+						<div class="flex group-focus-within:hidden group-hover:hidden transition-all">
 							<Emoji className="size-3.5" shortCode={folders[folderId].meta.icon} />
 						</div>
 
-						<div class="hidden group-hover:flex transition-all p-[0.0625rem]">
+						<div
+							class="hidden group-focus-within:flex group-hover:flex transition-all p-[0.0625rem]"
+						>
 							{#if open}
 								<ChevronDown className=" size-3" strokeWidth="1.5" />
 							{:else}
@@ -801,11 +811,13 @@
 							{/if}
 						</div>
 					{:else}
-						<div class="flex group-hover:hidden transition-all">
+						<div class="flex group-focus-within:hidden group-hover:hidden transition-all">
 							<FolderIcon className="size-3.5" strokeWidth="1.5" />
 						</div>
 
-						<div class="hidden group-hover:flex transition-all p-[0.0625rem]">
+						<div
+							class="hidden group-focus-within:flex group-hover:flex transition-all p-[0.0625rem]"
+						>
 							{#if open}
 								<ChevronDown className=" size-3" strokeWidth="1.5" />
 							{:else}

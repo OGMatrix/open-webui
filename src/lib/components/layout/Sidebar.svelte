@@ -970,11 +970,11 @@
 							https://docs.openwebui.com/license. -->
 								<img
 									src="{WEBUI_BASE_URL}/static/favicon.png"
-									class="sidebar-new-chat-icon size-5 rounded-full group-hover:hidden"
+									class="sidebar-new-chat-icon size-5 rounded-full group-focus-visible:hidden group-hover:hidden"
 									alt=""
 								/>
 
-								<Sidebar className="size-4 hidden group-hover:flex" />
+								<Sidebar className="size-4 hidden group-focus-visible:flex group-hover:flex" />
 							</div>
 						</button>
 					</Tooltip>

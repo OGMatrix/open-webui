@@ -413,7 +413,7 @@
 									<!-- The shortcut is shown rather than hidden in a help text. -->
 									{#if index < 9}
 										<kbd
-											class="mt-0.5 hidden shrink-0 rounded border border-gray-200 px-1 font-mono text-[0.625rem] text-gray-400 group-hover:block dark:border-gray-700 dark:text-gray-500"
+											class="mt-0.5 block shrink-0 rounded border border-gray-200 px-1 font-mono text-[0.625rem] text-gray-400 opacity-60 transition-opacity group-hover:opacity-100 dark:border-gray-700 dark:text-gray-500"
 										>
 											{index + 1}
 										</kbd>
