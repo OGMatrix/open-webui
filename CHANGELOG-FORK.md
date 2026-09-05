@@ -13,6 +13,20 @@ Releases are produced by the `Fork · Release` workflow, which writes this file.
 
 <!-- fork-release: new entries are inserted directly below this line -->
 
+## [0.11.3-ogm.5] - 2026-09-05
+
+Built on Open WebUI `0.11.3` (`upstream/dev` at `8652227ea`), fork commit `6d74f53fc`.
+
+Upstream: 11 commit(s) merged from open-webui/open-webui, still 0.11.3.
+
+### Fixed
+
+- Compact a chat that has already been compacted once (423285862)
+- Say the microphone was never asked for, instead of refused (2710634d0)
+
+### Changed
+
+- Stop tables crushing their own columns (2f5cec08d)
 ## [0.11.3-ogm.4] - 2026-09-04
 
 Built on Open WebUI `0.11.3` (`upstream/dev` at `bd0b3875b`), fork commit `50ed2900f`.
