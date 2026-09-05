@@ -48,6 +48,7 @@
 	export let editCodeBlock = true;
 	export let topPadding = false;
 	export let onInsertToNote: ((content: string) => void) | null = null;
+	export let onOpenInCanvas: ((content: string) => void) | null = null;
 
 	// Safari's content-visibility implementation has paint bugs that leave
 	// on-screen messages blank (#26712), so skip virtualization there
@@ -84,6 +85,7 @@
 				{editCodeBlock}
 				{topPadding}
 				{onInsertToNote}
+				{onOpenInCanvas}
 			/>
 		{:else if (history.messages[history.messages[messageId].parentId]?.models?.length ?? 1) === 1}
 			<ResponseMessage
@@ -144,6 +146,7 @@
 					{editCodeBlock}
 					{topPadding}
 					{onInsertToNote}
+					{onOpenInCanvas}
 				/>
 			{/key}
 		{/if}

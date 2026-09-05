@@ -1,5 +1,6 @@
 {
 	"Added": "",
+	"Canvas": "",
 	"Changed": "",
 	"Conversation outline": "",
 	"Find in Chat": "",
@@ -11,6 +12,8 @@
 	"Navigate to Previous Turn": "",
 	"Next match": "",
 	"No filesystem MCP server is connected.": "",
+	"Open in Canvas": "",
+	"Open in Notes": "",
 	"Previous match": "",
 	"Removed": "",
 	"Searches the conversation on screen, including messages not yet loaded.": "",

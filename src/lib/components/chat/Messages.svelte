@@ -71,6 +71,7 @@
 
 	export let onSelect = (e) => {};
 	export let onInsertToNote: ((content: string) => void) | null = null;
+	export let onOpenInCanvas: ((content: string) => void) | null = null;
 
 	export let messagesCount: number | null = 8;
 	let messagesLoading = false;
@@ -608,6 +609,7 @@
 								{editCodeBlock}
 								{topPadding}
 								{onInsertToNote}
+								{onOpenInCanvas}
 							/>
 						{/each}
 					</ul>

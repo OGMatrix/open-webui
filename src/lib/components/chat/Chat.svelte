@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { v4 as uuidv4 } from 'uuid';
 	import { toast } from 'svelte-sonner';
+	import { marked } from 'marked';
 
 	import { getContext, onDestroy, onMount, tick } from 'svelte';
 	import { fade } from 'svelte/transition';
@@ -29,6 +30,7 @@
 		audioQueue,
 		showControls,
 		showFindInChat,
+		canvasNoteId,
 		showCallOverlay,
 		temporaryChatEnabled,
 		mobile,
@@ -131,6 +133,8 @@
 	import Messages from '$lib/components/chat/Messages.svelte';
 	import FindInChat from '$lib/components/chat/FindInChat.svelte';
 	import ChatOutline from '$lib/components/chat/ChatOutline.svelte';
+	import { createNewNote } from '$lib/apis/notes';
+	import { titleFor, withCanvasContext } from '$lib/utils/canvas';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
 	import ChatControls from './ChatControls.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
@@ -810,10 +814,63 @@
 		}
 	};
 
-	const withSelectedText = (text: string) =>
-		embedded && selectedText?.trim()
-			? `${text}\n\nSelected note text for replace_note_content operations:\n${selectedText.trim()}`
-			: text;
+	/**
+	 * The document open beside this conversation, and what is selected in it.
+	 *
+	 * The title comes back up from the panel so the model can be told the name of
+	 * the thing it is editing rather than only its identifier.
+	 */
+	let canvasTitle = '';
+	let canvasSelection = '';
+	$: canvasNote = $canvasNoteId ? { id: $canvasNoteId, title: canvasTitle } : null;
+
+	/**
+	 * Open an answer as a document beside the conversation.
+	 *
+	 * A canvas is a note. Everything needed to edit one is already here -- the
+	 * model has view_note and replace_note_content, and the server announces every
+	 * change -- so what this adds is the one direction that was missing: getting
+	 * from an answer to a document at all.
+	 */
+	const openInCanvas = async (content: string) => {
+		const title = titleFor(content, $i18n.t('Untitled'));
+
+		const note = await createNewNote(localStorage.token, {
+			title,
+			data: {
+				content: {
+					json: null,
+					html: marked.parse(content ?? ''),
+					md: content
+				}
+			},
+			meta: null,
+			access_grants: []
+		}).catch((error) => {
+			toast.error(`${error}`);
+			return null;
+		});
+
+		if (!note) return;
+
+		canvasTitle = title;
+		canvasSelection = '';
+		canvasNoteId.set(note.id);
+		showControls.set(true);
+	};
+
+	/** Everything the model should know about what is open beside the chat. */
+	const withOpenContext = (text: string) => {
+		const withNote =
+			embedded && selectedText?.trim()
+				? `${text}\n\nSelected note text for replace_note_content operations:\n${selectedText.trim()}`
+				: text;
+
+		// A document open beside an ordinary conversation gets what the notes page
+		// already gives its own embedded chat: the model is told which note it is
+		// looking at, so an instruction about "the document" has a referent.
+		return withCanvasContext(withNote, canvasNote, canvasSelection);
+	};
 	const noteChatDebug = (message: string, data: Record<string, unknown> = {}) => {
 		if (!embedded) return;
 		console.info('[note-chat]', message, {
@@ -2151,6 +2208,12 @@
 	};
 
 	const initNewChat = async () => {
+		// A document belongs to the conversation it was opened from; carrying
+		// it into the next one would name a note the new chat has never seen.
+		canvasNoteId.set(null);
+		canvasTitle = '';
+		canvasSelection = '';
+
 		console.log('initNewChat');
 		resetWebSearchConfirmation();
 
@@ -2396,6 +2459,12 @@
 	};
 
 	const loadChat = async () => {
+		// A document belongs to the conversation it was opened from; carrying
+		// it into the next one would name a note the new chat has never seen.
+		canvasNoteId.set(null);
+		canvasTitle = '';
+		canvasSelection = '';
+
 		noteChatDebug('loadChat start');
 		// chatIdProp is empty for chats started from the home page (URL set via replaceState)
 		chatId.set(chatIdProp || $chatId);
@@ -4747,6 +4816,7 @@
 										bottomPadding={files.length > 0}
 										{onSelect}
 										{onInsertToNote}
+										onOpenInCanvas={openInCanvas}
 										{contextCompaction}
 									/>
 								</div>
@@ -4819,7 +4889,7 @@
 											if (e.detail || files.length > 0) {
 												await tick();
 
-												submitHandler(withSelectedText(e.detail));
+												submitHandler(withOpenContext(e.detail));
 											}
 										}}
 									/>
@@ -4846,7 +4916,7 @@
 														class="flex min-h-8 w-full items-center justify-between py-1 text-left text-[0.8125rem] leading-5 text-gray-500 transition hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300"
 														on:click={async () => {
 															await tick();
-															await submitHandler(withSelectedText(suggestion));
+															await submitHandler(withOpenContext(suggestion));
 														}}
 													>
 														<span class="min-w-0 truncate">{suggestion}</span>
@@ -4911,7 +4981,7 @@
 											clearDraft(getDraftChatId());
 											if (e.detail || files.length > 0) {
 												await tick();
-												submitHandler(withSelectedText(e.detail));
+												submitHandler(withOpenContext(e.detail));
 											}
 										}}
 									/>
@@ -4963,7 +5033,7 @@
 										clearDraft();
 										if (e.detail || files.length > 0) {
 											await tick();
-											submitHandler(withSelectedText(e.detail));
+											submitHandler(withOpenContext(e.detail));
 										}
 									}}
 								/>
@@ -4993,6 +5063,8 @@
 						{showMessage}
 						{eventTarget}
 						{codeInterpreterEnabled}
+						bind:canvasTitle
+						bind:canvasSelection
 					/>
 				{/if}
 			</div>

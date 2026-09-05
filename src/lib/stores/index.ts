@@ -145,6 +145,13 @@ export const showSidebar = writable(false);
 export const showSearch = writable(false);
 /** Find within the conversation on screen, as opposed to across chats. */
 export const showFindInChat = writable(false);
+/**
+ * The note held open beside the conversation, if any.
+ *
+ * A canvas is a note; what makes it a canvas is that the chat knows it is
+ * open, so the model can be told to edit it rather than to repeat it.
+ */
+export const canvasNoteId: Writable<string | null> = writable(null);
 export const showSettings: Writable<boolean | string | SettingsModalRequest> = writable(false);
 export const showChangelog = writable(false);
 

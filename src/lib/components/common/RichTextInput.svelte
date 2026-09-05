@@ -217,8 +217,11 @@
 
 	export let editor: Editor | null = null;
 
-	export let socket = null;
-	export let user = null;
+	// Typed loosely on purpose: the socket and the session user come from
+	// stores whose types the editor has no use for, and leaving them inferred
+	// as `null` made every caller that passes a real one an error.
+	export let socket: any = null;
+	export let user: any = null;
 	export let files = [];
 
 	export let documentId = '';

@@ -1,8 +1,10 @@
 <script context="module" lang="ts">
-	let savedTab: 'controls' | 'files' | 'overview' = 'controls';
+	let savedTab: 'controls' | 'files' | 'overview' | 'canvas' = 'controls';
 </script>
 
 <script lang="ts">
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import { onMount, tick, getContext } from 'svelte';
 	import {
 		config,
@@ -25,12 +27,14 @@
 	import Embeds from './ChatControls/Embeds.svelte';
 	import FileNav from './FileNav.svelte';
 	import McpFileTree from './McpFileTree.svelte';
+	import Canvas from './Canvas.svelte';
 	import { getMCPFilesystemServers, type MCPFilesystemServer } from '$lib/apis/tools';
+	import { canvasNoteId } from '$lib/stores';
 	import PyodideFileNav from './PyodideFileNav.svelte';
 	import Overview from './Overview.svelte';
 	import { isSavedChatId } from '$lib/utils/chatId';
 
-	const i18n = getContext('i18n');
+	const i18n = getContext<Writable<i18nType>>('i18n');
 
 	export let history;
 	export let models = [];
@@ -115,17 +119,28 @@
 		mcpFilesAvailable ||
 		(codeInterpreterEnabled && $config?.code?.interpreter_engine !== 'jupyter');
 	$: showOverviewTab = hasMessages;
+	/** The canvas tab exists only while a document is open beside the chat. */
+	$: showCanvasTab = !!$canvasNoteId;
+
+	/** The title of that document, so the chat can name it to the model. */
+	export let canvasTitle = '';
+	/** What the reader has selected in it, so an instruction can refer to it. */
+	export let canvasSelection = '';
 
 	// Tab fallback: if active tab becomes hidden, switch to next available
 	$: if (!showOverviewTab && activeTab === 'overview') activeTab = 'controls';
 	$: if (!showFilesTab && activeTab === 'files') activeTab = 'controls';
+	$: if (!showCanvasTab && activeTab === 'canvas') activeTab = 'controls';
+	// Opening an answer as a document is a deliberate act, so the panel shows it
+	// rather than leaving the reader to find the tab.
+	$: if (showCanvasTab && $canvasNoteId) activeTab = 'canvas';
 	$: if (!showControlsTab && activeTab === 'controls') {
 		if (showFilesTab) activeTab = 'files';
 		else if (showOverviewTab) activeTab = 'overview';
 	}
 
 	// Auto-close if there are no visible tabs
-	$: if (!showControlsTab && !showFilesTab && !showOverviewTab) {
+	$: if (!showControlsTab && !showFilesTab && !showOverviewTab && !showCanvasTab) {
 		showControls.set(false);
 	}
 
@@ -277,6 +292,17 @@
 										{$i18n.t('Files')}
 									</button>
 								{/if}
+								{#if showCanvasTab}
+									<button
+										class="px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {activeTab ===
+										'canvas'
+											? 'bg-gray-100/40 dark:bg-gray-800/25 font-normal text-gray-700 dark:text-gray-200'
+											: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100/30 dark:hover:bg-gray-800/20 hover:text-gray-600 dark:hover:text-gray-300'}"
+										on:click={() => (activeTab = 'canvas')}
+									>
+										{$i18n.t('Canvas')}
+									</button>
+								{/if}
 								{#if showOverviewTab}
 									<button
 										class="px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {activeTab ===
@@ -325,6 +351,16 @@
 								/>
 							{:else if activeTab === 'files' && terminalFilesAvailable && $selectedTerminalId}
 								<FileNav {chatId} />
+							{:else if activeTab === 'canvas' && $canvasNoteId}
+								<Canvas
+									noteId={$canvasNoteId}
+									bind:title={canvasTitle}
+									bind:selectedText={canvasSelection}
+									onClose={() => {
+										canvasNoteId.set(null);
+										activeTab = 'controls';
+									}}
+								/>
 							{:else if activeTab === 'files' && mcpFilesAvailable}
 								<McpFileTree servers={mcpServers} />
 							{:else if activeTab === 'files' && codeInterpreterEnabled}
@@ -402,6 +438,17 @@
 										{$i18n.t('Files')}
 									</button>
 								{/if}
+								{#if showCanvasTab}
+									<button
+										class="px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {activeTab ===
+										'canvas'
+											? 'bg-gray-100/40 dark:bg-gray-800/25 font-normal text-gray-700 dark:text-gray-200'
+											: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100/30 dark:hover:bg-gray-800/20 hover:text-gray-600 dark:hover:text-gray-300'}"
+										on:click={() => (activeTab = 'canvas')}
+									>
+										{$i18n.t('Canvas')}
+									</button>
+								{/if}
 								{#if showOverviewTab}
 									<button
 										class="px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {activeTab ===
@@ -455,6 +502,16 @@
 								/>
 							{:else if activeTab === 'files' && terminalFilesAvailable && $selectedTerminalId}
 								<FileNav overlay={dragged} {chatId} />
+							{:else if activeTab === 'canvas' && $canvasNoteId}
+								<Canvas
+									noteId={$canvasNoteId}
+									bind:title={canvasTitle}
+									bind:selectedText={canvasSelection}
+									onClose={() => {
+										canvasNoteId.set(null);
+										activeTab = 'controls';
+									}}
+								/>
 							{:else if activeTab === 'files' && mcpFilesAvailable}
 								<McpFileTree servers={mcpServers} />
 							{:else if activeTab === 'files' && codeInterpreterEnabled}

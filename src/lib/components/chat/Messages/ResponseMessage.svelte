@@ -46,6 +46,8 @@
 	import ProfileImage from './ProfileImage.svelte';
 	import Image from '$lib/components/common/Image.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import PencilSquare from '$lib/components/icons/PencilSquare.svelte';
+	import { worthOpening } from '$lib/utils/canvas';
 	import RateComment from './RateComment.svelte';
 	import WebSearchResults from './ResponseMessage/WebSearchResults.svelte';
 	import Sparkles from '$lib/components/icons/Sparkles.svelte';
@@ -179,6 +181,8 @@
 	export let editCodeBlock = true;
 	export let topPadding = false;
 	export let onInsertToNote: ((content: string) => void) | null = null;
+	/** Open this answer as a document beside the conversation. */
+	export let onOpenInCanvas: ((content: string) => void) | null = null;
 
 	let citationsElement: HTMLDivElement;
 
@@ -1121,6 +1125,27 @@
 											}}
 										>
 											{$i18n.t('Insert')}
+										</button>
+									</Tooltip>
+								{/if}
+
+								{#if !readOnly && onOpenInCanvas && worthOpening(visibleResponseContent)}
+									<!--
+										Only for an answer long enough to be a document. Offering it
+										on a one-line reply would put the action on every message in
+										the conversation, which is how a useful button becomes noise.
+									-->
+									<Tooltip content={$i18n.t('Open in Canvas')} placement="bottom">
+										<button
+											aria-label={$i18n.t('Open in Canvas')}
+											class="{isLastMessage || ($settings?.highContrastMode ?? false)
+												? 'visible'
+												: 'hover-reveal'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
+											on:click={() => {
+												onOpenInCanvas?.(visibleResponseContent);
+											}}
+										>
+											<PencilSquare className="size-4" strokeWidth="1.75" />
 										</button>
 									</Tooltip>
 								{/if}
