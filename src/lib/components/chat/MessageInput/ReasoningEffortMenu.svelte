@@ -87,7 +87,7 @@
 					that showed its state as colour alone, which is the reading the rest
 					of the row stopped relying on.
 				-->
-				<span class="hidden @md:inline">{$i18n.t('Thinking')}</span>
+				<span class="inline">{$i18n.t('Thinking')}</span>
 			</button>
 		</Tooltip>
 	{:else}
@@ -101,9 +101,9 @@
 						so the chip can be found by reading it rather than by recognising a
 						bulb, and the value follows when there is one.
 					-->
-					<span class="hidden @md:inline">{$i18n.t('Thinking')}</span>
+					<span class="inline">{$i18n.t('Thinking')}</span>
 					{#if effective !== null}
-						<span class="hidden opacity-70 @md:inline">{labelFor(effective)}</span>
+						<span class="opacity-70">{labelFor(effective)}</span>
 					{/if}
 				</button>
 			</Tooltip>
