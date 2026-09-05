@@ -138,7 +138,6 @@
 	import Expand from '../icons/Expand.svelte';
 	import QueuedMessageItem from './MessageInput/QueuedMessageItem.svelte';
 	import PromptStatusBar from './MessageInput/PromptStatusBar.svelte';
-	import ScrollToBottom from './ScrollToBottom.svelte';
 	import { currentOrigin, mediaAccessMessage, requestMicrophone } from '$lib/utils/mediaAccess';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
@@ -166,8 +165,6 @@
 	export let contextCompactionEnabled = false;
 	/** Compaction while it runs, so the strip can say so. */
 	export let contextCompaction: { state: 'running' | 'failed'; startedAt: number } | null = null;
-	/** Re-attach the view to the newest message and scroll there. */
-	export let onScrollToBottom: (() => void) | null = null;
 	export let embedded = false;
 
 	export let autoScroll = false;
@@ -2115,16 +2112,6 @@
 								: ''}  transition px-0.5 bg-white/5 dark:bg-gray-500/5 backdrop-blur-sm dark:text-gray-100"
 							dir={$settings?.chatDirection ?? 'auto'}
 						>
-							<!--
-								Sits against the top edge of this box, so it stays where the
-								eye already is however tall the strip above has grown.
-							-->
-							<ScrollToBottom
-								attached={autoScroll}
-								{generating}
-								onClick={() => onScrollToBottom?.()}
-							/>
-
 							<GenerationGlow
 								active={streamingMessage !== null}
 								tokensPerSecond={glowView?.tokensPerSecond ?? null}

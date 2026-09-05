@@ -12,6 +12,7 @@
 	import Message from './Messages/Message.svelte';
 	import ContextCompactedMarker from './Messages/ContextCompactedMarker.svelte';
 	import ContextCompactingRow from './Messages/ContextCompactingRow.svelte';
+	import { isNearBottom } from '$lib/utils/scrollPosition';
 	import Loader from '../common/Loader.svelte';
 	import Spinner from '../common/Spinner.svelte';
 
@@ -244,9 +245,7 @@
 		// Optional auto-scroll
 		if ($settings?.scrollOnBranchChange ?? true) {
 			const element = getMessagesContainer();
-			autoScroll = element
-				? element.scrollHeight - element.scrollTop <= element.clientHeight + 50
-				: false;
+			autoScroll = element ? isNearBottom(element) : false;
 
 			setTimeout(() => {
 				scrollToBottom();
@@ -293,9 +292,7 @@
 
 		if ($settings?.scrollOnBranchChange ?? true) {
 			const element = getMessagesContainer();
-			autoScroll = element
-				? element.scrollHeight - element.scrollTop <= element.clientHeight + 50
-				: false;
+			autoScroll = element ? isNearBottom(element) : false;
 
 			setTimeout(() => {
 				scrollToBottom();
@@ -346,9 +343,7 @@
 
 		if ($settings?.scrollOnBranchChange ?? true) {
 			const element = getMessagesContainer();
-			autoScroll = element
-				? element.scrollHeight - element.scrollTop <= element.clientHeight + 50
-				: false;
+			autoScroll = element ? isNearBottom(element) : false;
 
 			setTimeout(() => {
 				scrollToBottom();
@@ -521,7 +516,7 @@
 		if (autoScroll) {
 			const element = getMessagesContainer();
 			if (element) {
-				autoScroll = element.scrollHeight - element.scrollTop <= element.clientHeight + 50;
+				autoScroll = isNearBottom(element);
 				setTimeout(() => {
 					scrollToBottom();
 				}, 100);

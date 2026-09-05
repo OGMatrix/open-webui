@@ -69,6 +69,7 @@
 	} from '$lib/utils';
 	import { getContextWindow } from '$lib/utils/contextWindow';
 	import { estimateMessagesTokens, estimateTokens } from '$lib/utils/tokenEstimate';
+	import { isNearBottom } from '$lib/utils/scrollPosition';
 	import { AudioQueue } from '$lib/utils/audio';
 	import {
 		applyGenerationUsage,
@@ -4665,9 +4666,7 @@
 								id="messages-container"
 								bind:this={messagesContainerElement}
 								on:scroll={(e) => {
-									autoScroll =
-										messagesContainerElement.scrollHeight - messagesContainerElement.scrollTop <=
-										messagesContainerElement.clientHeight + 5;
+									autoScroll = isNearBottom(messagesContainerElement);
 									isNearTop = messagesContainerElement.scrollTop <= 100;
 								}}
 							>
@@ -4742,10 +4741,6 @@
 										{contextUsage}
 										{contextCompactionEnabled}
 										{contextCompaction}
-										onScrollToBottom={() => {
-											autoScroll = true;
-											scrollToBottom('smooth');
-										}}
 										{embedded}
 										compactHandler={handleManualCompact}
 										statusHandler={handleStatusCommand}

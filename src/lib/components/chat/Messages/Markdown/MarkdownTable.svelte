@@ -241,17 +241,21 @@
 
 <style>
 	/*
-	 * As wide as its content, and never narrower than the frame.
+	 * Fits the frame, and is stopped from crushing its columns by its content.
 	 *
-	 * The table used to be width:100%, which reads as "fits the pane" and
-	 * behaves as "crush every column until it does". A column of file paths ends
-	 * up a few characters wide with each path broken across three lines. The
-	 * frame scrolls, so the honest answer is to let the table be as wide as it
-	 * needs and scroll it.
+	 * Sizing by max-content was the wrong half of an earlier fix. It did keep a
+	 * column of file paths from being crushed, but it also made any table with
+	 * three columns and a paragraph in one of them wider than the pane, so
+	 * reading the last column meant scrolling sideways for it.
+	 *
+	 * The half that mattered is below: a codespan that will not wrap gives its
+	 * column a floor the table layout has to respect. Measured on both tables
+	 * that were reported — two columns of paths, and three with a prose column
+	 * — at the real width of the message column, each now fills its frame
+	 * exactly, scrolls in neither direction, and breaks no chip.
 	 */
 	.markdown-table-grid {
-		width: max-content;
-		min-width: 100%;
+		width: 100%;
 	}
 
 	/*
@@ -278,17 +282,17 @@
 	}
 
 	/*
-	 * Inline code stays in one piece.
+	 * Inline code stays in one piece, and this is what keeps the columns honest.
 	 *
 	 * A codespan is a chip with its own background, so half of one at the end of
-	 * a line and half at the start of the next reads as two different things.
-	 * Sizing by content already stops paths being crushed, but a chip with a
-	 * space in it -- `POST /models/unload` -- still breaks at that space, which
-	 * is where it looks worst.
+	 * a line and half at the start of the next reads as two different things --
+	 * `src/core/llama-` above `cpp-client.ts`. Refusing to wrap also gives the
+	 * column a width the table layout cannot go below, which is what stops a
+	 * path column being crushed to ten characters in the first place.
 	 *
 	 * The cost is bounded and was measured: a single token wide enough to beat
-	 * the cell cap above overruns it, by 27px for a hundred-character path. That
-	 * is inside a frame that scrolls, and it is the rarer of the two failures.
+	 * the cell cap above overruns it, by 27px for a hundred-character path,
+	 * inside a frame that scrolls. That is rarer than either failure it avoids.
 	 */
 	.markdown-table-grid :global(.codespan) {
 		white-space: nowrap;
