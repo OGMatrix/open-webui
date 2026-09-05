@@ -13,6 +13,28 @@ Releases are produced by the `Fork · Release` workflow, which writes this file.
 
 <!-- fork-release: new entries are inserted directly below this line -->
 
+## [0.11.3-ogm.6] - 2026-09-05
+
+Built on Open WebUI `0.11.3` (`upstream/dev` at `85b11a4f3`), fork commit `754519ea5`.
+
+Upstream: 3 commit(s) merged from open-webui/open-webui, still 0.11.3.
+
+### Added
+
+- Sort the composer toolbar into openers and state (437265203)
+- Find in conversation (2fd068bc8)
+- Move between turns, and show the shape of the conversation (d7f2c13eb)
+- Browse a filesystem MCP server from the chat (0d3dc8b31)
+
+### Fixed
+
+- One jump-to-latest button, that actually re-attaches (14049dcaa)
+- Reach without a mouse what was only revealed by one (202f9327b)
+- A button inside a button, and two leftover logs (0a043af5d)
+
+### Changed
+
+- Make the context ring readable, and put the number on it (1f2c3adbb)
 ## [0.11.3-ogm.5] - 2026-09-05
 
 Built on Open WebUI `0.11.3` (`upstream/dev` at `8652227ea`), fork commit `6d74f53fc`.
