@@ -64,7 +64,7 @@
 	// The off state carries a transparent border rather than none, or the pill
 	// would change size the moment thinking is switched on.
 	$: pillClass = (on: boolean) =>
-		`group flex max-w-full shrink-0 items-center gap-1.5 overflow-hidden rounded-full border px-2 py-[0.1875rem] text-xs transition-colors duration-300 ${focusClass} ${
+		`group flex max-w-full shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full border px-2 py-[0.1875rem] text-xs transition-colors duration-300 ${focusClass} ${
 			on
 				? 'border-amber-200/40 bg-amber-50 text-amber-600 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-400/10 dark:text-amber-300 dark:hover:bg-amber-600/10'
 				: 'border-transparent bg-transparent text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
@@ -96,15 +96,11 @@
 				<button type="button" aria-label={menuTooltip} class={pillClass(active)}>
 					<LightBulb className="size-3.5 shrink-0" strokeWidth="1.75" />
 					<!--
-						A level on its own ("High") does not say what is high, and on model
-						default there is no level to name at all. The noun leads either way,
-						so the chip can be found by reading it rather than by recognising a
-						bulb, and the value follows when there is one.
+						The level, not the category. "High" beside a lit bulb is already
+						thinking effort, and the pair of words wrapped over two lines.
+						On model default there is no level, so the noun stands in.
 					-->
-					<span class="inline">{$i18n.t('Thinking')}</span>
-					{#if effective !== null}
-						<span class="opacity-70">{labelFor(effective)}</span>
-					{/if}
+					<span>{effective !== null ? labelFor(effective) : $i18n.t('Thinking')}</span>
 				</button>
 			</Tooltip>
 

@@ -1063,7 +1063,7 @@
 	 * to click one. These give the second kind a form of its own.
 	 */
 	const CHIP =
-		'group flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-[0.1875rem] text-xs transition-colors duration-300';
+		'group flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-[0.1875rem] text-xs transition-colors duration-300';
 	/**
 	 * High contrast keeps the focus ring.
 	 *
@@ -2685,7 +2685,6 @@
 														The noun is dropped only where the composer is too
 														narrow to carry it.
 													-->
-													<span class="inline">{$i18n.t('Tools')}</span>
 												</button>
 											</Tooltip>
 										{/if}
@@ -2708,7 +2707,6 @@
 												>
 													<Cube className="size-3.5 shrink-0" strokeWidth="1.75" />
 													<span class="tabular-nums">{(selectedSkillIds ?? []).length}</span>
-													<span class="inline">{$i18n.t('Skills')}</span>
 												</button>
 											</Tooltip>
 										{/if}

@@ -12,6 +12,7 @@
 		type OutlineEntry
 	} from '$lib/utils/chatOutline';
 	import { matchKeybinding, Shortcut } from '$lib/shortcuts';
+	import { isNearBottom } from '$lib/utils/scrollPosition';
 
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 
@@ -59,6 +60,16 @@
 	const updateActive = () => {
 		const container = document.getElementById(messagesContainerId);
 		if (!container || outline.length === 0) return;
+
+		// At the bottom, the turn being read is the last one, whatever the
+		// geometry says. The rule below asks which question has passed the top of
+		// the view; a final exchange short enough to sit below that line never
+		// passes it, and the mark stayed stuck on the turn before -- which is
+		// exactly the case of standing at the end of a conversation.
+		if (isNearBottom(container)) {
+			activeId = outline[outline.length - 1].id;
+			return;
+		}
 
 		const top = container.getBoundingClientRect().top;
 		let deepest: number | null = null;

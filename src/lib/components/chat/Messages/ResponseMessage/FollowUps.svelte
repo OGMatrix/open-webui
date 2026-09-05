@@ -21,7 +21,12 @@
 					on:click={() => onClick(followUp)}
 					aria-label={$i18n.t('Follow up: {{question}}', { question: followUp })}
 				>
-					<div class="line-clamp-1">
+					<!--
+					Two lines, not one. A follow-up is a question, and on a phone one
+					line cuts most of them in half -- leaving a suggestion nobody can
+					read deciding whether to tap it.
+				-->
+					<div class="line-clamp-2">
 						{followUp}
 					</div>
 				</button>
