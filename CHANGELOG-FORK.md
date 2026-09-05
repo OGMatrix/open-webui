@@ -13,6 +13,19 @@ Releases are produced by the `Fork · Release` workflow, which writes this file.
 
 <!-- fork-release: new entries are inserted directly below this line -->
 
+## [0.11.3-ogm.7] - 2026-09-05
+
+Built on Open WebUI `0.11.3` (`upstream/dev` at `85b11a4f3`), fork commit `5162ca7aa`.
+
+### Added
+
+- Open an answer as a document beside the chat (775ce4fb7)
+
+### Fixed
+
+- The composer row was unusable on a phone (60b0c9a17)
+- Five things that were wrong on screen (6ff46bd5a)
+- Follow the answer, pad the table, keep the document (5162ca7aa)
 ## [0.11.3-ogm.6] - 2026-09-05
 
 Built on Open WebUI `0.11.3` (`upstream/dev` at `85b11a4f3`), fork commit `754519ea5`.
