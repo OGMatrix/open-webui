@@ -1054,6 +1054,50 @@
 		selectedTerminalId.set(null);
 	}
 
+	/**
+	 * One shape for everything that is switched on right now.
+	 *
+	 * The row used to mix three unrelated kinds of control at the same size and
+	 * weight: buttons that open a menu, indicators of what is currently active,
+	 * and a gauge. Nothing said which was which, so the only way to find out was
+	 * to click one. These give the second kind a form of its own.
+	 */
+	const CHIP =
+		'group flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-[0.1875rem] text-xs transition-colors duration-300';
+	/**
+	 * High contrast keeps the focus ring.
+	 *
+	 * The rest of the row suppresses the default outline and relies on colour,
+	 * which is exactly what high-contrast mode exists to stop relying on.
+	 */
+	$: CHIP_FOCUS = ($settings?.highContrastMode ?? false) ? '' : 'focus:outline-hidden';
+	/** A mode that is on, and that clicking turns off. */
+	const CHIP_MODE =
+		'border-sky-200/50 bg-sky-50 text-sky-600 hover:bg-sky-100 dark:border-sky-500/25 dark:bg-sky-400/10 dark:text-sky-300 dark:hover:bg-sky-400/20';
+	/** A count of what is attached, which clicking opens rather than removes. */
+	const CHIP_COUNT =
+		'border-gray-200/70 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/10';
+
+	/**
+	 * Whether the state half of the row has anything in it.
+	 *
+	 * Every chip in that group is conditional, so on a plain chat with no tools
+	 * and nothing switched on the group is empty -- and an unconditional rule in
+	 * front of it would hang there next to nothing, reading as a glitch. Mirrors
+	 * the conditions on the group's children one for one; a new chip belongs here
+	 * as well as there.
+	 */
+	$: hasStateChips =
+		(selectedToolIds ?? []).length > 0 ||
+		(selectedSkillIds ?? []).length > 0 ||
+		(selectedFilterIds ?? []).length > 0 ||
+		!!reasoningMode ||
+		(webSearchEnabled && showWebSearchButton) ||
+		(imageGenerationEnabled && showImageGenerationButton) ||
+		(codeInterpreterEnabled && showCodeInterpreterButton) ||
+		(pendingOAuthTools ?? []).length > 0 ||
+		showTerminalSelector;
+
 	const scrollToBottom = () => {
 		const element = document.getElementById('messages-container');
 		element.scrollTo({
@@ -2583,7 +2627,26 @@
 											</div>
 										{/if}
 
-										<div class="ml-1 flex gap-1.5 shrink-0">
+										{#if hasStateChips}
+											<!--
+												Everything past this rule reports state rather than opening
+												something. The line says so without spending a word on it.
+											-->
+											<div
+												class="mx-1.5 h-4 w-px shrink-0 self-center bg-gray-200/70 dark:bg-white/10"
+												aria-hidden="true"
+											></div>
+										{/if}
+
+										<!--
+											overflow-x on its own is not possible: setting one axis to auto makes
+											the other clip too, which would slice the focus ring off a chip. The
+											padding gives the ring room and the negative margin hands the space
+											back, so the row keeps the height it had.
+										-->
+										<div
+											class="scrollbar-hidden -my-1 flex min-w-0 items-center gap-1.5 overflow-x-auto py-1"
+										>
 											{#if (selectedToolIds ?? []).length > 0}
 												<Tooltip
 													content={$i18n.t('{{COUNT}} Available Tools', {
@@ -2591,18 +2654,24 @@
 													})}
 												>
 													<button
-														class="translate-y-[0.5px] px-1 flex gap-1 items-center text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg self-center transition"
-														aria-label={$i18n.t('Available Tools')}
+														class="{CHIP} {CHIP_FOCUS} {CHIP_COUNT}"
+														aria-label={$i18n.t('{{COUNT}} Available Tools', {
+															COUNT: (selectedToolIds ?? []).length
+														})}
 														type="button"
 														on:click={() => {
 															showTools = !showTools;
 														}}
 													>
-														<Wrench className="size-4" strokeWidth="1.75" />
-
-														<span class="text-sm">
-															{(selectedToolIds ?? []).length}
-														</span>
+														<Wrench className="size-3.5 shrink-0" strokeWidth="1.75" />
+														<span class="tabular-nums">{(selectedToolIds ?? []).length}</span>
+														<!--
+															A wrench is not a symbol anyone reads reliably, and a
+															bare count says nothing about what is being counted.
+															The noun is dropped only where the composer is too
+															narrow to carry it.
+														-->
+														<span class="hidden @md:inline">{$i18n.t('Tools')}</span>
 													</button>
 												</Tooltip>
 											{/if}
@@ -2614,90 +2683,97 @@
 													})}
 												>
 													<button
-														class="translate-y-[0.5px] px-1 flex gap-1 items-center text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg self-center transition"
-														aria-label={$i18n.t('Available Skills')}
+														class="{CHIP} {CHIP_FOCUS} {CHIP_COUNT}"
+														aria-label={$i18n.t('{{COUNT}} Available Skills', {
+															COUNT: (selectedSkillIds ?? []).length
+														})}
 														type="button"
 														on:click={() => {
 															showSkills = !showSkills;
 														}}
 													>
-														<Cube className="size-4" strokeWidth="1.75" />
-
-														<span class="text-sm">
-															{(selectedSkillIds ?? []).length}
-														</span>
+														<Cube className="size-3.5 shrink-0" strokeWidth="1.75" />
+														<span class="tabular-nums">{(selectedSkillIds ?? []).length}</span>
+														<span class="hidden @md:inline">{$i18n.t('Skills')}</span>
 													</button>
 												</Tooltip>
 											{/if}
 
+											<!--
+												A filter is a named thing the user switched on, so it says its name. It
+												used to be a bare icon at a size nothing else in the row uses, with the
+												name only in a tooltip -- unreachable on touch, and invisible to anyone
+												scanning the row.
+
+												Two buttons side by side rather than one with a clickable div inside it.
+												The div was not focusable and had no key handler, so a filter with valves
+												could not be removed from the keyboard at all; nesting a real button
+												inside a button is invalid, which is presumably why it was a div.
+											-->
 											{#each selectedFilterIds as filterId (filterId)}
 												{@const filter = toggleFilters.find((f) => f.id === filterId)}
 												{#if filter}
-													<Tooltip
-														content={resolveLocalizedFunction(
-															filter,
-															$localizedFunctions,
-															$i18n.language
-														)}
-														placement="top"
-													>
-														<button
-															on:click|preventDefault={() => {
-																if (
-																	filter?.has_user_valves &&
-																	($_user?.role === 'admin' ||
-																		($_user?.permissions?.chat?.valves ?? true))
-																) {
-																	selectedValvesType = 'function';
-																	selectedValvesItemId = filterId;
-																	showValvesModal = true;
-																} else {
-																	selectedFilterIds = selectedFilterIds.filter(
-																		(id) => id !== filterId
-																	);
-																}
-															}}
-															type="button"
-															class="group p-[0.375rem] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {selectedFilterIds.includes(
-																filterId
-															)
-																? 'text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20'
-																: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '} capitalize"
+													{@const filterName = resolveLocalizedFunction(
+														filter,
+														$localizedFunctions,
+														$i18n.language
+													)}
+													{@const canOpenValves =
+														(filter?.has_user_valves ?? false) &&
+														($_user?.role === 'admin' ||
+															($_user?.permissions?.chat?.valves ?? true))}
+													<div class="{CHIP} {CHIP_MODE} max-w-full gap-0 overflow-hidden !pr-0.5">
+														<Tooltip
+															content={canOpenValves ? $i18n.t('Valves') : filterName}
+															placement="top"
+															className="flex min-w-0"
 														>
-															{#if filter?.icon}
-																<div class="size-4 items-center flex justify-center">
+															<button
+																type="button"
+																class="flex max-w-full items-center gap-1.5 overflow-hidden capitalize {CHIP_FOCUS}"
+																on:click|preventDefault={() => {
+																	if (canOpenValves) {
+																		selectedValvesType = 'function';
+																		selectedValvesItemId = filterId;
+																		showValvesModal = true;
+																	} else {
+																		selectedFilterIds = selectedFilterIds.filter(
+																			(id) => id !== filterId
+																		);
+																	}
+																}}
+															>
+																{#if filter?.icon}
 																	<img
 																		src={filter.icon}
-																		class="size-3.5 {filter.icon.includes('data:image/svg')
+																		class="size-3.5 shrink-0 {filter.icon.includes('data:image/svg')
 																			? 'dark:invert-[80%]'
 																			: ''}"
 																		style="fill: currentColor;"
-																		alt={resolveLocalizedFunction(
-																			filter,
-																			$localizedFunctions,
-																			$i18n.language
-																		)}
+																		alt=""
 																	/>
-																</div>
-															{:else}
-																<Sparkles className="size-4" strokeWidth="1.75" />
-															{/if}
-															<!-- svelte-ignore a11y-click-events-have-key-events -->
-															<!-- svelte-ignore a11y-no-static-element-interactions -->
-															<div
-																class="hidden group-hover:block"
-																on:click={(e) => {
-																	e.stopPropagation();
-																	e.preventDefault();
+																{:else}
+																	<Sparkles className="size-3.5 shrink-0" strokeWidth="1.75" />
+																{/if}
+																<span class="truncate">{filterName}</span>
+															</button>
+														</Tooltip>
+
+														<Tooltip content={$i18n.t('Remove')} placement="top">
+															<button
+																type="button"
+																aria-label={$i18n.t('Remove')}
+																class="ml-1 flex shrink-0 rounded-full p-1 opacity-50 transition hover:opacity-100 {CHIP_FOCUS}"
+																on:click|preventDefault|stopPropagation={() => {
 																	selectedFilterIds = selectedFilterIds.filter(
 																		(id) => id !== filterId
 																	);
 																}}
 															>
-																<XMark className="size-4" strokeWidth="1.75" />
-															</div>
-														</button>
-													</Tooltip>
+																<XMark className="size-3" strokeWidth="2" />
+															</button>
+														</Tooltip>
+													</div>
 												{/if}
 											{/each}
 
@@ -2727,15 +2803,21 @@
 													<button
 														on:click|preventDefault={() => (webSearchEnabled = !webSearchEnabled)}
 														type="button"
-														class="group p-[0.375rem] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {webSearchEnabled ||
-														($settings?.webSearch ?? false) === 'always'
-															? ' text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-600/10 border border-sky-200/40 dark:border-sky-500/20'
-															: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '}"
+														aria-pressed={webSearchEnabled}
+														aria-label={$i18n.t('Web Search')}
+														class="{CHIP} {CHIP_FOCUS} {CHIP_MODE}"
 													>
-														<GlobeAlt className="size-4" strokeWidth="1.75" />
-														<div class="hidden group-hover:block">
-															<XMark className="size-4" strokeWidth="1.75" />
-														</div>
+														<GlobeAlt className="size-3.5 shrink-0" strokeWidth="1.75" />
+														<span class="hidden @md:inline">{$i18n.t('Web Search')}</span>
+														<!--
+															Always drawn, not revealed on hover. Appearing on hover changed
+															the chip's width under the cursor, and a touch screen has no
+															hover at all -- so the way to switch a mode off was never shown.
+														-->
+														<XMark
+															className="size-3 shrink-0 opacity-50 transition group-hover:opacity-100"
+															strokeWidth="2"
+														/>
 													</button>
 												</Tooltip>
 											{/if}
@@ -2746,14 +2828,21 @@
 														on:click|preventDefault={() =>
 															(imageGenerationEnabled = !imageGenerationEnabled)}
 														type="button"
-														class="group p-[0.375rem] flex gap-1.5 items-center text-sm rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden {imageGenerationEnabled
-															? ' text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-700/10 border border-sky-200/40 dark:border-sky-500/20'
-															: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '}"
+														aria-pressed={imageGenerationEnabled}
+														aria-label={$i18n.t('Image')}
+														class="{CHIP} {CHIP_FOCUS} {CHIP_MODE}"
 													>
-														<Photo className="size-4" strokeWidth="1.75" />
-														<div class="hidden group-hover:block">
-															<XMark className="size-4" strokeWidth="1.75" />
-														</div>
+														<Photo className="size-3.5 shrink-0" strokeWidth="1.75" />
+														<span class="hidden @md:inline">{$i18n.t('Image')}</span>
+														<!--
+															Always drawn, not revealed on hover. Appearing on hover changed
+															the chip's width under the cursor, and a touch screen has no
+															hover at all -- so the way to switch a mode off was never shown.
+														-->
+														<XMark
+															className="size-3 shrink-0 opacity-50 transition group-hover:opacity-100"
+															strokeWidth="2"
+														/>
 													</button>
 												</Tooltip>
 											{/if}
@@ -2761,25 +2850,24 @@
 											{#if codeInterpreterEnabled && showCodeInterpreterButton}
 												<Tooltip content={$i18n.t('Code Interpreter')} placement="top">
 													<button
-														aria-label={codeInterpreterEnabled
-															? $i18n.t('Disable Code Interpreter')
-															: $i18n.t('Enable Code Interpreter')}
-														aria-pressed={codeInterpreterEnabled}
 														on:click|preventDefault={() =>
 															(codeInterpreterEnabled = !codeInterpreterEnabled)}
 														type="button"
-														class=" group p-[0.375rem] flex gap-1.5 items-center text-sm transition-colors duration-300 max-w-full overflow-hidden {codeInterpreterEnabled
-															? ' text-sky-500 dark:text-sky-300 bg-sky-50 hover:bg-sky-100 dark:bg-sky-400/10 dark:hover:bg-sky-700/10 border border-sky-200/40 dark:border-sky-500/20'
-															: 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 '} {($settings?.highContrastMode ??
-														false)
-															? 'm-1'
-															: 'focus:outline-hidden rounded-full'}"
+														aria-pressed={codeInterpreterEnabled}
+														aria-label={$i18n.t('Code Interpreter')}
+														class="{CHIP} {CHIP_FOCUS} {CHIP_MODE}"
 													>
-														<Terminal className="size-3.5" strokeWidth="2" />
-
-														<div class="hidden group-hover:block">
-															<XMark className="size-4" strokeWidth="1.75" />
-														</div>
+														<Terminal className="size-3.5 shrink-0" strokeWidth="1.75" />
+														<span class="hidden @md:inline">{$i18n.t('Code Interpreter')}</span>
+														<!--
+															Always drawn, not revealed on hover. Appearing on hover changed
+															the chip's width under the cursor, and a touch screen has no
+															hover at all -- so the way to switch a mode off was never shown.
+														-->
+														<XMark
+															className="size-3 shrink-0 opacity-50 transition group-hover:opacity-100"
+															strokeWidth="2"
+														/>
 													</button>
 												</Tooltip>
 											{/if}

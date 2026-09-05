@@ -3,6 +3,8 @@
 	import type { Writable } from 'svelte/store';
 	import type { i18n as i18nType } from 'i18next';
 
+	import { settings } from '$lib/stores';
+
 	import Dropdown from '$lib/components/common/Dropdown.svelte';
 	import DropdownMenu from '$lib/components/common/DropdownMenu.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -53,11 +55,19 @@
 				? $i18n.t('Thinking effort: {{level}} (default)', { level: labelFor(effective) })
 				: $i18n.t('Thinking effort: {{level}}', { level: labelFor(effective) });
 
-	const pillClass = (on: boolean) =>
-		`group flex max-w-full items-center gap-1.5 overflow-hidden rounded-full p-[0.375rem] text-sm transition-colors duration-300 focus:outline-hidden ${
+	// High contrast is the one mode that exists to stop relying on colour, so it
+	// is the one mode that keeps the focus ring the rest of the row suppresses.
+	$: focusClass = ($settings?.highContrastMode ?? false) ? '' : 'focus:outline-hidden';
+
+	// The same shape the composer gives everything else that reports state, so a
+	// row of them reads as one family rather than as several unrelated controls.
+	// The off state carries a transparent border rather than none, or the pill
+	// would change size the moment thinking is switched on.
+	$: pillClass = (on: boolean) =>
+		`group flex max-w-full shrink-0 items-center gap-1.5 overflow-hidden rounded-full border px-2 py-[0.1875rem] text-xs transition-colors duration-300 ${focusClass} ${
 			on
-				? 'border border-amber-200/40 bg-amber-50 text-amber-600 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-400/10 dark:text-amber-300 dark:hover:bg-amber-600/10'
-				: 'bg-transparent text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+				? 'border-amber-200/40 bg-amber-50 text-amber-600 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-400/10 dark:text-amber-300 dark:hover:bg-amber-600/10'
+				: 'border-transparent bg-transparent text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
 		}`;
 </script>
 
@@ -71,14 +81,30 @@
 				class={pillClass(switchedOn)}
 				on:click|preventDefault={() => onSelect(switchedOn ? 'off' : 'high')}
 			>
-				<LightBulb className="size-4" strokeWidth="1.75" />
+				<LightBulb className="size-3.5 shrink-0" strokeWidth="1.75" />
+				<!--
+					A lit bulb is not a word. It was the only control left in this row
+					that showed its state as colour alone, which is the reading the rest
+					of the row stopped relying on.
+				-->
+				<span class="hidden @md:inline">{$i18n.t('Thinking')}</span>
 			</button>
 		</Tooltip>
 	{:else}
 		<Dropdown bind:show side="top" align="start" sideOffset={6}>
 			<Tooltip content={menuTooltip} placement="top">
-				<button type="button" aria-label={$i18n.t('Thinking effort')} class={pillClass(active)}>
-					<LightBulb className="size-4" strokeWidth="1.75" />
+				<button type="button" aria-label={menuTooltip} class={pillClass(active)}>
+					<LightBulb className="size-3.5 shrink-0" strokeWidth="1.75" />
+					<!--
+						A level on its own ("High") does not say what is high, and on model
+						default there is no level to name at all. The noun leads either way,
+						so the chip can be found by reading it rather than by recognising a
+						bulb, and the value follows when there is one.
+					-->
+					<span class="hidden @md:inline">{$i18n.t('Thinking')}</span>
+					{#if effective !== null}
+						<span class="hidden opacity-70 @md:inline">{labelFor(effective)}</span>
+					{/if}
 				</button>
 			</Tooltip>
 
