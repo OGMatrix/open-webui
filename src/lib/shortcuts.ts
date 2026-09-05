@@ -25,6 +25,7 @@ export enum Shortcut {
 	TOGGLE_DICTATION = 'toggleDictation',
 	NAVIGATE_CHAT_UP = 'navigateChatUp',
 	NAVIGATE_CHAT_DOWN = 'navigateChatDown',
+	FIND_IN_CHAT = 'findInChat',
 
 	//Global
 	SEARCH = 'search',
@@ -64,6 +65,7 @@ export const CONFIGURABLE_SHORTCUTS = [
 	Shortcut.TOGGLE_DICTATION,
 	Shortcut.NAVIGATE_CHAT_UP,
 	Shortcut.NAVIGATE_CHAT_DOWN,
+	Shortcut.FIND_IN_CHAT,
 	Shortcut.SEARCH,
 	Shortcut.OPEN_SETTINGS,
 	Shortcut.SHOW_SHORTCUTS,
@@ -90,6 +92,7 @@ export const DEFAULT_KEYBINDINGS: KeybindingsMap = {
 	[Shortcut.TOGGLE_DICTATION]: 'Cmd+Shift+L',
 	[Shortcut.NAVIGATE_CHAT_UP]: '',
 	[Shortcut.NAVIGATE_CHAT_DOWN]: '',
+	[Shortcut.FIND_IN_CHAT]: 'Cmd+F',
 	[Shortcut.SEARCH]: 'Cmd+K',
 	[Shortcut.OPEN_SETTINGS]: 'Cmd+.',
 	[Shortcut.SHOW_SHORTCUTS]: 'Cmd+/',
@@ -244,6 +247,13 @@ export const shortcuts: ShortcutRegistry = {
 		name: 'Navigate to Previous Chat',
 		keys: [],
 		category: 'Chat',
+		configurable: true
+	},
+	[Shortcut.FIND_IN_CHAT]: {
+		name: 'Find in Chat',
+		keys: ['mod', 'F'],
+		category: 'Chat',
+		tooltip: 'Searches the conversation on screen, including messages not yet loaded.',
 		configurable: true
 	},
 	[Shortcut.NAVIGATE_CHAT_DOWN]: {

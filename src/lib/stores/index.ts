@@ -143,6 +143,8 @@ export type SettingsModalRequest = {
 
 export const showSidebar = writable(false);
 export const showSearch = writable(false);
+/** Find within the conversation on screen, as opposed to across chats. */
+export const showFindInChat = writable(false);
 export const showSettings: Writable<boolean | string | SettingsModalRequest> = writable(false);
 export const showChangelog = writable(false);
 

@@ -172,6 +172,20 @@
 		}
 	};
 
+	/**
+	 * Stop paging and put the whole branch on the page.
+	 *
+	 * Messages arrive eight at a time as the reader scrolls up, so anything
+	 * older than the last few is not in the document at all. Searching has to be
+	 * able to reach it without asking the reader to scroll for it.
+	 */
+	export const renderAll = async () => {
+		if (messagesCount === null) return;
+		messagesCount = null;
+		buildMessages();
+		await tick();
+	};
+
 	export const scrollToTop = async () => {
 		messagesCount = null;
 		buildMessages();

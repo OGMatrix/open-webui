@@ -28,6 +28,7 @@
 		socket,
 		audioQueue,
 		showControls,
+		showFindInChat,
 		showCallOverlay,
 		temporaryChatEnabled,
 		mobile,
@@ -128,6 +129,7 @@
 	import Banner from '../common/Banner.svelte';
 	import MessageInput from '$lib/components/chat/MessageInput.svelte';
 	import Messages from '$lib/components/chat/Messages.svelte';
+	import FindInChat from '$lib/components/chat/FindInChat.svelte';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
 	import ChatControls from './ChatControls.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
@@ -4659,7 +4661,35 @@
 							}}
 						/>
 					{/if}
-					<div id="chat-pane" class="flex flex-col flex-auto z-10 w-full @container overflow-auto">
+					<div
+						id="chat-pane"
+						class="relative flex flex-col flex-auto z-10 w-full @container overflow-auto"
+					>
+						<!--
+							Floats over the conversation rather than displacing it: the line
+							someone is reading should not move when they start looking for it.
+							The wrapper ignores the pointer so the messages under it stay
+							selectable; the bar itself takes it back.
+						-->
+						<div
+							class="pointer-events-none absolute inset-x-0 top-0 z-40 flex justify-end px-3 {embedded
+								? 'pt-3'
+								: 'pt-20'}"
+						>
+							<FindInChat
+								bind:show={$showFindInChat}
+								{history}
+								renderAll={async () => {
+									await messagesRef?.renderAll();
+								}}
+								onNavigate={() => {
+									// Jumping to a hit and being dragged back to the bottom by a
+									// streaming answer would make the feature unusable mid-run.
+									autoScroll = false;
+								}}
+							/>
+						</div>
+
 						{#if ($settings?.landingPageMode === 'chat' && !$selectedFolder) || createMessagesList(history, history.currentId).length > 0}
 							<div
 								class=" pb-2.5 flex flex-col justify-between w-full flex-auto overflow-auto h-0 max-w-full z-10 scrollbar-hidden"

@@ -36,6 +36,7 @@
 		terminalServers,
 		selectedTerminalId,
 		showSearch,
+		showFindInChat,
 		showSidebar,
 		showControls,
 		mobile,
@@ -280,7 +281,20 @@
 				}
 
 				const shortcut = matchKeybinding(event);
-				if (shortcut === Shortcut.SEARCH) {
+				if (shortcut === Shortcut.FIND_IN_CHAT) {
+					// Takes the browser's own find, which cannot see the messages that
+					// have not been paged in yet -- which in a long chat is most of them.
+					event.preventDefault();
+					showFindInChat.set(true);
+					await tick();
+					// Pressing it again while the bar is open selects what is in it,
+					// which is what a second press of a find shortcut always does.
+					const findInput = document.getElementById('find-in-chat-input');
+					if (findInput instanceof HTMLInputElement) {
+						findInput.focus();
+						findInput.select();
+					}
+				} else if (shortcut === Shortcut.SEARCH) {
 					console.log('Shortcut triggered: SEARCH');
 					event.preventDefault();
 					showSearch.set(!$showSearch);

@@ -1056,3 +1056,25 @@ html.high-contrast:not(.dark) .shimmer {
 	color: var(--color-gray-800);
 	-webkit-text-fill-color: var(--color-gray-800);
 }
+
+/* Search hits, painted with the CSS Custom Highlight API.
+   Ranges rather than wrapper elements: the messages are rendered by Svelte, and
+   inserting <mark> into them would be undone on the next render. Only colour is
+   set, because a highlight pseudo-element accepts nothing that reflows text. */
+::highlight(owui-find) {
+	background-color: rgba(250, 204, 21, 0.35);
+	color: inherit;
+}
+
+::highlight(owui-find-current) {
+	background-color: rgba(249, 115, 22, 0.55);
+	color: inherit;
+}
+
+html.dark ::highlight(owui-find) {
+	background-color: rgba(250, 204, 21, 0.28);
+}
+
+html.dark ::highlight(owui-find-current) {
+	background-color: rgba(249, 115, 22, 0.5);
+}
