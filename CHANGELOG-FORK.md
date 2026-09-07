@@ -13,6 +13,19 @@ Releases are produced by the `Fork · Release` workflow, which writes this file.
 
 <!-- fork-release: new entries are inserted directly below this line -->
 
+## [0.11.3-ogm.8] - 2026-09-07
+
+Built on Open WebUI `0.11.3` (`upstream/dev` at `57acc2b68`), fork commit `1e173188d`.
+
+Upstream: 41 commit(s) merged from open-webui/open-webui, still 0.11.3.
+
+### Added
+
+- Make a long answer comfortable to read (921f3eb10)
+
+### Fixed
+
+- Follow the answer from a signal that actually fires (877a161e9)
 ## [0.11.3-ogm.7] - 2026-09-05
 
 Built on Open WebUI `0.11.3` (`upstream/dev` at `85b11a4f3`), fork commit `5162ca7aa`.
