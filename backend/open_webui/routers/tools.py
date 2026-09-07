@@ -341,6 +341,7 @@ async def export_tools(
     return await Tools.get_tools(
         db=db,
         user_id=None if bypass_access_control else user.id,
+        permission='write',
     )
 
 

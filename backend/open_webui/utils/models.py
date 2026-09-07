@@ -438,7 +438,14 @@ async def get_all_models(request, refresh: bool = False, user: UserModel = None)
 
     log.debug('get_all_models() returned %s models', len(models))
 
-    models_dict = {model['id']: model for model in models}
+    models_dict = {}
+    for model in models:
+        model = model.copy()
+        if model.get('ollama'):
+            # Keep the moving expiry in the API response, outside the registry signature.
+            model['ollama'] = model['ollama'].copy()
+            model['ollama'].pop('expires_at', None)
+        models_dict[model['id']] = model
     if isinstance(request.app.state.MODELS, RedisDict):
         try:
             request.app.state.MODELS.set(models_dict)

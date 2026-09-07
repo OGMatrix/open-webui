@@ -1465,7 +1465,11 @@ export const getLineCount = (text) => {
 };
 
 // Helper function to recursively resolve OpenAPI schema into JSON schema format
-function resolveSchema(schemaRef, components, resolvedSchemas = new Set()) {
+export function resolveSchema(
+	schemaRef,
+	components,
+	resolvedSchemas = new Set()
+): Record<string, any> {
 	if (!schemaRef) return {};
 
 	if (schemaRef['$ref']) {

@@ -2,7 +2,7 @@
 	import { getRAGConfig, updateRAGConfig } from '$lib/apis/retrieval';
 	import Switch from '$lib/components/common/Switch.svelte';
 
-	import { models } from '$lib/stores';
+	import { config, models } from '$lib/stores';
 	import { onMount, getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import SensitiveInput from '$lib/components/common/SensitiveInput.svelte';
@@ -210,7 +210,7 @@
 						<option disabled selected value="">{$i18n.t('Select a engine')}</option>
 						{#each webSearchEngines as engine}
 							{#if engine === 'duckduckgo' || engine === 'ddgs'}
-								<option value={engine}>DDGS</option>
+								<option value={engine} disabled={$config?.features?.slim}>DDGS</option>
 							{:else if engine === 'serphouse'}
 								<option value={engine}>SERPHouse</option>
 							{:else}
@@ -1174,7 +1174,9 @@
 					>
 						<option value="">{$i18n.t('Default')}</option>
 						{#each webLoaderEngines as engine}
-							<option value={engine}>{engine}</option>
+							<option value={engine} disabled={$config?.features?.slim && engine === 'playwright'}
+								>{engine}</option
+							>
 						{/each}
 					</SettingsSelect>
 				</AdminSettingRow>

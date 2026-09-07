@@ -29,6 +29,7 @@ import urllib3.connection
 import urllib3.connectionpool
 import validators
 from requests.adapters import HTTPAdapter
+from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 from langchain_community.document_loaders import PlaywrightURLLoader, WebBaseLoader
 from langchain_community.document_loaders.base import BaseLoader
@@ -58,6 +59,7 @@ from open_webui.env import (
     AIOHTTP_CLIENT_SSL_CERT_FILE,
     AIOHTTP_CLIENT_TIMEOUT,
     USER_AGENT,
+    USE_SLIM,
 )
 from open_webui.retrieval.loaders.external_web import ExternalWebLoader
 from open_webui.retrieval.loaders.microsoft_web_iq import MicrosoftWebIQLoader
@@ -301,6 +303,9 @@ _DROPPED_REQUEST_HEADERS = {'accept-encoding', 'connection', 'content-length', '
 
 # The clients hand us a decoded body, so the sender's framing no longer describes it.
 _DROPPED_RESPONSE_HEADERS = {'connection', 'content-encoding', 'content-length', 'transfer-encoding'}
+
+# The Playwright loader only reads the page HTML, which none of these feed.
+_DROPPED_RESOURCE_TYPES = {'font', 'image', 'media'}
 
 
 def _forwardable_request_headers(headers: Dict[str, str]) -> Dict[str, str]:
@@ -674,6 +679,10 @@ class SafePlaywrightURLLoader(PlaywrightURLLoader, RateLimitMixin, URLProcessing
         playwright_timeout: Optional[int] = 10000,
     ):
         """Initialize with additional safety parameters and remote browser support."""
+        if USE_SLIM:
+            raise HTTPException(
+                503, 'Playwright is unavailable in slim. Use basic HTTP fetching or an external web loader.'
+            )
 
         proxy_server = proxy.get('server') if proxy else None
         if trust_env and not proxy_server:
@@ -719,6 +728,9 @@ class SafePlaywrightURLLoader(PlaywrightURLLoader, RateLimitMixin, URLProcessing
 
     def _intercept_navigation_sync(self, route, session):
         req = route.request
+        if req.resource_type in _DROPPED_RESOURCE_TYPES:
+            route.abort()
+            return
 
         hop_cookies: List[Tuple[str, str]] = []
 
@@ -773,6 +785,9 @@ class SafePlaywrightURLLoader(PlaywrightURLLoader, RateLimitMixin, URLProcessing
 
     async def _intercept_navigation(self, route, session):
         req = route.request
+        if req.resource_type in _DROPPED_RESOURCE_TYPES:
+            await route.abort()
+            return
 
         hop_cookies: List[Tuple[str, str]] = []
 
