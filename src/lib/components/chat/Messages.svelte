@@ -140,12 +140,14 @@
 			cancelAnimationFrame(pendingRebuild);
 			pendingRebuild = null;
 			buildMessages();
+			void followAfterRender();
 		} else if (_messages) {
 			// Content update (streaming) — throttle to once per frame
 			if (!pendingRebuild) {
 				pendingRebuild = requestAnimationFrame(() => {
 					pendingRebuild = null;
 					buildMessages();
+					void followAfterRender();
 				});
 			}
 		}
@@ -156,14 +158,15 @@
 	/**
 	 * Keep the view at the end of a growing answer.
 	 *
-	 * Watching the content rather than the history: an answer grows for reasons
-	 * the message list never hears about -- a code block laying out, an image
-	 * arriving, a tool call opening -- and all of them move the bottom away.
+	 * Driven by the list rebuild above, which runs on every change to the
+	 * history -- during streaming, every token. An earlier attempt watched an
+	 * element for resizes instead and watched the wrong one: the node it
+	 * observed carries `h-full`, so its height is the container's height and it
+	 * never grows. It fired on window resizes and on nothing else.
 	 *
 	 * The reader is followed only while they are still at the end. Scrolling up
 	 * stops it, and the scroll handler that sets `autoScroll` is what notices.
 	 */
-	let contentElement: HTMLElement | null = null;
 	let followScheduled = 0;
 	let lastHeight = 0;
 
@@ -182,23 +185,39 @@
 		container.scrollTop = container.scrollHeight;
 	};
 
+	/**
+	 * Scroll once the tokens that arrived are actually laid out.
+	 *
+	 * `tick` waits for Svelte to apply the change; the frame after it is where
+	 * the browser has measured the result, and measuring before that reads the
+	 * height the pane had a moment ago.
+	 */
+	const followAfterRender = async () => {
+		await tick();
+		cancelAnimationFrame(followScheduled);
+		followScheduled = requestAnimationFrame(follow);
+	};
+
+	/**
+	 * Content that settles after the last token.
+	 *
+	 * An image finishing its download makes the pane taller without any change
+	 * to the history, so the rebuild never hears about it and the view is left
+	 * short of the end. `load` does not bubble, hence the capture phase.
+	 */
+	const onLateLayout = () => {
+		cancelAnimationFrame(followScheduled);
+		followScheduled = requestAnimationFrame(follow);
+	};
+
 	onMount(() => {
 		const container = getMessagesContainer();
 		lastHeight = container?.scrollHeight ?? 0;
-
-		if (typeof ResizeObserver === 'undefined' || !contentElement) return;
-
-		const observer = new ResizeObserver(() => {
-			// A resize observer can fire several times for one frame of growth;
-			// scrolling once per frame is enough and avoids fighting the browser.
-			cancelAnimationFrame(followScheduled);
-			followScheduled = requestAnimationFrame(follow);
-		});
-		observer.observe(contentElement);
+		container?.addEventListener('load', onLateLayout, true);
 
 		return () => {
 			cancelAnimationFrame(followScheduled);
-			observer.disconnect();
+			container?.removeEventListener('load', onLateLayout, true);
 		};
 	});
 
@@ -583,7 +602,7 @@
 	};
 </script>
 
-<div bind:this={contentElement} class={className}>
+<div class={className}>
 	{#if Object.keys(history?.messages ?? {}).length == 0}
 		<ChatPlaceholder modelIds={selectedModels} {atSelectedModel} {onSelect} />
 	{:else}
