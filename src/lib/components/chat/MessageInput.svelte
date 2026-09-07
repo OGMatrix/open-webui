@@ -1905,7 +1905,7 @@
 			<div
 				class="flex flex-col px-3 {($settings?.widescreenMode ?? null)
 					? 'max-w-full'
-					: 'max-w-[58rem]'} w-full"
+					: 'reading-column'} w-full"
 			>
 				<div class="relative">
 					{#if autoScroll === false && history?.currentId}
@@ -1943,7 +1943,7 @@
 			<div
 				class="{($settings?.widescreenMode ?? null)
 					? 'max-w-full'
-					: 'max-w-[58rem]'} px-2 mx-auto inset-x-0"
+					: 'reading-column'} px-2 mx-auto inset-x-0"
 			>
 				<div class="">
 					<input

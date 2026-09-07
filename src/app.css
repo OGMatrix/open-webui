@@ -1088,3 +1088,37 @@ html.dark ::highlight(owui-find) {
 html.dark ::highlight(owui-find-current) {
 	background-color: rgba(249, 115, 22, 0.5);
 }
+
+/* Reading comfort.
+   ----------------
+   Measured against this stylesheet before touching it: rendered markdown put
+   headings and bold at pure #ffffff on a #161616 field, a ratio of 18.1:1,
+   while body text sat at #d1d5dc (12.3:1). Pure white glyphs on a dark field
+   bloom into it -- halation -- and an assistant's answer is dense with bold,
+   so most of what the eye tracks was the part that glows. Body text was
+   already where it should be; only the emphasis was not.
+
+   Headings and bold now sit just below white. They stay clearly above the body
+   text, which is what emphasis needs, and they stop blooming. */
+html.dark :is(.markdown-prose, .markdown-prose-sm, .markdown-prose-xs) {
+	--tw-prose-invert-headings: #e4e6e9;
+	--tw-prose-invert-bold: #e4e6e9;
+	--tw-prose-invert-quotes: #e4e6e9;
+	--tw-prose-invert-lead: #c9ced5;
+	--tw-prose-invert-counters: #9aa1a9;
+	--tw-prose-invert-bullets: #71787f;
+}
+
+/* High contrast is the one mode that asks for the full separation back. */
+html.dark.high-contrast :is(.markdown-prose, .markdown-prose-sm, .markdown-prose-xs) {
+	--tw-prose-invert-headings: #ffffff;
+	--tw-prose-invert-bold: #ffffff;
+	--tw-prose-invert-quotes: #ffffff;
+}
+
+/* The column a conversation is read in. Set from the reading-width setting on
+   the root; the fallback matches the default so the layout does not jump in the
+   moment between the stylesheet arriving and the setting being applied. */
+.reading-column {
+	max-width: var(--reading-width, 42rem);
+}

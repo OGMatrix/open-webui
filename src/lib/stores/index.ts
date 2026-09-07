@@ -254,6 +254,8 @@ type Settings = {
 	imageCompression?: boolean;
 	imageCompressionSize?: any;
 	textScale?: number;
+	/** How wide a line of an answer runs; see utils/readingComfort. */
+	readingWidth?: 'narrow' | 'comfortable' | 'wide';
 	fontFamily?: string | null;
 	widescreenMode?: null;
 	largeTextAsFile?: boolean;

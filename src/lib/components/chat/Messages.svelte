@@ -66,7 +66,7 @@
 	 * in step with the wrapper in Messages/Message.svelte.
 	 */
 	$: messageColumnClass = `mx-auto w-full px-3.5 ${
-		($settings?.widescreenMode ?? null) ? 'max-w-full' : 'max-w-[58rem]'
+		($settings?.widescreenMode ?? null) ? 'max-w-full' : 'reading-column'
 	}`;
 
 	export let onSelect = (e) => {};

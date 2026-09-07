@@ -5,6 +5,13 @@
 	import { updateUserInfo } from '$lib/apis/users';
 	import { getUserPosition } from '$lib/utils';
 	import { normalizeAppFontFamily, setAppFontFamily, setTextScale } from '$lib/utils/text-scale';
+	import {
+		READING_WIDTHS,
+		charactersPerLine,
+		normalizeReadingWidth,
+		setReadingWidth,
+		type ReadingWidth
+	} from '$lib/utils/readingComfort';
 	import { canWriteClipboard } from '$lib/utils/mediaAccess';
 
 	import Minus from '$lib/components/icons/Minus.svelte';
@@ -36,6 +43,7 @@
 
 	let responseAutoCopy = false;
 	let widescreenMode = false;
+	let readingWidth: ReadingWidth = 'comfortable';
 	let splitLargeChunks = false;
 	let scrollOnBranchChange = true;
 	let scrollOnResponseGeneration = true;
@@ -232,6 +240,24 @@
 		toast.error($i18n.t('This browser cannot copy to the clipboard.'));
 	};
 
+	/**
+	 * Step through the reading widths.
+	 *
+	 * A conversation was being read at about a hundred and twenty characters a
+	 * line. Typography research puts a comfortable line between fifty and seventy
+	 * five, and ninety at the outside; past that the eye starts missing the start
+	 * of the next line, which is what makes a long answer tiring to read.
+	 */
+	const cycleReadingWidth = () => {
+		const order: ReadingWidth[] = ['narrow', 'comfortable', 'wide'];
+		readingWidth = order[(order.indexOf(readingWidth) + 1) % order.length];
+
+		if (!externalSettings) {
+			setReadingWidth(readingWidth);
+		}
+		saveSettings({ readingWidth });
+	};
+
 	const toggleChangeChatDirection = async () => {
 		if (chatDirection === 'auto') {
 			chatDirection = 'LTR';
@@ -379,6 +405,7 @@
 		landingPageMode = currentSettings?.landingPageMode ?? '';
 		chatBubble = currentSettings?.chatBubble ?? true;
 		widescreenMode = currentSettings?.widescreenMode ?? false;
+		readingWidth = normalizeReadingWidth(currentSettings?.readingWidth);
 		splitLargeChunks = currentSettings?.splitLargeChunks ?? false;
 		scrollOnBranchChange = currentSettings?.scrollOnBranchChange ?? true;
 		scrollOnResponseGeneration = currentSettings?.scrollOnResponseGeneration ?? true;
@@ -819,6 +846,36 @@
 		</div>
 		<p class={settingDescriptionClass}>
 			{$i18n.t('Queue outgoing messages instead of interrupting active responses.')}
+		</p>
+	</div>
+
+	<div>
+		<div class={settingRowClass}>
+			<div id="reading-width-label" class={settingLabelClass}>
+				{$i18n.t('Text Width')}
+			</div>
+
+			<button
+				aria-labelledby="reading-width-label reading-width-value"
+				class={actionButtonClass}
+				on:click={cycleReadingWidth}
+				type="button"
+			>
+				<!--
+					The measure, not just a name: a width is worth choosing by what it
+					does to a line, and the number is what the research is about.
+				-->
+				<span id="reading-width-value">
+					{$i18n.t('{{COUNT}} characters', {
+						COUNT: charactersPerLine(READING_WIDTHS[readingWidth])
+					})}
+				</span>
+			</button>
+		</div>
+		<p class={settingDescriptionClass}>
+			{$i18n.t(
+				'How wide a line of an answer runs. Around 50 to 75 characters reads most comfortably.'
+			)}
 		</p>
 	</div>
 
