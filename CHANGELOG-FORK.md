@@ -13,6 +13,20 @@ Releases are produced by the `Fork · Release` workflow, which writes this file.
 
 <!-- fork-release: new entries are inserted directly below this line -->
 
+## [0.11.3-ogm.9] - 2026-09-08
+
+Built on Open WebUI `0.11.3` (`upstream/dev` at `ba34bee2d`), fork commit `03b627c16`.
+
+Upstream: 18 commit(s) merged from open-webui/open-webui, still 0.11.3.
+
+### Added
+
+- Let a conversation remember which tools it was using (73cddbce4)
+- Presets, one switch for a whole list, and a word before you send (0010a2de3)
+
+### Fixed
+
+- Stop the context gauge being squeezed into a column (61b5d04aa)
 ## [0.11.3-ogm.8] - 2026-09-07
 
 Built on Open WebUI `0.11.3` (`upstream/dev` at `57acc2b68`), fork commit `1e173188d`.
