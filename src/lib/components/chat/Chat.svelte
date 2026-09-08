@@ -135,6 +135,13 @@
 	import ChatOutline from '$lib/components/chat/ChatOutline.svelte';
 	import { createNewNote } from '$lib/apis/notes';
 	import { titleFor, withCanvasContext } from '$lib/utils/canvas';
+	import {
+		emptySelection,
+		readUserDefault,
+		resolveSelection,
+		sameSelection,
+		type ComposerSelection
+	} from '$lib/utils/composerSelection';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
 	import ChatControls from './ChatControls.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
@@ -771,14 +778,79 @@
 		}
 	};
 
-	let oldSelectedModelIds = [''];
-	$: if (!equal(selectedModelIds, oldSelectedModelIds)) {
-		onSelectedModelIdsChange();
+	/** Everything the composer has switched on, as one value. */
+	$: currentSelection = {
+		toolIds: selectedToolIds ?? [],
+		skillIds: selectedSkillIds ?? [],
+		filterIds: selectedFilterIds ?? [],
+		webSearch: webSearchEnabled === true,
+		imageGeneration: imageGenerationEnabled === true,
+		codeInterpreter: codeInterpreterEnabled === true
+	} satisfies ComposerSelection;
+
+	/**
+	 * Which ids can still be selected, so a deleted tool is not offered back.
+	 *
+	 * A store that has not loaded yet says nothing about what exists, which is not
+	 * the same as saying nothing does -- and pruning against that would drop every
+	 * tool a conversation had, simply for opening it before the list arrived.
+	 */
+	const availableIds = () => ({
+		toolIds: $tools ? $tools.map((tool) => tool.id) : undefined,
+		// An inactive skill is not selectable, so it is not available either.
+		skillIds: $skills
+			? $skills.filter((skill) => skill.is_active).map((skill) => skill.id)
+			: undefined
+	});
+
+	/**
+	 * The selection as of the last time it was applied or saved.
+	 *
+	 * Opening a chat applies one, and writing that straight back would touch the
+	 * chat -- which moves it to the top of the sidebar. So this marks where the
+	 * composer was put, and only a difference from it is the reader's own doing.
+	 */
+	let selectionBaseline: ComposerSelection | null = null;
+
+	const applySelection = (selection: ComposerSelection) => {
+		selectedToolIds = selection.toolIds;
+		selectedSkillIds = selection.skillIds;
+		selectedFilterIds = selection.filterIds;
+		webSearchEnabled = selection.webSearch;
+		imageGenerationEnabled = selection.imageGeneration;
+		codeInterpreterEnabled = selection.codeInterpreter;
+		selectionBaseline = selection;
+	};
+
+	$: selectionChanged =
+		selectionBaseline !== null && !sameSelection(currentSelection, selectionBaseline);
+
+	/**
+	 * Only a model the reader actually changed resets the selection.
+	 *
+	 * This used to start at [''], so the first real model arriving looked like a
+	 * change and wiped the selection on every mount -- which is what made opening
+	 * a chat, or starting one, hand back the model's list of tools however
+	 * carefully the reader had chosen otherwise.
+	 */
+	let oldSelectedModelIds: string[] | null = null;
+	$: {
+		const chosen = (selectedModelIds ?? []).filter((id) => id);
+		if (chosen.length > 0) {
+			if (oldSelectedModelIds === null) {
+				oldSelectedModelIds = structuredClone(chosen);
+			} else if (!equal(chosen, oldSelectedModelIds)) {
+				onSelectedModelIdsChange(chosen);
+			}
+		}
 	}
 
-	const onSelectedModelIdsChange = () => {
+	const onSelectedModelIdsChange = (chosen: string[]) => {
+		oldSelectedModelIds = structuredClone(chosen);
+		// A chat being opened is not a model being changed; loadChat applies what
+		// that conversation was using once it has it.
+		if (loading) return;
 		resetInput();
-		oldSelectedModelIds = structuredClone(selectedModelIds);
 	};
 
 	const mergeFiles = (current, incoming) => {
@@ -798,18 +870,31 @@
 
 		try {
 			const input = JSON.parse(storageChatInput);
-			prompt = input.prompt ?? '';
-			messageInput?.setText(prompt);
-			files = input.files ?? [];
-			selectedToolIds = input.selectedToolIds ?? [];
-			selectedSkillIds = input.selectedSkillIds ?? [];
-			selectedFilterIds = input.selectedFilterIds ?? [];
-			webSearchEnabled = input.webSearchEnabled ?? false;
-			imageGenerationEnabled = input.imageGenerationEnabled ?? false;
-			codeInterpreterEnabled = input.codeInterpreterEnabled ?? false;
+			const draftPrompt = input.prompt ?? '';
+			const draftFiles = input.files ?? [];
+			// A draft carries what was switched on when it was written. Pruned on the
+			// way back in, because a tool can have been deleted since.
+			const draftSelection = resolveSelection({ saved: input }, availableIds());
+
 			if (input.toolApprovalMode) {
 				await handleToolApprovalModeChange(input.toolApprovalMode);
 			}
+
+			// Only a draft with a message in it is a message being written, and only
+			// that speaks over the defaults -- tools and all, including a draft whose
+			// tools were deliberately switched off.
+			//
+			// One is written whenever the composer changes, so without this a new chat
+			// inherits the last chat's tools, and merely visiting the home page leaves
+			// an empty one behind that would switch everything off.
+			if (draftPrompt === '' && draftFiles.length === 0) {
+				return false;
+			}
+
+			prompt = draftPrompt;
+			messageInput?.setText(prompt);
+			files = draftFiles;
+			applySelection(draftSelection);
 			return true;
 		} catch (e) {
 			return false;
@@ -926,13 +1011,16 @@
 	}
 
 	let saveControlsTimer;
-	$: if (!loading && !$temporaryChatEnabled && $chatId && params && chatFiles) {
+	$: if (!loading && !$temporaryChatEnabled && $chatId && params && chatFiles && currentSelection) {
 		clearTimeout(saveControlsTimer);
 		saveControlsTimer = setTimeout(saveControls, 400);
 	}
 
 	const navigateHandler = async () => {
 		noteChatDebug('navigateHandler start');
+		// A conversation is being opened, so its selection is due to be put back.
+		selectionRestoredFor = null;
+		selectionRestored = false;
 		// Mark the outgoing chat as read before loading the new one.
 		// $chatId still holds the previous chat here — loadChat() updates it.
 		if ($chatId && $chatId !== chatIdProp && !$temporaryChatEnabled) {
@@ -980,7 +1068,9 @@
 				await processNextInQueue(chatIdProp);
 			}
 
-			if (!(await restoreChatInput(storageChatInput))) {
+			// Defaults are for a conversation that has never chosen anything. Running
+			// them over one that has is what re-enabled every tool on every open.
+			if (!(await restoreChatInput(storageChatInput)) && !selectionRestored) {
 				await setDefaults();
 			}
 
@@ -1087,17 +1177,29 @@
 	};
 
 	const resetInput = async () => {
-		selectedToolIds = [];
-		selectedSkillIds = [];
-		selectedFilterIds = [];
+		applySelection(emptySelection());
 		pendingOAuthTools = [];
-		webSearchEnabled = false;
-		imageGenerationEnabled = false;
-		codeInterpreterEnabled = false;
 
 		if (selectedModelIds.filter((id) => id).length > 0) {
 			await setDefaults();
 		}
+	};
+
+	/**
+	 * What this conversation was using, put back.
+	 *
+	 * Returns whether there was anything to put back, so a conversation that
+	 * never saved one still falls through to the defaults.
+	 */
+	/** Whether the conversation now open supplied a selection of its own. */
+	let selectionRestored = false;
+	/** The conversation whose saved selection has been put back. */
+	let selectionRestoredFor: string | null = null;
+
+	const restoreSavedSelection = (saved: unknown): boolean => {
+		if (saved === undefined || saved === null) return false;
+		applySelection(resolveSelection({ saved }, availableIds()));
+		return true;
 	};
 
 	/** Check whether a terminal ID references an available system or direct terminal. */
@@ -1116,11 +1218,30 @@
 		selectedTerminalId.set(null);
 	}
 
-	let settingDefaults = false;
+	/**
+	 * The defaults being applied, if they are.
+	 *
+	 * A second caller waits for the one already running rather than skipping past
+	 * it. Skipping meant returning before the defaults had landed, so whatever the
+	 * caller did next -- restoring a half-written message's tools, say -- was
+	 * overwritten a moment later by the call it thought it had avoided.
+	 */
+	let settingDefaults: Promise<void> | null = null;
 	const setDefaults = async () => {
-		if (settingDefaults) return;
-		settingDefaults = true;
+		if (settingDefaults) {
+			await settingDefaults;
+			return;
+		}
 
+		settingDefaults = applyDefaults();
+		try {
+			await settingDefaults;
+		} finally {
+			settingDefaults = null;
+		}
+	};
+
+	const applyDefaults = async () => {
 		try {
 			if (!$tools) {
 				tools.set(await getTools(localStorage.token));
@@ -1137,86 +1258,84 @@
 
 			const model = atSelectedModel ?? $models.find((m) => m.id === selectedModels[0]);
 			if (model) {
-				// Set Default Tools
-				if (model?.info?.meta?.toolIds) {
-					const defaultIds = [
-						...new Set(
-							[...(model?.info?.meta?.toolIds ?? [])].filter((id) =>
-								$tools.find((t) => t.id === id)
-							)
-						)
-					];
+				// Where a conversation that has never chosen anything starts.
+				//
+				// The reader's own default wins over the model's list -- they set it
+				// later and more deliberately -- and a model that lists tools still
+				// supplies them to anyone who has never set one. A saved conversation
+				// never reaches here: it answers for itself, and loadChat has already
+				// put that back.
+				const defaults = resolveSelection(
+					{
+						userDefault: readUserDefault($settings),
+						modelToolIds: model?.info?.meta?.toolIds,
+						modelSkillIds: model?.info?.meta?.skillIds,
+						modelFilterIds: model?.info?.meta?.defaultFilterIds,
+						modelFeatureIds: model?.info?.meta?.defaultFeatureIds
+					},
+					availableIds()
+				);
 
-					// Separate unauthenticated OAuth tools
-					const unauthed = [];
-					const authed = [];
-					for (const id of defaultIds) {
-						const tool = $tools.find((t) => t.id === id);
-						if (tool && tool.authenticated === false) {
-							const parts = id.split(':');
-							const serverId = parts.at(-1) ?? id;
-							const authType =
-								parts.length > 1 ? (parts[0] === 'server' ? parts[1] : parts[0]) : null;
-							unauthed.push({ id, name: tool.name ?? id, serverId, authType });
-						} else {
-							authed.push(id);
-						}
+				// A tool whose server has not been authorised cannot simply be switched
+				// on; it needs the reader through OAuth first.
+				const unauthed = [];
+				const authed = [];
+				for (const id of defaults.toolIds) {
+					const tool = ($tools ?? []).find((t) => t.id === id);
+					if (tool && tool.authenticated === false) {
+						const parts = id.split(':');
+						const serverId = parts.at(-1) ?? id;
+						const authType =
+							parts.length > 1 ? (parts[0] === 'server' ? parts[1] : parts[0]) : null;
+						unauthed.push({ id, name: tool.name ?? id, serverId, authType });
+					} else {
+						authed.push(id);
 					}
-					selectedToolIds = authed;
-					pendingOAuthTools = unauthed;
-					await continueOAuthRedirect();
-				} else if ($settings?.tools) {
-					selectedToolIds = $settings.tools;
-				} else {
-					selectedToolIds = selectedToolIds.filter((id) => !id.startsWith('direct_server:'));
 				}
+				selectedToolIds = authed;
+				pendingOAuthTools = unauthed;
+				await continueOAuthRedirect();
 
-				// Set Default Skills
-				if (model?.info?.meta?.skillIds) {
-					selectedSkillIds = [
-						...new Set(
-							[...(model?.info?.meta?.skillIds ?? [])].filter((id) =>
-								($skills ?? []).find((s) => s.id === id && s.is_active)
-							)
-						)
-					];
-				} else {
-					selectedSkillIds = [];
-				}
+				selectedSkillIds = defaults.skillIds;
 
-				// Set Default Filters (Toggleable only)
-				if (model?.info?.meta?.defaultFilterIds) {
-					selectedFilterIds = model.info.meta.defaultFilterIds.filter((id) =>
-						model?.filters?.find((f) => f.id === id)
+				// A filter belongs to the model, so one the model does not carry cannot
+				// be switched on however it got into the default.
+				selectedFilterIds = defaults.filterIds.filter((id) =>
+					model?.filters?.find((f) => f.id === id)
+				);
+
+				// A mode the reader could not switch on by hand must not be switched on
+				// for them, so each is gated exactly as its button is: enabled on this
+				// server, permitted for this reader, and not refused by the model. A
+				// model that declares nothing counts as capable -- the same rule the
+				// composer uses to decide whether to show the button at all.
+				const capabilities = model?.info?.meta?.capabilities ?? {};
+				const modeAvailable = (capable: unknown, enabled: unknown, permitted: unknown) =>
+					(capable ?? true) !== false &&
+					Boolean(enabled) &&
+					($user?.role === 'admin' || Boolean(permitted));
+
+				webSearchEnabled =
+					defaults.webSearch &&
+					modeAvailable(
+						capabilities.web_search,
+						$config?.features?.enable_web_search,
+						$user?.permissions?.features?.web_search
 					);
-				}
-
-				// Set Default Features
-				if (model?.info?.meta?.defaultFeatureIds) {
-					if (
-						model.info?.meta?.capabilities?.['image_generation'] &&
-						$config?.features?.enable_image_generation &&
-						($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
-					) {
-						imageGenerationEnabled = model.info.meta.defaultFeatureIds.includes('image_generation');
-					}
-
-					if (
-						model.info?.meta?.capabilities?.['web_search'] &&
-						$config?.features?.enable_web_search &&
-						($user?.role === 'admin' || $user?.permissions?.features?.web_search)
-					) {
-						webSearchEnabled = model.info.meta.defaultFeatureIds.includes('web_search');
-					}
-
-					if (
-						model.info?.meta?.capabilities?.['code_interpreter'] &&
-						$config?.features?.enable_code_interpreter &&
-						($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
-					) {
-						codeInterpreterEnabled = model.info.meta.defaultFeatureIds.includes('code_interpreter');
-					}
-				}
+				imageGenerationEnabled =
+					defaults.imageGeneration &&
+					modeAvailable(
+						capabilities.image_generation,
+						$config?.features?.enable_image_generation,
+						$user?.permissions?.features?.image_generation
+					);
+				codeInterpreterEnabled =
+					defaults.codeInterpreter &&
+					modeAvailable(
+						capabilities.code_interpreter,
+						$config?.features?.enable_code_interpreter,
+						$user?.permissions?.features?.code_interpreter
+					);
 
 				// Set Default Terminal — only if the referenced terminal actually exists
 				if (model?.info?.meta?.terminalId) {
@@ -1225,9 +1344,20 @@
 						selectedTerminalId.set(tid);
 					}
 				}
+
+				// Where the defaults left the composer, so only what the reader does
+				// from here counts as a change worth writing to the chat.
+				selectionBaseline = {
+					toolIds: selectedToolIds,
+					skillIds: selectedSkillIds,
+					filterIds: selectedFilterIds,
+					webSearch: webSearchEnabled,
+					imageGeneration: imageGenerationEnabled,
+					codeInterpreter: codeInterpreterEnabled
+				};
 			}
-		} finally {
-			settingDefaults = false;
+		} catch (error) {
+			console.error('[defaults]', error);
 		}
 	};
 
@@ -2371,9 +2501,14 @@
 
 		autoScroll = true;
 
-		// resetInput() must stay last: the selected model's defaults override the draft's selection.
-		await restoreChatInput(sessionStorage.getItem('chat-input'));
+		selectionRestoredFor = null;
+		selectionRestored = false;
+
+		// The draft goes on last, because it is what the reader actually chose. The
+		// defaults are only where a new conversation with no draft starts, and
+		// running them afterwards is what threw away a half-written message's tools.
 		await resetInput();
+		await restoreChatInput(sessionStorage.getItem('chat-input'));
 		await chatId.set('');
 		await chatTitle.set('');
 
@@ -2580,6 +2715,18 @@
 				params = structuredClone(chatContent?.params ?? {});
 				delete params.note_id;
 				chatFiles = structuredClone(chatContent?.files ?? []);
+
+				// What this conversation had switched on. A saved chat answers for
+				// itself: the model's configured list is a starting point for a new
+				// conversation, not something to re-impose on an old one.
+				//
+				// Only when a different conversation is being opened. loadChat also runs
+				// to refill a streaming answer that arrived with holes in it, and that
+				// must not undo a tool switched on since this chat was opened.
+				if (selectionRestoredFor !== $chatId) {
+					selectionRestoredFor = $chatId;
+					selectionRestored = restoreSavedSelection(chatContent?.selection);
+				}
 
 				// The document this conversation had open, if it still exists. Stored on
 				// the chat rather than in this browser, so it comes back wherever the
@@ -3118,11 +3265,15 @@
 		// the text already on the message instead of recounting it.
 		ensureGenerationStats(message);
 
-        // Store raw OR-aligned output items from backend
+		// Store raw OR-aligned output items from backend
 		if (output) {
 			message.output = output;
 			message.content = getOutputText(output);
-			if (data.type === 'response.output_text.delta' && navigator.vibrate && $settings?.hapticFeedback) {
+			if (
+				data.type === 'response.output_text.delta' &&
+				navigator.vibrate &&
+				$settings?.hapticFeedback
+			) {
 				navigator.vibrate(5);
 			}
 			dispatchCallOverlayAudio(message);
@@ -4395,17 +4546,28 @@
 	const saveControls = async () => {
 		if (!$chatId || $temporaryChatEnabled) return;
 		const loaded = chat?.chat ?? {};
-		if (equal(params, loaded.params ?? {}) && equal(chatFiles, loaded.files ?? [])) return;
+		if (
+			equal(params, loaded.params ?? {}) &&
+			equal(chatFiles, loaded.files ?? []) &&
+			!selectionChanged
+		)
+			return;
 
 		const res = await updateChatById(localStorage.token, $chatId, {
 			params,
-			files: chatFiles
+			files: chatFiles,
+			// What this conversation has switched on, so opening it again does not
+			// hand back the model's list instead.
+			selection: currentSelection
 		}).catch((err) => {
 			console.error('[controls autosave]', err);
 			return null;
 		});
 		// Refresh the dedupe baseline so a later revert still saves.
-		if (res) chat = res;
+		if (res) {
+			chat = res;
+			selectionBaseline = currentSelection;
+		}
 	};
 
 	const MAX_DRAFT_LENGTH = 5000;

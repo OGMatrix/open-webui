@@ -1802,12 +1802,30 @@ export interface ModelConfig {
 	params: ModelParams;
 }
 
+/** What a model declares it can do; absent means yes, as the composer reads it. */
+export type ModelCapability =
+	| 'vision'
+	| 'file_upload'
+	| 'web_search'
+	| 'image_generation'
+	| 'code_interpreter'
+	| 'terminal';
+
 export interface ModelMeta {
-	toolIds: never[];
+	/** The tools a new conversation with this model starts with. */
+	toolIds?: string[];
+	/** The skills a new conversation with this model starts with. */
+	skillIds?: string[];
+	/** The toggleable filters a new conversation with this model starts with. */
+	defaultFilterIds?: string[];
+	/** The modes it switches on: web_search, image_generation, code_interpreter. */
+	defaultFeatureIds?: string[];
+	/** The terminal it runs code against, if it names one. */
+	terminalId?: string;
 	description?: string;
 	i18n?: Record<string, Record<string, any>>;
 	hidden?: boolean;
-	capabilities?: object;
+	capabilities?: Partial<Record<ModelCapability, boolean>>;
 	profile_image_url?: string;
 }
 

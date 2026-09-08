@@ -2,6 +2,7 @@ import { APP_NAME } from '$lib/constants';
 import { type Writable, derived, writable } from 'svelte/store';
 import type { ModelConfig } from '$lib/apis';
 import type { Banner } from '$lib/types';
+import type { ComposerSelection } from '$lib/utils/composerSelection';
 import type { Socket } from 'socket.io-client';
 import type { AudioQueue } from '$lib/utils/audio';
 import type { I18nOverrides } from '$lib/utils/translationDictionary';
@@ -256,6 +257,14 @@ type Settings = {
 	textScale?: number;
 	/** How wide a line of an answer runs; see utils/readingComfort. */
 	readingWidth?: 'narrow' | 'comfortable' | 'wide';
+	/** What new conversations start with; see utils/composerSelection. */
+	defaultSelection?: ComposerSelection;
+	/**
+	 * An older starting point: a bare list of tool ids. Read for anyone who set
+	 * it by hand, since nothing in the app ever wrote it. Superseded by
+	 * defaultSelection, which covers skills, filters and the modes as well.
+	 */
+	tools?: string[];
 	fontFamily?: string | null;
 	widescreenMode?: null;
 	largeTextAsFile?: boolean;

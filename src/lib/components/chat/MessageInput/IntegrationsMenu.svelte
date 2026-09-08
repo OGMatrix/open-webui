@@ -4,9 +4,15 @@
 	import { getContext, onDestroy, tick } from 'svelte';
 	import { fly } from 'svelte/transition';
 
-	import { user, tools as _tools, skills as _skills, toolServers } from '$lib/stores';
+	import { settings, user, tools as _tools, skills as _skills, toolServers } from '$lib/stores';
 
 	import { deleteOAuthSession } from '$lib/apis/auths';
+	import { updateUserSettings } from '$lib/apis/users';
+	import {
+		readUserDefault,
+		sameSelection,
+		type ComposerSelection
+	} from '$lib/utils/composerSelection';
 	import { getTools } from '$lib/apis/tools';
 	import { getSkills } from '$lib/apis/skills';
 
@@ -28,6 +34,7 @@
 	import ChevronRight from '$lib/components/icons/ChevronRight.svelte';
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte';
 	import LinkSlash from '$lib/components/icons/LinkSlash.svelte';
+	import Bookmark from '$lib/components/icons/Bookmark.svelte';
 
 	const i18n = getContext('i18n') as any;
 
@@ -98,6 +105,62 @@
 	$: if (show) {
 		init();
 	}
+
+	/**
+	 * What new conversations start with.
+	 *
+	 * A conversation remembers what it was using, so this is only about the empty
+	 * one you have not started yet. Without it the only answer to "always give me
+	 * these two tools" was to edit the model, which changes them for everyone.
+	 */
+	$: currentSelection = {
+		toolIds: selectedToolIds ?? [],
+		skillIds: selectedSkillIds ?? [],
+		filterIds: selectedFilterIds ?? [],
+		webSearch: webSearchEnabled === true,
+		imageGeneration: imageGenerationEnabled === true,
+		codeInterpreter: codeInterpreterEnabled === true
+	} satisfies ComposerSelection;
+
+	$: savedDefault = readUserDefault($settings);
+	$: isDefault = savedDefault !== null && sameSelection(currentSelection, savedDefault);
+
+	let savingDefault = false;
+	const setAsDefault = async (state: boolean) => {
+		if (savingDefault) return;
+		savingDefault = true;
+
+		// An empty default is a real answer -- "start me with nothing on" -- and it
+		// has to be stored, not left absent, or the model's list comes back.
+		const next = state ? currentSelection : null;
+
+		const updated = { ...$settings };
+		if (next) {
+			updated.defaultSelection = next;
+		} else {
+			delete updated.defaultSelection;
+			// The older bare list of tool ids would otherwise take over again.
+			delete updated.tools;
+		}
+		settings.set(updated);
+
+		const res = await updateUserSettings(localStorage.token, { ui: updated }).catch((error) => {
+			console.error('[default selection]', error);
+			return null;
+		});
+		savingDefault = false;
+
+		if (!res) {
+			toast.error($i18n.t('Could not save your default'));
+			return;
+		}
+
+		toast.success(
+			state
+				? $i18n.t('New chats will start with this')
+				: $i18n.t('New chats follow the model again')
+		);
+	};
 
 	let fileUploadEnabled = true;
 	$: fileUploadEnabled =
@@ -291,7 +354,7 @@
 		<DropdownMenu className="min-w-70 max-w-70 max-h-72 overflow-hidden">
 			{#if tab === ''}
 				<div
-					class="max-h-72 overflow-y-auto overflow-x-hidden scrollbar-thin"
+					class="max-h-64 overflow-y-auto overflow-x-hidden scrollbar-thin"
 					in:fly={{ x: -20, duration: 150 }}
 				>
 					{#if tools}
@@ -521,6 +584,38 @@
 							</button>
 						</Tooltip>
 					{/if}
+				</div>
+
+				<div class="mt-1 pt-1 border-t border-gray-100 dark:border-gray-850">
+					<Tooltip
+						content={isDefault
+							? $i18n.t('Turn this off to let new chats follow the model again.')
+							: $i18n.t(
+									'Every new chat starts with exactly this. Chats you have already started keep what they were using.'
+								)}
+						placement="top-start"
+					>
+						<button
+							class={rowClass(isDefault)}
+							aria-pressed={isDefault}
+							disabled={savingDefault}
+							on:click={() => setAsDefault(!isDefault)}
+						>
+							<div class="flex-1 truncate">
+								<div class="flex flex-1 items-center gap-2 overflow-hidden">
+									<div class="shrink-0">
+										<Bookmark className="size-3.5" strokeWidth="1.75" />
+									</div>
+
+									<div class="min-w-0 truncate">{$i18n.t('Start new chats with this')}</div>
+								</div>
+							</div>
+
+							<div class=" shrink-0" inert>
+								<Switch state={isDefault} />
+							</div>
+						</button>
+					</Tooltip>
 				</div>
 			{:else if tab === 'tools' && tools}
 				<div class="flex max-h-72 min-h-0 flex-col gap-0.5" in:fly={{ x: 20, duration: 150 }}>
