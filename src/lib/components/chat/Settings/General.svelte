@@ -66,10 +66,21 @@
 		keep_alive: null
 	};
 
+	$: canEditSystemPrompt =
+		$user?.role === 'admin' ||
+		(($user?.permissions.chat?.controls ?? true) &&
+			($user?.permissions.chat?.system_prompt ?? true));
+	$: canEditParams =
+		$user?.role === 'admin' ||
+		(($user?.permissions.chat?.controls ?? true) && ($user?.permissions.chat?.params ?? true));
+
 	const saveHandler = async () => {
-		saveSettings({
-			system: system !== '' ? system : undefined,
-			params: {
+		const updated: Record<string, any> = {};
+		if (canEditSystemPrompt) {
+			updated.system = system !== '' ? system : null;
+		}
+		if (canEditParams) {
+			updated.params = {
 				stream_response: params.stream_response !== null ? params.stream_response : undefined,
 				stream_delta_chunk_size:
 					params.stream_delta_chunk_size !== null ? params.stream_delta_chunk_size : undefined,
@@ -105,9 +116,14 @@
 				...(params.custom_params && Object.keys(params.custom_params).length > 0
 					? { custom_params: params.custom_params }
 					: {})
-			}
-		});
-		dispatch('save');
+			};
+		}
+		try {
+			await saveSettings(updated);
+			dispatch('save');
+		} catch {
+			// The settings modal displays the save error; do not report success.
+		}
 	};
 
 	onMount(async () => {
@@ -255,7 +271,7 @@
 			{/if}
 		</UserSettingSection>
 
-		{#if $user?.role === 'admin' || (($user?.permissions.chat?.controls ?? true) && ($user?.permissions.chat?.system_prompt ?? true))}
+		{#if canEditSystemPrompt}
 			<UserSettingSection title={$i18n.t('System Prompt')}>
 				<UserSettingField description={$i18n.t('Set the default system prompt for new chats.')}>
 					<Textarea
@@ -268,7 +284,7 @@
 			</UserSettingSection>
 		{/if}
 
-		{#if $user?.role === 'admin' || (($user?.permissions.chat?.controls ?? true) && ($user?.permissions.chat?.params ?? true))}
+		{#if canEditParams}
 			<UserSettingSection title={$i18n.t('Advanced Parameters')}>
 				<UserSettingRow description={$i18n.t('Show or hide custom generation parameters.')}>
 					<span slot="label">{$i18n.t('Model parameters')}</span>

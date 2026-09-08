@@ -1,10 +1,7 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { getContext, onMount } from 'svelte';
-	import type { Writable } from 'svelte/store';
-	import type { i18n as i18nType } from 'i18next';
-
-	const i18n: Writable<i18nType> = getContext('i18n');
+	const i18n = getContext<any>('i18n');
 
 	import { getHermesInfo, verifyOpenAIConnection } from '$lib/apis/openai';
 	import { verifyOllamaConnection } from '$lib/apis/ollama';
@@ -33,11 +30,12 @@
 	export let ollama = false;
 	export let direct = false;
 
-	export let connection = null;
+	export let connection: any = null;
 
 	let url = '';
 	let key = '';
 	let auth_type = 'bearer';
+	let forwardCookies = false;
 
 	let connectionType = 'external';
 	let provider = '';
@@ -119,6 +117,7 @@
 				key,
 				config: {
 					auth_type,
+					...(!direct && !ollama ? { forward_cookies: forwardCookies } : {}),
 					...(provider ? { provider } : {}),
 					...(azure ? { azure: true } : {}),
 					api_version: apiVersion,
@@ -242,6 +241,7 @@
 				model_ids: modelIds,
 				connection_type: connectionType,
 				auth_type,
+				...(!direct && !ollama ? { forward_cookies: forwardCookies } : {}),
 				headers: headers ? JSON.parse(headers) : undefined,
 				passthrough_params: parsePassthroughParams(passthroughParams),
 				...(provider ? { provider } : {}),
@@ -259,6 +259,7 @@
 		url = '';
 		key = '';
 		auth_type = 'bearer';
+		forwardCookies = false;
 		prefixId = '';
 		passthroughParams = '';
 		showAdvanced = false;
@@ -267,6 +268,7 @@
 	};
 
 	const init = () => {
+		forwardCookies = connection?.config?.forward_cookies ?? false;
 		if (connection) {
 			url = connection.url;
 			key = connection.key;
@@ -533,6 +535,24 @@
 						</div>
 
 						{#if showAdvanced}
+							{#if !direct && !ollama}
+								<div class="flex items-center justify-between gap-3 mt-2">
+									<div>
+										<label for="forward-cookies" class="text-xs text-gray-500">
+											{$i18n.t('Forward cookies')}
+										</label>
+										<p class="text-xs text-gray-500">
+											{$i18n.t('Forward cookies from your Open WebUI request to this server.')}
+										</p>
+									</div>
+									<Switch
+										id="forward-cookies"
+										ariaLabel={$i18n.t('Forward cookies')}
+										bind:state={forwardCookies}
+									/>
+								</div>
+							{/if}
+
 							{#if !direct}
 								<div class="flex gap-2 mt-2">
 									<div class="flex flex-col w-full">

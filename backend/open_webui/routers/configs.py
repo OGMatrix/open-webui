@@ -217,6 +217,7 @@ class ToolServerConnection(BaseModel):
     path: str
     type: str | None = 'openapi'  # openapi, mcp
     auth_type: str | None
+    forward_cookies: bool = False
     headers: dict | str | None = None
     key: str | None
     config: dict | None
@@ -306,6 +307,7 @@ class TerminalServerConnection(BaseModel):
 
     key: str | None = ''
     auth_type: str | None = 'bearer'
+    forward_cookies: bool = False
 
     config: dict | None = None
 

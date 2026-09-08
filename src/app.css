@@ -1001,7 +1001,8 @@ html.high-contrast:not(.dark)
 	:is(
 		#sidebar .hover\:bg-gray-100:hover,
 		#sidebar .group:hover .group-hover\:bg-gray-100,
-		.app-dropdown-menu :is(button, a):hover
+		.app-dropdown-menu :is(button, a):not(.user-menu-row *):hover,
+		.app-dropdown-menu .user-menu-row:hover
 	) {
 	background-color: var(--color-gray-200) !important;
 }
@@ -1010,7 +1011,8 @@ html.high-contrast.dark
 	:is(
 		#sidebar .dark\:hover\:bg-gray-900:hover,
 		#sidebar .group:hover .dark\:group-hover\:bg-gray-900,
-		.app-dropdown-menu :is(button, a):hover
+		.app-dropdown-menu :is(button, a):not(.user-menu-row *):hover,
+		.app-dropdown-menu .user-menu-row:hover
 	) {
 	background-color: var(--color-gray-800) !important;
 }

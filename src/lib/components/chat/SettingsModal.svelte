@@ -866,15 +866,18 @@
 	};
 
 	const saveSettings = async (updated: Record<string, any>) => {
-		console.log(updated);
-		await settings.set({ ...$settings, ...updated });
-		await models.set(await getModels());
-		const saved = await updateUserSettings(localStorage.token, { ui: $settings });
+		const saved = await updateUserSettings(localStorage.token, {
+			ui: updated
+		}).catch((error) => {
+			toast.error(`${error}`);
+			throw error;
+		});
 		personalUiSettings =
 			saved?.ui && typeof saved.ui === 'object' && !Array.isArray(saved.ui) ? saved.ui : {};
 		await settings.set(
 			mergeUiSettings($config?.ui?.default_interface_settings ?? {}, personalUiSettings)
 		);
+		await models.set(await getModels());
 	};
 
 	const getModels = async () => {

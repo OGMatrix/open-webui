@@ -102,7 +102,7 @@
 	let modelDefaultsPanel = null;
 	let modelDefaultsDirty = false;
 
-	let viewOption = ''; // '' = All, 'enabled', 'disabled', 'visible', 'hidden'
+	let viewOption = '';
 	let tags: string[] = [];
 	let selectedTag = '';
 
@@ -151,6 +151,8 @@
 		filteredModels = models
 			.filter((m) => searchValue === '' || m.name.toLowerCase().includes(searchValue.toLowerCase()))
 			.filter((m) => {
+				if (viewOption === 'base') return !isPresetModel(m);
+				if (viewOption === 'workspace') return isPresetModel(m);
 				if (viewOption === 'enabled') return m?.is_active ?? true;
 				if (viewOption === 'disabled') return !(m?.is_active ?? true);
 				if (viewOption === 'visible') return !(m?.meta?.hidden ?? false);

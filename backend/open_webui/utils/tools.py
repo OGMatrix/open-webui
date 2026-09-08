@@ -146,15 +146,13 @@ async def build_tool_server_headers(
 
     auth_type = connection.get('auth_type', 'bearer')
     headers = {}
-    cookies = {}
+    cookies = getattr(request, 'cookies', {}) if connection.get('forward_cookies', False) else {}
 
     if auth_type == 'bearer':
         headers.update(bearer_auth_header(connection.get('key', '')))
     elif auth_type == 'session':
-        cookies = request.cookies if hasattr(request, 'cookies') else {}
         headers.update(bearer_auth_header(request.state.token.credentials))
     elif auth_type == 'system_oauth':
-        cookies = request.cookies if hasattr(request, 'cookies') else {}
         oauth_token = extra_params.get('__oauth_token__', None)
         if oauth_token:
             headers.update(bearer_auth_header(oauth_token.get('access_token', '')))
@@ -1399,16 +1397,14 @@ async def get_terminal_tools(
 
     # Build auth headers
     auth_type = connection.get('auth_type', 'bearer')
-    cookies = {}
+    cookies = getattr(request, 'cookies', {}) if connection.get('forward_cookies', False) else {}
     headers = {'Content-Type': 'application/json', 'X-User-Id': user.id}
 
     if auth_type == 'bearer':
         headers.update(bearer_auth_header(connection.get('key', '')))
     elif auth_type == 'session':
-        cookies = request.cookies
         headers.update(bearer_auth_header(request.state.token.credentials))
     elif auth_type == 'system_oauth':
-        cookies = request.cookies
         oauth_token = extra_params.get('__oauth_token__', None)
         if oauth_token:
             headers.update(bearer_auth_header(oauth_token.get('access_token', '')))

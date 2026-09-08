@@ -159,7 +159,7 @@ async def get_headers_and_cookies(
     metadata: dict | None = None,
     user: UserModel = None,
 ):
-    cookies = {}
+    cookies = getattr(request, 'cookies', {}) if config.get('forward_cookies', False) else {}
     headers = {
         'Content-Type': 'application/json',
         **(
@@ -189,11 +189,8 @@ async def get_headers_and_cookies(
     elif auth_type == 'none':
         token = None
     elif auth_type == 'session':
-        cookies = request.cookies
         token = request.state.token.credentials
     elif auth_type == 'system_oauth':
-        cookies = request.cookies
-
         oauth_token = None
         try:
             if request.cookies.get('oauth_session_id', None):

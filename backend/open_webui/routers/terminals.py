@@ -145,16 +145,14 @@ async def proxy_terminal(
             return JSONResponse({'error': 'A saved chat is required for this terminal'}, status_code=409)
         if context_id:
             headers[TERMINAL_CONTEXT_HEADER] = context_id
-    cookies = {}
+    cookies = getattr(request, 'cookies', {}) if connection.get('forward_cookies', False) else {}
     auth_type = connection.get('auth_type', 'bearer')
 
     if auth_type == 'bearer':
         headers.update(bearer_auth_header(connection.get('key', '')))
     elif auth_type == 'session':
-        cookies = request.cookies
         headers.update(bearer_auth_header(request.state.token.credentials))
     elif auth_type == 'system_oauth':
-        cookies = request.cookies
         # Resolve the token server-side from the caller's OAuth session; never trust a client header.
         oauth_token = None
         try:

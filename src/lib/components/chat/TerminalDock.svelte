@@ -113,6 +113,7 @@
 		tabs = tabs.filter((tab) => tab.id !== id);
 		delete panes[id];
 		if (activeId === id) activeId = shellOpened ? 'shell' : (tabs[0]?.id ?? '');
+		if (!activeId) expanded = false;
 	}
 
 	function closeShell() {
@@ -121,6 +122,7 @@
 		connected = false;
 		connecting = false;
 		activeId = tabs[0]?.id ?? '';
+		if (!activeId) expanded = false;
 	}
 
 	function navigate(event: KeyboardEvent) {
@@ -165,7 +167,7 @@
 	>
 		{#if !expanded}
 			<button
-				on:click={() => (expanded = true)}
+				on:click={() => select(activeId || 'shell')}
 				class="flex h-full min-w-0 flex-1 items-center gap-1.5 px-2 text-left hover:text-gray-900 dark:hover:text-gray-100"
 			>
 				<Icon name="terminal" size={13} />
@@ -246,7 +248,7 @@
 			</div>
 		{/if}
 		<button
-			on:click={() => (expanded = !expanded)}
+			on:click={() => (expanded ? (expanded = false) : select(activeId || 'shell'))}
 			class="tab-button flex h-7 w-7 shrink-0 items-center justify-center"
 			aria-expanded={expanded}
 			title={$i18n.t(expanded ? 'Collapse terminal' : 'Expand terminal')}
