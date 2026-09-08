@@ -320,6 +320,48 @@ async def follow_up_generation_template(template: str, messages: list[dict], use
     return template
 
 
+def render_integrations(integrations: list[dict]) -> str:
+    """One integration per line: the id the model must answer with, then what it is.
+
+    A JSON blob would cost more tokens and read no better to a small model, and
+    the id has to survive verbatim -- everything the model names is checked
+    against this list, and anything else is thrown away.
+    """
+    lines = []
+    for integration in integrations:
+        name = (integration.get('name') or '').strip()
+        description = (integration.get('description') or '').strip()
+        kind = (integration.get('kind') or 'tool').strip()
+
+        line = f'- {integration.get("id")} ({kind}): {name}'
+        if description:
+            line = f'{line} -- {description}'
+        lines.append(line)
+
+    return '\n'.join(lines) if lines else '(none)'
+
+
+async def tool_suggestions_generation_template(
+    template: str,
+    messages: list[dict],
+    integrations: list[dict],
+    selected_ids: list[str],
+    user: Optional[Any] = None,
+) -> str:
+    prompt = get_last_user_message(messages)
+    template = replace_prompt_variable(template, prompt)
+    template = replace_messages_variable(template, messages)
+
+    template = template.replace('{{INTEGRATIONS}}', render_integrations(integrations))
+    template = template.replace(
+        '{{SELECTED_INTEGRATIONS}}',
+        ', '.join(selected_ids) if selected_ids else '(none)',
+    )
+
+    template = await prompt_template(template, user)
+    return template
+
+
 async def tags_generation_template(template: str, messages: list[dict], user: Optional[Any] = None) -> str:
     prompt = get_last_user_message(messages)
     template = replace_prompt_variable(template, prompt)

@@ -28,9 +28,18 @@
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 
 	import Suggestions from './Suggestions.svelte';
+
+	/** Passed straight through to the composer; see Chat.svelte. */
+	export let suggestionState: 'idle' | 'asking' | 'offering' = 'idle';
+	export let suggestion: ToolSuggestion | null = null;
+	export let onSuggestionApply: (chosen: Set<string>) => void = () => {};
+	export let onSuggestionDismiss: () => void = () => {};
+	export let onSuggestionCancel: () => void = () => {};
+	export let onSuggestionNeverAgain: () => void = () => {};
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 	import MessageInput from './MessageInput.svelte';
+	import type { ToolSuggestion } from '$lib/utils/toolSuggestions';
 	import FolderPlaceholder from './Placeholder/FolderPlaceholder.svelte';
 	import FolderTitle from './Placeholder/FolderTitle.svelte';
 
@@ -273,6 +282,12 @@
 						{onQueueSendNow}
 						{onQueueEdit}
 						{onQueueDelete}
+						{suggestionState}
+						{suggestion}
+						{onSuggestionApply}
+						{onSuggestionDismiss}
+						{onSuggestionCancel}
+						{onSuggestionNeverAgain}
 						{askUser}
 						{onWebSearchToggle}
 						on:chatVariables

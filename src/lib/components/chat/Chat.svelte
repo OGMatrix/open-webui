@@ -116,6 +116,7 @@
 		generateQueries,
 		chatAction,
 		generateMoACompletion,
+		generateToolSuggestions,
 		stopTask,
 		stopTasksByChatId,
 		getTaskIdsByChatId
@@ -142,6 +143,13 @@
 		sameSelection,
 		type ComposerSelection
 	} from '$lib/utils/composerSelection';
+	import {
+		applySuggestion,
+		isEmptySuggestion,
+		readSuggestion,
+		suggestionKey,
+		type ToolSuggestion
+	} from '$lib/utils/toolSuggestions';
 	import Navbar from '$lib/components/chat/Navbar.svelte';
 	import ChatControls from './ChatControls.svelte';
 	import EventConfirmDialog from '../common/ConfirmDialog.svelte';
@@ -812,14 +820,19 @@
 	 */
 	let selectionBaseline: ComposerSelection | null = null;
 
-	const applySelection = (selection: ComposerSelection) => {
+	const applySelection = (selection: ComposerSelection, { readerChose = false } = {}) => {
 		selectedToolIds = selection.toolIds;
 		selectedSkillIds = selection.skillIds;
 		selectedFilterIds = selection.filterIds;
 		webSearchEnabled = selection.webSearch;
 		imageGenerationEnabled = selection.imageGeneration;
 		codeInterpreterEnabled = selection.codeInterpreter;
-		selectionBaseline = selection;
+
+		// A selection the reader picked is a change worth writing to the chat;
+		// one this component put there is only where the composer was left.
+		if (!readerChose) {
+			selectionBaseline = selection;
+		}
 	};
 
 	$: selectionChanged =
@@ -1021,6 +1034,8 @@
 		// A conversation is being opened, so its selection is due to be put back.
 		selectionRestoredFor = null;
 		selectionRestored = false;
+		askedAbout = new Set();
+		releaseSuggestion();
 		// Mark the outgoing chat as read before loading the new one.
 		// $chatId still holds the previous chat here — loadChat() updates it.
 		if ($chatId && $chatId !== chatIdProp && !$temporaryChatEnabled) {
@@ -1202,6 +1217,199 @@
 		return true;
 	};
 
+	/**
+	 * Which of the three modes this reader could switch on by hand.
+	 *
+	 * Each is gated exactly as its button is: enabled on this server, permitted
+	 * for this reader, and not refused by the model. A model that declares
+	 * nothing counts as capable -- the same rule the composer uses to decide
+	 * whether to show the button at all.
+	 */
+	const modeAvailability = (model: any) => {
+		const capabilities = model?.info?.meta?.capabilities ?? {};
+		const available = (capable: unknown, enabled: unknown, permitted: unknown) =>
+			(capable ?? true) !== false &&
+			Boolean(enabled) &&
+			($user?.role === 'admin' || Boolean(permitted));
+
+		return {
+			webSearch: available(
+				capabilities.web_search,
+				$config?.features?.enable_web_search,
+				$user?.permissions?.features?.web_search
+			),
+			imageGeneration: available(
+				capabilities.image_generation,
+				$config?.features?.enable_image_generation,
+				$user?.permissions?.features?.image_generation
+			),
+			codeInterpreter: available(
+				capabilities.code_interpreter,
+				$config?.features?.enable_code_interpreter,
+				$user?.permissions?.features?.code_interpreter
+			)
+		};
+	};
+
+	/**
+	 * What this message might need switched on.
+	 *
+	 * The message is held while the task model is asked, and only while: the
+	 * request is given a deadline, the reader can send past it at any moment, and
+	 * every way this can fail ends with the message going out. A suggestion is
+	 * worth a moment; it is never worth a message.
+	 */
+	const SUGGESTION_TIMEOUT = 6000;
+
+	let suggestionState: 'idle' | 'asking' | 'offering' = 'idle';
+	let suggestion: ToolSuggestion | null = null;
+	let heldPrompt: string | null = null;
+	let suggestionRequest: AbortController | null = null;
+
+	/**
+	 * Messages already asked about, so answering once settles it.
+	 *
+	 * Sending, being told what is missing, waving it away and sending again must
+	 * not ask a second time -- and neither must the queue replaying a message.
+	 */
+	let askedAbout = new Set<string>();
+
+	/** Whether there is anything at all this reader could be told to switch on. */
+	const anythingToSuggest = (): boolean => {
+		if (($tools ?? []).length > 0) return true;
+		if (($skills ?? []).some((skill) => skill.is_active)) return true;
+
+		const modes = modeAvailability(
+			atSelectedModel ?? $models.find((m) => m.id === selectedModels[0])
+		);
+		return modes.webSearch || modes.imageGeneration || modes.codeInterpreter;
+	};
+
+	/** Which of the selected ids the task model knows how to talk about. */
+	const selectedIntegrationIds = (): string[] => [
+		...(selectedToolIds ?? []),
+		...(selectedSkillIds ?? []),
+		...(webSearchEnabled ? ['feature:web_search'] : []),
+		...(imageGenerationEnabled ? ['feature:image_generation'] : []),
+		...(codeInterpreterEnabled ? ['feature:code_interpreter'] : [])
+	];
+
+	/** Let go of the held message, whichever way this ended. */
+	const releaseSuggestion = (): string | null => {
+		const held = heldPrompt;
+		suggestionRequest = null;
+		suggestionState = 'idle';
+		suggestion = null;
+		heldPrompt = null;
+		return held;
+	};
+
+	/**
+	 * Ask, and hold the message while the answer comes back.
+	 *
+	 * Returns whether the message is being held. A caller that gets `true` must
+	 * stop: this function owns the message from here, and will send it.
+	 */
+	const askAboutIntegrations = async (
+		userPrompt: string,
+		attachments: number
+	): Promise<boolean> => {
+		if (($settings?.toolSuggestions ?? true) !== true) return false;
+		if (suggestionState !== 'idle') return false;
+		if (!anythingToSuggest()) return false;
+
+		const key = suggestionKey(userPrompt, attachments);
+		if (askedAbout.has(key)) return false;
+
+		const modelId = selectedModels.find((id) => id);
+		if (!modelId) return false;
+
+		heldPrompt = userPrompt;
+		suggestionState = 'asking';
+		suggestion = null;
+
+		const request = new AbortController();
+		suggestionRequest = request;
+		const deadline = setTimeout(() => request.abort(), SUGGESTION_TIMEOUT);
+
+		// The last few turns, and the message about to join them.
+		const recent = createMessagesList(history, history.currentId)
+			.slice(-6)
+			.map((message) => ({ role: message.role, content: message.content ?? '' }));
+
+		const answer = await generateToolSuggestions(
+			localStorage.token,
+			modelId,
+			[...recent, { role: 'user', content: userPrompt }],
+			selectedIntegrationIds(),
+			$chatId || undefined,
+			request.signal
+		);
+		clearTimeout(deadline);
+
+		// Someone pressed "Send now", or moved on entirely, while we waited.
+		if (suggestionRequest !== request) return true;
+
+		askedAbout = new Set([...askedAbout, key]);
+
+		const read = answer
+			? readSuggestion(answer.suggestion, answer.candidates, currentSelection)
+			: null;
+
+		if (!read || isEmptySuggestion(read)) {
+			// Nothing to say. Send, and never make the reader notice this happened.
+			const held = releaseSuggestion();
+			if (held !== null) await submitHandler(held);
+			return true;
+		}
+
+		suggestion = read;
+		suggestionState = 'offering';
+		return true;
+	};
+
+	const sendHeldPrompt = async () => {
+		const held = releaseSuggestion();
+		if (held !== null) await submitHandler(held);
+	};
+
+	/** Take the parts that were ticked, then send. */
+	const applyIntegrationSuggestion = async (chosen: Set<string>) => {
+		const offered = suggestion;
+		const held = releaseSuggestion();
+
+		if (offered) {
+			applySelection(applySuggestion(currentSelection, offered, chosen), { readerChose: true });
+			await tick();
+		}
+		if (held !== null) await submitHandler(held);
+	};
+
+	/** Stop waiting and go, without marking the answer as given. */
+	const sendWithoutWaiting = async () => {
+		suggestionRequest?.abort();
+
+		const held = heldPrompt;
+		releaseSuggestion();
+		if (held !== null) {
+			// Asked and answered: cutting the wait short is an answer too.
+			askedAbout = new Set([...askedAbout, suggestionKey(held, files.length)]);
+			await submitHandler(held);
+		}
+	};
+
+	/** Never again, and send this one as it is. */
+	const stopSuggestingIntegrations = async () => {
+		settings.set({ ...$settings, toolSuggestions: false });
+		await updateUserSettings(localStorage.token, { ui: $settings }).catch((error) => {
+			console.error('[tool suggestions setting]', error);
+		});
+		toast.success(
+			$i18n.t('Integration suggestions turned off. You can turn them back on in Settings.')
+		);
+		await sendHeldPrompt();
+	};
+
 	/** Check whether a terminal ID references an available system or direct terminal. */
 	const isTerminalAvailable = (tid: string): boolean => {
 		return (
@@ -1305,37 +1513,11 @@
 				);
 
 				// A mode the reader could not switch on by hand must not be switched on
-				// for them, so each is gated exactly as its button is: enabled on this
-				// server, permitted for this reader, and not refused by the model. A
-				// model that declares nothing counts as capable -- the same rule the
-				// composer uses to decide whether to show the button at all.
-				const capabilities = model?.info?.meta?.capabilities ?? {};
-				const modeAvailable = (capable: unknown, enabled: unknown, permitted: unknown) =>
-					(capable ?? true) !== false &&
-					Boolean(enabled) &&
-					($user?.role === 'admin' || Boolean(permitted));
-
-				webSearchEnabled =
-					defaults.webSearch &&
-					modeAvailable(
-						capabilities.web_search,
-						$config?.features?.enable_web_search,
-						$user?.permissions?.features?.web_search
-					);
-				imageGenerationEnabled =
-					defaults.imageGeneration &&
-					modeAvailable(
-						capabilities.image_generation,
-						$config?.features?.enable_image_generation,
-						$user?.permissions?.features?.image_generation
-					);
-				codeInterpreterEnabled =
-					defaults.codeInterpreter &&
-					modeAvailable(
-						capabilities.code_interpreter,
-						$config?.features?.enable_code_interpreter,
-						$user?.permissions?.features?.code_interpreter
-					);
+				// for them.
+				const modes = modeAvailability(model);
+				webSearchEnabled = defaults.webSearch && modes.webSearch;
+				imageGenerationEnabled = defaults.imageGeneration && modes.imageGeneration;
+				codeInterpreterEnabled = defaults.codeInterpreter && modes.codeInterpreter;
 
 				// Set Default Terminal — only if the referenced terminal actually exists
 				if (model?.info?.meta?.terminalId) {
@@ -2503,6 +2685,8 @@
 
 		selectionRestoredFor = null;
 		selectionRestored = false;
+		askedAbout = new Set();
+		releaseSuggestion();
 
 		// The draft goes on last, because it is what the reader actually chose. The
 		// defaults are only where a new conversation with no draft starts, and
@@ -3722,6 +3906,14 @@
 				toast.error($i18n.t(`Oops! There was an error in the previous response.`));
 				return;
 			}
+		}
+
+		// The last gate: what this message might need switched on. Asked once per
+		// message, and only for the message that is really about to go -- after
+		// the queue, so a message waiting its turn is asked about when it is sent
+		// rather than when it was typed.
+		if (await askAboutIntegrations(userPrompt, files.length)) {
+			return;
 		}
 
 		// Clear input and submit
@@ -5061,6 +5253,12 @@
 										{contextUsage}
 										{contextCompactionEnabled}
 										{contextCompaction}
+										{suggestionState}
+										{suggestion}
+										onSuggestionApply={applyIntegrationSuggestion}
+										onSuggestionDismiss={sendHeldPrompt}
+										onSuggestionCancel={sendWithoutWaiting}
+										onSuggestionNeverAgain={stopSuggestingIntegrations}
 										{embedded}
 										compactHandler={handleManualCompact}
 										statusHandler={handleStatusCommand}
@@ -5154,6 +5352,12 @@
 										chatId={$chatId}
 										{contextUsage}
 										{contextCompactionEnabled}
+										{suggestionState}
+										{suggestion}
+										onSuggestionApply={applyIntegrationSuggestion}
+										onSuggestionDismiss={sendHeldPrompt}
+										onSuggestionCancel={sendWithoutWaiting}
+										onSuggestionNeverAgain={stopSuggestingIntegrations}
 										{embedded}
 										compactHandler={handleManualCompact}
 										statusHandler={handleStatusCommand}
@@ -5193,6 +5397,12 @@
 						{:else}
 							<div class="flex items-center h-full">
 								<Placeholder
+									{suggestionState}
+									{suggestion}
+									onSuggestionApply={applyIntegrationSuggestion}
+									onSuggestionDismiss={sendHeldPrompt}
+									onSuggestionCancel={sendWithoutWaiting}
+									onSuggestionNeverAgain={stopSuggestingIntegrations}
 									{history}
 									bind:selectedModels
 									bind:messageInput

@@ -149,4 +149,5 @@ class TASKS(str, Enum):
     IMAGE_PROMPT_GENERATION = 'image_prompt_generation'
     AUTOCOMPLETE_GENERATION = 'autocomplete_generation'
     FUNCTION_CALLING = 'function_calling'
+    TOOL_SUGGESTIONS = 'tool_suggestions'
     MOA_RESPONSE_GENERATION = 'moa_response_generation'

@@ -1,4 +1,5 @@
 import { WEBUI_BASE_URL } from '$lib/constants';
+import type { SuggestionCandidate } from '$lib/utils/toolSuggestions';
 import { convertOpenApiToToolPayload, resolveSchema } from '$lib/utils';
 import { normalizeTags } from '$lib/utils/tags';
 import { getOpenAIModelsDirect } from './openai';
@@ -918,6 +919,81 @@ export const generateTags = async (
 		console.error('Failed to parse response: ', e);
 		return [];
 	}
+};
+
+/**
+ * Ask the task model whether this message has what it needs switched on.
+ *
+ * Comes back with the catalogue it was given as well as its answer, so the
+ * caller checks every id against the same list the model saw rather than
+ * against whatever it happens to have loaded.
+ *
+ * Never throws: a message must go out whether or not this worked.
+ */
+export const generateToolSuggestions = async (
+	token: string = '',
+	model: string,
+	messages: object[],
+	selectedIds: string[] = [],
+	chat_id?: string,
+	signal?: AbortSignal
+): Promise<{ suggestion: unknown; candidates: SuggestionCandidate[] } | null> => {
+	const res = await fetch(`${WEBUI_BASE_URL}/api/v1/tasks/tool_suggestions/completions`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			Authorization: `Bearer ${token}`
+		},
+		signal,
+		body: JSON.stringify({
+			model: model,
+			messages: messages,
+			selected_ids: selectedIds,
+			...(chat_id && { chat_id: chat_id })
+		})
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			// An aborted request is the caller's own doing, not a failure to report.
+			if (err?.name !== 'AbortError') {
+				console.error('[tool suggestions]', err);
+			}
+			return null;
+		});
+
+	if (!res) return null;
+
+	const candidates: SuggestionCandidate[] = Array.isArray(res?.candidates) ? res.candidates : [];
+	const content = res?.choices?.[0]?.message?.content ?? '';
+
+	return { suggestion: parseJsonBlock(content), candidates };
+};
+
+/**
+ * The JSON a small model meant to send, out of whatever it actually sent.
+ *
+ * Fences, a sentence of preamble and single quotes are all common; the
+ * straight parse is tried first so an apostrophe inside a sentence is not
+ * turned into a quotation mark and made to break the very thing it parses.
+ */
+const parseJsonBlock = (content: string): unknown => {
+	const attempt = (text: string): unknown => {
+		const start = text.indexOf('{');
+		const end = text.lastIndexOf('}');
+		if (start === -1 || end === -1 || end < start) return undefined;
+
+		try {
+			return JSON.parse(text.substring(start, end + 1));
+		} catch (e) {
+			return undefined;
+		}
+	};
+
+	return attempt(content) ?? attempt(content.replace(/['\u2018\u2019`]/g, '"')) ?? null;
 };
 
 export const generateEmoji = async (

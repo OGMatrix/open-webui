@@ -2318,6 +2318,45 @@ JSON format: { "follow_ups": ["Question 1?", "Question 2?", "Question 3?"] }
 
 ENABLE_FOLLOW_UP_GENERATION = os.getenv('ENABLE_FOLLOW_UP_GENERATION', 'True').lower() == 'true'
 
+ENABLE_TOOL_SUGGESTIONS = os.getenv('ENABLE_TOOL_SUGGESTIONS', 'True').lower() == 'true'
+
+TOOL_SUGGESTIONS_PROMPT_TEMPLATE = os.getenv('TOOL_SUGGESTIONS_PROMPT_TEMPLATE', '')
+
+DEFAULT_TOOL_SUGGESTIONS_PROMPT_TEMPLATE = """### Task:
+The user is about to send the message below. Decide whether the integrations they have switched on are the right ones for it, and recommend the smallest change that would help.
+
+### Guidelines:
+- Recommend switching something **on** only when the message plainly needs it: information the assistant cannot already have, an action on an outside system, or a capability named in the list.
+- Recommend switching something **off** only when it is switched on, cannot help with this message, and would cost the assistant time or make it wander.
+- Most messages need no change at all. Returning empty lists is the normal, correct answer, and is better than a guess.
+- Use only the exact ids from the list. Never invent one, and never name the same id in both lists.
+- Say nothing about anything that is already in the state you would want it in.
+- Keep "reason" to one short sentence in the language of the message, saying why the change helps. Leave it empty when you recommend nothing.
+- Respond **exclusively** with the JSON object. No commentary, no code fences.
+
+### Output:
+JSON format: { "enable": ["id"], "disable": ["id"], "reason": "One short sentence." }
+
+### Currently switched on:
+<selected>
+{{SELECTED_INTEGRATIONS}}
+</selected>
+
+### Available integrations:
+<integrations>
+{{INTEGRATIONS}}
+</integrations>
+
+### Message the user is about to send:
+<message>
+{{prompt}}
+</message>
+
+### Conversation so far:
+<chat_history>
+{{MESSAGES:END:4}}
+</chat_history>"""
+
 ENABLE_TAGS_GENERATION = os.getenv('ENABLE_TAGS_GENERATION', 'True').lower() == 'true'
 
 ENABLE_TITLE_GENERATION = os.getenv('ENABLE_TITLE_GENERATION', 'True').lower() == 'true'
@@ -3160,6 +3199,8 @@ DEFAULT_CONFIG = {
     'task.image.prompt_template': IMAGE_PROMPT_GENERATION_PROMPT_TEMPLATE,
     'task.follow_up.prompt_template': FOLLOW_UP_GENERATION_PROMPT_TEMPLATE,
     'task.follow_up.enable': ENABLE_FOLLOW_UP_GENERATION,
+    'task.tool_suggestions.prompt_template': TOOL_SUGGESTIONS_PROMPT_TEMPLATE,
+    'task.tool_suggestions.enable': ENABLE_TOOL_SUGGESTIONS,
     'task.tags.enable': ENABLE_TAGS_GENERATION,
     'task.title.enable': ENABLE_TITLE_GENERATION,
     'task.query.search.enable': ENABLE_SEARCH_QUERY_GENERATION,

@@ -13,6 +13,20 @@
 		sameSelection,
 		type ComposerSelection
 	} from '$lib/utils/composerSelection';
+	import {
+		MAX_PRESETS,
+		MAX_PRESET_NAME,
+		addPreset,
+		activePreset,
+		readPresets,
+		removePreset,
+		renamePreset,
+		presetName,
+		replacePreset,
+		summarize,
+		type PresetError,
+		type SelectionPreset
+	} from '$lib/utils/selectionPresets';
 	import { getTools } from '$lib/apis/tools';
 	import { getSkills } from '$lib/apis/skills';
 
@@ -35,6 +49,11 @@
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte';
 	import LinkSlash from '$lib/components/icons/LinkSlash.svelte';
 	import Bookmark from '$lib/components/icons/Bookmark.svelte';
+	import Bolt from '$lib/components/icons/Bolt.svelte';
+	import Check from '$lib/components/icons/Check.svelte';
+	import Pencil from '$lib/components/icons/Pencil.svelte';
+	import GarbageBin from '$lib/components/icons/GarbageBin.svelte';
+	import ArrowPath from '$lib/components/icons/ArrowPath.svelte';
 
 	const i18n = getContext('i18n') as any;
 
@@ -125,6 +144,26 @@
 	$: savedDefault = readUserDefault($settings);
 	$: isDefault = savedDefault !== null && sameSelection(currentSelection, savedDefault);
 
+	/**
+	 * Change the reader's settings and put them on the server.
+	 *
+	 * The store is set first so the menu answers immediately; a failed write is
+	 * reported rather than left to look like it worked.
+	 */
+	const saveSettings = async (
+		change: (settings: Record<string, any>) => void
+	): Promise<boolean> => {
+		const updated = { ...$settings };
+		change(updated);
+		settings.set(updated);
+
+		const res = await updateUserSettings(localStorage.token, { ui: updated }).catch((error) => {
+			console.error('[composer settings]', error);
+			return null;
+		});
+		return Boolean(res);
+	};
+
 	let savingDefault = false;
 	const setAsDefault = async (state: boolean) => {
 		if (savingDefault) return;
@@ -132,25 +171,18 @@
 
 		// An empty default is a real answer -- "start me with nothing on" -- and it
 		// has to be stored, not left absent, or the model's list comes back.
-		const next = state ? currentSelection : null;
-
-		const updated = { ...$settings };
-		if (next) {
-			updated.defaultSelection = next;
-		} else {
-			delete updated.defaultSelection;
-			// The older bare list of tool ids would otherwise take over again.
-			delete updated.tools;
-		}
-		settings.set(updated);
-
-		const res = await updateUserSettings(localStorage.token, { ui: updated }).catch((error) => {
-			console.error('[default selection]', error);
-			return null;
+		const saved = await saveSettings((updated) => {
+			if (state) {
+				updated.defaultSelection = currentSelection;
+			} else {
+				delete updated.defaultSelection;
+				// The older bare list of tool ids would otherwise take over again.
+				delete updated.tools;
+			}
 		});
 		savingDefault = false;
 
-		if (!res) {
+		if (!saved) {
 			toast.error($i18n.t('Could not save your default'));
 			return;
 		}
@@ -160,6 +192,165 @@
 				? $i18n.t('New chats will start with this')
 				: $i18n.t('New chats follow the model again')
 		);
+	};
+
+	/**
+	 * Named selections, and the ways they change.
+	 *
+	 * Editing is a mode rather than three icons per row: at this width a row that
+	 * carries apply, rename, overwrite and delete at once is a row nobody can hit
+	 * on a phone.
+	 */
+	$: presets = readPresets($settings);
+	$: currentPreset = activePreset(presets, currentSelection);
+
+	let editingPresets = false;
+	let newPresetName = '';
+	let renameDrafts: Record<string, string> = {};
+	let savingPresets = false;
+
+	const presetErrorText = (error: PresetError): string =>
+		({
+			'empty-name': $i18n.t('Give the preset a name'),
+			'duplicate-name': $i18n.t('A preset with that name already exists'),
+			'too-many': $i18n.t('You can keep up to {{count}} presets', { count: MAX_PRESETS })
+		})[error];
+
+	/**
+	 * Change the presets, one change at a time.
+	 *
+	 * Each change is worked out from the list as it stands when its turn comes,
+	 * not from the list as it stood when the reader clicked. Renaming, replacing
+	 * and deleting in quick succession would otherwise have the last of them
+	 * write back a list read before the first had landed -- and a change that
+	 * arrived while another was in flight used to be dropped without a word.
+	 */
+	let pending: Promise<void> = Promise.resolve();
+
+	const editPresets = (
+		change: (current: SelectionPreset[]) => { presets: SelectionPreset[]; error?: PresetError },
+		message: (presets: SelectionPreset[]) => string
+	): Promise<void> => {
+		savingPresets = true;
+		pending = pending
+			.then(async () => {
+				const { presets: next, error } = change(readPresets($settings));
+				if (error) {
+					toast.error(presetErrorText(error));
+					return;
+				}
+
+				const saved = await saveSettings((updated) => {
+					updated.selectionPresets = next;
+				});
+				if (saved) {
+					toast.success(message(next));
+				} else {
+					toast.error($i18n.t('Could not save your presets'));
+				}
+			})
+			.finally(() => {
+				savingPresets = false;
+			});
+
+		return pending;
+	};
+
+	const createPreset = async () => {
+		const name = presetName(newPresetName);
+		if (name === '') {
+			toast.error(presetErrorText('empty-name'));
+			return;
+		}
+
+		newPresetName = '';
+		await editPresets(
+			(current) => addPreset(current, name, currentSelection),
+			() => $i18n.t('Preset "{{name}}" saved', { name })
+		);
+	};
+
+	const applyPreset = (preset: SelectionPreset) => {
+		selectedToolIds = [...preset.selection.toolIds];
+		selectedSkillIds = [...preset.selection.skillIds];
+		selectedFilterIds = [...preset.selection.filterIds];
+		webSearchEnabled = preset.selection.webSearch;
+		imageGenerationEnabled = preset.selection.imageGeneration;
+		codeInterpreterEnabled = preset.selection.codeInterpreter;
+		onWebSearchToggle(webSearchEnabled);
+	};
+
+	const overwritePreset = (preset: SelectionPreset) =>
+		editPresets(
+			(current) => ({ presets: replacePreset(current, preset.id, currentSelection) }),
+			() => $i18n.t('Preset "{{name}}" now holds what is switched on', { name: preset.name })
+		);
+
+	const commitRename = (preset: SelectionPreset) => {
+		const draft = presetName(renameDrafts[preset.id] ?? preset.name);
+		if (draft === preset.name) return Promise.resolve();
+
+		// Put the old name back if the new one is refused, so the field never
+		// shows a name the list does not have.
+		return editPresets(
+			(current) => {
+				const result = renamePreset(current, preset.id, draft);
+				if (result.error) {
+					renameDrafts = { ...renameDrafts, [preset.id]: preset.name };
+				}
+				return result;
+			},
+			() => $i18n.t('Preset renamed')
+		);
+	};
+
+	const deletePreset = (preset: SelectionPreset) =>
+		editPresets(
+			(current) => ({ presets: removePreset(current, preset.id) }),
+			() => $i18n.t('Preset "{{name}}" deleted', { name: preset.name })
+		);
+
+	/** What a preset holds, as one line under its name. */
+	const presetSummary = (preset: SelectionPreset): string => {
+		const counts = summarize(preset.selection);
+		if (counts.empty) return $i18n.t('Nothing switched on');
+
+		const parts: string[] = [];
+		if (counts.tools > 0) parts.push($i18n.t('{{count}} tools', { count: counts.tools }));
+		if (counts.skills > 0) parts.push($i18n.t('{{count}} skills', { count: counts.skills }));
+		if (counts.filters > 0) parts.push($i18n.t('{{count}} filters', { count: counts.filters }));
+		if (counts.modes > 0) parts.push($i18n.t('{{count}} modes', { count: counts.modes }));
+		return parts.join(' \u00b7 ');
+	};
+
+	/**
+	 * Everything in the list at once.
+	 *
+	 * Acts on what is listed, so a search narrows what the button touches -- which
+	 * is the useful reading when a search is what put those rows on screen.
+	 * Integrations awaiting a sign-in are left out: switching one on by this route
+	 * would not connect it.
+	 */
+	$: toggleableToolIds = Object.keys(tools ?? {}).filter(
+		(id) => tools?.[id]?.authenticated ?? true
+	);
+	$: allToolsOn =
+		toggleableToolIds.length > 0 && toggleableToolIds.every((id) => selectedToolIds.includes(id));
+
+	const toggleAllTools = () => {
+		selectedToolIds = allToolsOn
+			? selectedToolIds.filter((id) => !toggleableToolIds.includes(id))
+			: [...new Set([...selectedToolIds, ...toggleableToolIds])];
+	};
+
+	$: listedSkillIds = Object.keys(skills ?? {});
+	$: allSkillsOn =
+		listedSkillIds.length > 0 && listedSkillIds.every((id) => selectedSkillIds.includes(id));
+
+	const toggleAllSkills = () => {
+		selectedSkillIds = allSkillsOn
+			? selectedSkillIds.filter((id) => !listedSkillIds.includes(id))
+			: [...new Set([...selectedSkillIds, ...listedSkillIds])];
 	};
 
 	let fileUploadEnabled = true;
@@ -616,25 +807,76 @@
 							</div>
 						</button>
 					</Tooltip>
+
+					<Tooltip
+						content={$i18n.t('Keep a combination under a name and put it back on in one click.')}
+						placement="top-start"
+					>
+						<button
+							class={rowClass(false)}
+							on:click={() => {
+								tab = 'presets';
+							}}
+						>
+							<div class="flex-1 truncate">
+								<div class="flex flex-1 items-center gap-2 overflow-hidden">
+									<div class="shrink-0">
+										<Bolt className="size-3.5" strokeWidth="1.75" />
+									</div>
+
+									<div class="min-w-0 truncate">
+										{presets.length > 0 ? $i18n.t('Presets') : $i18n.t('Save as preset')}
+									</div>
+
+									{#if currentPreset}
+										<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
+											{currentPreset.name}
+										</div>
+									{:else if presets.length > 0}
+										<div class="shrink-0 text-gray-400 dark:text-gray-500">{presets.length}</div>
+									{/if}
+								</div>
+							</div>
+
+							<div class="shrink-0 text-gray-500">
+								<ChevronRight />
+							</div>
+						</button>
+					</Tooltip>
 				</div>
 			{:else if tab === 'tools' && tools}
 				<div class="flex max-h-72 min-h-0 flex-col gap-0.5" in:fly={{ x: 20, duration: 150 }}>
-					<button
-						class="flex w-full justify-between gap-2 items-center h-[1.6875rem] px-2 text-[0.8125rem] font-normal cursor-pointer rounded-xl hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
-						on:click={() => {
-							toolQuery = '';
-							tab = '';
-						}}
-					>
-						<ChevronLeft />
+					<div class="flex w-full items-center gap-1">
+						<button
+							class="flex flex-1 min-w-0 gap-2 items-center h-[1.6875rem] px-2 text-[0.8125rem] font-normal cursor-pointer rounded-xl hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
+							on:click={() => {
+								toolQuery = '';
+								tab = '';
+							}}
+						>
+							<ChevronLeft />
 
-						<div class="flex items-center w-full justify-between">
-							<div>
+							<div class="min-w-0 truncate">
 								{$i18n.t('Tools')}
 								<span class="ml-0.5 text-gray-500">{toolIds.length}</span>
 							</div>
-						</div>
-					</button>
+						</button>
+
+						<Tooltip
+							content={allToolsOn
+								? $i18n.t('Switch off every tool in this list')
+								: $i18n.t('Switch on every tool in this list')}
+							placement="top-end"
+						>
+							<button
+								class="shrink-0 h-[1.6875rem] px-2 text-[0.75rem] rounded-xl whitespace-nowrap text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50/40 dark:hover:bg-gray-800/40 disabled:opacity-40"
+								disabled={toggleableToolIds.length === 0}
+								on:click={toggleAllTools}
+							>
+								{allToolsOn ? $i18n.t('None') : $i18n.t('All')}
+							</button>
+						</Tooltip>
+					</div>
 
 					<SearchInput bind:value={toolQuery} placeholder={$i18n.t('Search tools')} />
 
@@ -760,22 +1002,37 @@
 				</div>
 			{:else if tab === 'skills' && skills}
 				<div class="flex max-h-72 min-h-0 flex-col gap-0.5" in:fly={{ x: 20, duration: 150 }}>
-					<button
-						class="flex w-full justify-between gap-2 items-center h-[1.6875rem] px-2 text-[0.8125rem] font-normal cursor-pointer rounded-xl hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
-						on:click={() => {
-							skillQuery = '';
-							tab = '';
-						}}
-					>
-						<ChevronLeft />
+					<div class="flex w-full items-center gap-1">
+						<button
+							class="flex flex-1 min-w-0 gap-2 items-center h-[1.6875rem] px-2 text-[0.8125rem] font-normal cursor-pointer rounded-xl hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
+							on:click={() => {
+								skillQuery = '';
+								tab = '';
+							}}
+						>
+							<ChevronLeft />
 
-						<div class="flex items-center w-full justify-between">
-							<div>
+							<div class="min-w-0 truncate">
 								{$i18n.t('Skills')}
 								<span class="ml-0.5 text-gray-500">{skillIds.length}</span>
 							</div>
-						</div>
-					</button>
+						</button>
+
+						<Tooltip
+							content={allSkillsOn
+								? $i18n.t('Switch off every skill in this list')
+								: $i18n.t('Switch on every skill in this list')}
+							placement="top-end"
+						>
+							<button
+								class="shrink-0 h-[1.6875rem] px-2 text-[0.75rem] rounded-xl whitespace-nowrap text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50/40 dark:hover:bg-gray-800/40 disabled:opacity-40"
+								disabled={listedSkillIds.length === 0}
+								on:click={toggleAllSkills}
+							>
+								{allSkillsOn ? $i18n.t('None') : $i18n.t('All')}
+							</button>
+						</Tooltip>
+					</div>
 
 					<SearchInput bind:value={skillQuery} placeholder={$i18n.t('Search skills')} />
 
@@ -837,6 +1094,157 @@
 								{/each}
 							</div>
 						{/if}
+					</div>
+				</div>
+			{:else if tab === 'presets'}
+				<div class="flex max-h-72 min-h-0 flex-col gap-0.5" in:fly={{ x: 20, duration: 150 }}>
+					<div class="flex w-full items-center gap-1">
+						<button
+							class="flex flex-1 min-w-0 gap-2 items-center h-[1.6875rem] px-2 text-[0.8125rem] font-normal cursor-pointer rounded-xl hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
+							on:click={() => {
+								editingPresets = false;
+								tab = '';
+							}}
+						>
+							<ChevronLeft />
+
+							<div class="min-w-0 truncate">
+								{$i18n.t('Presets')}
+								{#if presets.length > 0}
+									<span class="ml-0.5 text-gray-500">{presets.length}</span>
+								{/if}
+							</div>
+						</button>
+
+						{#if presets.length > 0}
+							<button
+								class="shrink-0 h-[1.6875rem] px-2 text-[0.75rem] rounded-xl whitespace-nowrap text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
+								on:click={() => {
+									editingPresets = !editingPresets;
+									renameDrafts = {};
+								}}
+							>
+								{editingPresets ? $i18n.t('Done') : $i18n.t('Edit')}
+							</button>
+						{/if}
+					</div>
+
+					<div class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin">
+						{#if presets.length === 0}
+							<div class="px-2 py-3 text-xs text-gray-500">
+								{$i18n.t(
+									'Switch on what you need, then name it here. One click puts it all back on later.'
+								)}
+							</div>
+						{:else}
+							<div class="flex flex-col gap-0.5">
+								{#each presets as preset (preset.id)}
+									{#if editingPresets}
+										<div
+											class="flex w-full items-center gap-1 px-2 py-0.5 rounded-xl text-[0.8125rem]"
+										>
+											<input
+												class="min-w-0 flex-1 bg-transparent outline-hidden text-gray-700 dark:text-gray-200 placeholder:text-gray-400"
+												value={renameDrafts[preset.id] ?? preset.name}
+												maxlength={MAX_PRESET_NAME}
+												aria-label={$i18n.t('Preset name')}
+												on:input={(e) => {
+													renameDrafts = {
+														...renameDrafts,
+														[preset.id]: e.currentTarget.value
+													};
+												}}
+												on:blur={() => commitRename(preset)}
+												on:keydown={(e) => {
+													if (e.key === 'Enter') {
+														e.preventDefault();
+														e.currentTarget.blur();
+													} else if (e.key === 'Escape') {
+														e.preventDefault();
+														renameDrafts = { ...renameDrafts, [preset.id]: preset.name };
+													}
+												}}
+											/>
+
+											<Tooltip content={$i18n.t('Replace with what is switched on now')}>
+												<button
+													class="shrink-0 p-1 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50/40 dark:hover:bg-gray-800/40 disabled:opacity-40"
+													aria-label={$i18n.t('Replace with what is switched on now')}
+													on:click={() => overwritePreset(preset)}
+												>
+													<ArrowPath className="size-3.5" strokeWidth="1.75" />
+												</button>
+											</Tooltip>
+
+											<Tooltip content={$i18n.t('Delete preset')}>
+												<button
+													class="shrink-0 p-1 rounded-lg text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-50/40 dark:hover:bg-gray-800/40 disabled:opacity-40"
+													aria-label={$i18n.t('Delete preset')}
+													on:click={() => deletePreset(preset)}
+												>
+													<GarbageBin className="size-3.5" strokeWidth="1.75" />
+												</button>
+											</Tooltip>
+										</div>
+									{:else}
+										<button
+											class={rowClass(currentPreset?.id === preset.id)}
+											aria-pressed={currentPreset?.id === preset.id}
+											on:click={() => applyPreset(preset)}
+										>
+											<div class="flex-1 truncate">
+												<div class="flex flex-1 items-center gap-2 overflow-hidden">
+													<div class="shrink-0">
+														<Bolt className="size-3.5" strokeWidth="1.75" />
+													</div>
+
+													<div class="min-w-0 truncate">{preset.name}</div>
+													<div class="min-w-0 truncate text-gray-400 dark:text-gray-500">
+														{presetSummary(preset)}
+													</div>
+												</div>
+											</div>
+
+											{#if currentPreset?.id === preset.id}
+												<div class="shrink-0 text-gray-500">
+													<Check className="size-3.5" strokeWidth="2.5" />
+												</div>
+											{/if}
+										</button>
+									{/if}
+								{/each}
+							</div>
+						{/if}
+					</div>
+
+					<div class="mt-1 pt-1 border-t border-gray-100 dark:border-gray-850">
+						<form
+							class="flex w-full items-center gap-1 px-2 h-[1.6875rem] text-[0.8125rem]"
+							on:submit|preventDefault={createPreset}
+						>
+							<div class="shrink-0 text-gray-500">
+								<Pencil className="size-3.5" strokeWidth="1.75" />
+							</div>
+
+							<input
+								class="min-w-0 flex-1 bg-transparent outline-hidden text-gray-700 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+								bind:value={newPresetName}
+								maxlength={MAX_PRESET_NAME}
+								placeholder={$i18n.t('Name this combination')}
+								aria-label={$i18n.t('Name this combination')}
+								disabled={savingPresets || presets.length >= MAX_PRESETS}
+							/>
+
+							<button
+								class="shrink-0 px-2 rounded-lg text-[0.75rem] text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50/40 dark:hover:bg-gray-800/40 disabled:opacity-40 whitespace-nowrap"
+								type="submit"
+								disabled={savingPresets ||
+									newPresetName.trim() === '' ||
+									presets.length >= MAX_PRESETS}
+							>
+								{$i18n.t('Save')}
+							</button>
+						</form>
 					</div>
 				</div>
 			{/if}

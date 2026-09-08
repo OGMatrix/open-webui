@@ -39,6 +39,7 @@
 	// Addons
 	let titleAutoGenerate = true;
 	let autoFollowUps = true;
+	let toolSuggestions = true;
 	let autoTags = true;
 
 	let responseAutoCopy = false;
@@ -354,6 +355,7 @@
 		titleAutoGenerate = currentSettings?.title?.auto ?? true;
 		autoTags = currentSettings?.autoTags ?? true;
 		autoFollowUps = currentSettings?.autoFollowUps ?? true;
+		toolSuggestions = currentSettings?.toolSuggestions ?? true;
 
 		generationGlow = (currentSettings?.generationGlow ?? 'sweep') as GlowStyle;
 		generationGlowSpeed = currentSettings?.generationGlowSpeed ?? 1;
@@ -1212,6 +1214,31 @@
 		</div>
 		<p class={settingDescriptionClass}>
 			{$i18n.t('Generate suggested follow-up prompts after responses.')}
+		</p>
+	</div>
+
+	<div>
+		<div class={settingRowClass}>
+			<div class={settingLabelClass} id="tool-suggestions-label">
+				{$i18n.t('Integration Suggestions')}
+			</div>
+
+			<div class={settingControlClass}>
+				<Switch
+					ariaLabelledbyId="tool-suggestions-label"
+					tooltip={true}
+					bind:state={toolSuggestions}
+					inherited={isDefaultSetting('toolSuggestions')}
+					on:change={() => {
+						saveSettings({ toolSuggestions });
+					}}
+				/>
+			</div>
+		</div>
+		<p class={settingDescriptionClass}>
+			{$i18n.t(
+				'Check a message before it is sent and offer the tools it looks like it needs. Adds a short pause before sending.'
+			)}
 		</p>
 	</div>
 

@@ -3,6 +3,25 @@ import { type Writable, derived, writable } from 'svelte/store';
 import type { ModelConfig } from '$lib/apis';
 import type { Banner } from '$lib/types';
 import type { ComposerSelection } from '$lib/utils/composerSelection';
+import type { SelectionPreset } from '$lib/utils/selectionPresets';
+
+/** The shape the composer needs from a tool; the API returns more. */
+export interface ToolSummary {
+	id: string;
+	name: string;
+	meta?: { description?: string; [key: string]: any };
+	/** False only for an integration whose server has not been signed in to. */
+	authenticated?: boolean;
+	[key: string]: any;
+}
+
+export interface SkillSummary {
+	id: string;
+	name: string;
+	description?: string;
+	is_active?: boolean;
+	[key: string]: any;
+}
 import type { Socket } from 'socket.io-client';
 import type { AudioQueue } from '$lib/utils/audio';
 import type { I18nOverrides } from '$lib/utils/translationDictionary';
@@ -76,8 +95,14 @@ export const selectedFolder = writable(null);
 export const models: Writable<Model[]> = writable([]);
 
 export const knowledge: Writable<null | Document[]> = writable(null);
-export const tools = writable(null);
-export const skills = writable(null);
+/**
+ * What this reader may switch on, once it has been fetched.
+ *
+ * Null until then, which is not the same as empty: a component that prunes a
+ * selection against an empty list would drop everything a conversation had.
+ */
+export const tools = writable<ToolSummary[] | null>(null);
+export const skills = writable<SkillSummary[] | null>(null);
 export const functions = writable(null);
 
 export type WorkspaceSection = 'models' | 'knowledge' | 'prompts' | 'skills' | 'tools';
@@ -259,6 +284,10 @@ type Settings = {
 	readingWidth?: 'narrow' | 'comfortable' | 'wide';
 	/** What new conversations start with; see utils/composerSelection. */
 	defaultSelection?: ComposerSelection;
+	/** Named selections the reader can put on in one click; see utils/selectionPresets. */
+	selectionPresets?: SelectionPreset[];
+	/** Whether a message is checked for missing integrations before it is sent. */
+	toolSuggestions?: boolean;
 	/**
 	 * An older starting point: a bare list of tool ids. Read for anyone who set
 	 * it by hand, since nothing in the app ever wrote it. Superseded by

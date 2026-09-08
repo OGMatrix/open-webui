@@ -29,6 +29,8 @@
 		TITLE_GENERATION_PROMPT_TEMPLATE: '',
 		ENABLE_FOLLOW_UP_GENERATION: true,
 		FOLLOW_UP_GENERATION_PROMPT_TEMPLATE: '',
+		ENABLE_TOOL_SUGGESTIONS: true,
+		TOOL_SUGGESTIONS_PROMPT_TEMPLATE: '',
 		IMAGE_PROMPT_GENERATION_PROMPT_TEMPLATE: '',
 		ENABLE_AUTOCOMPLETE_GENERATION: true,
 		AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH: -1,
@@ -441,6 +443,33 @@
 						<Textarea
 							className={textareaClass}
 							bind:value={taskConfig.FOLLOW_UP_GENERATION_PROMPT_TEMPLATE}
+							placeholder={$i18n.t(
+								'Leave empty to use the default prompt, or enter a custom prompt'
+							)}
+						/>
+					</AdminSettingField>
+				{/if}
+
+				<AdminSettingRow
+					label={$i18n.t('Integration Suggestions')}
+					description={$i18n.t(
+						'Check a message before it is sent and offer the tools it looks like it needs.'
+					)}
+					let:labelId
+				>
+					<Switch bind:state={taskConfig.ENABLE_TOOL_SUGGESTIONS} ariaLabelledbyId={labelId} />
+				</AdminSettingRow>
+
+				{#if taskConfig.ENABLE_TOOL_SUGGESTIONS}
+					<AdminSettingField
+						label={$i18n.t('Integration Suggestions Prompt')}
+						description={$i18n.t(
+							'Guides which integrations are recommended before a message is sent.'
+						)}
+					>
+						<Textarea
+							className={textareaClass}
+							bind:value={taskConfig.TOOL_SUGGESTIONS_PROMPT_TEMPLATE}
 							placeholder={$i18n.t(
 								'Leave empty to use the default prompt, or enter a custom prompt'
 							)}

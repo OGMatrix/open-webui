@@ -138,6 +138,8 @@
 	import Expand from '../icons/Expand.svelte';
 	import QueuedMessageItem from './MessageInput/QueuedMessageItem.svelte';
 	import PromptStatusBar from './MessageInput/PromptStatusBar.svelte';
+	import type { ToolSuggestion } from '$lib/utils/toolSuggestions';
+	import ToolSuggestionCard from './MessageInput/ToolSuggestionCard.svelte';
 	import { currentOrigin, mediaAccessMessage, requestMicrophone } from '$lib/utils/mediaAccess';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
@@ -947,6 +949,19 @@
 
 	let user = null;
 	export let placeholder = '';
+
+	/**
+	 * What the task model suggests for the message being held, if anything.
+	 *
+	 * Owned by the chat, which is what holds the message; shown here because
+	 * this is where the reader is looking when they press send.
+	 */
+	export let suggestionState: 'idle' | 'asking' | 'offering' = 'idle';
+	export let suggestion: ToolSuggestion | null = null;
+	export let onSuggestionApply: (chosen: Set<string>) => void = () => {};
+	export let onSuggestionDismiss: () => void = () => {};
+	export let onSuggestionCancel: () => void = () => {};
+	export let onSuggestionNeverAgain: () => void = () => {};
 
 	type ModelCapability =
 		| 'vision'
@@ -2032,6 +2047,15 @@
 							tokens={contextTokenCount}
 							compactAt={compactionAt}
 							compacting={contextCompaction?.state === 'running'}
+						/>
+
+						<ToolSuggestionCard
+							state={suggestionState}
+							{suggestion}
+							onApply={onSuggestionApply}
+							onDismiss={onSuggestionDismiss}
+							onCancel={onSuggestionCancel}
+							onNeverAgain={onSuggestionNeverAgain}
 						/>
 
 						<!-- Queued messages display -->
