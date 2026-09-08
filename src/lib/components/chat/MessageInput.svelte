@@ -2890,7 +2890,7 @@
 														oauthRedirectHandler(pendingTool, chatInputDraft);
 													}}
 													type="button"
-													class="group px-2 py-[0.3125rem] flex gap-1.5 items-center text-xs rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden
+													class="group px-2 py-[0.3125rem] flex shrink-0 gap-1.5 items-center text-xs rounded-full transition-colors duration-300 focus:outline-hidden max-w-full overflow-hidden
 													text-amber-600 dark:text-amber-400 bg-amber-50 hover:bg-amber-100 dark:bg-amber-400/10 dark:hover:bg-amber-600/10 border border-amber-200/40 dark:border-amber-500/20"
 												>
 													<Wrench className="size-3.5" strokeWidth="1.75" />

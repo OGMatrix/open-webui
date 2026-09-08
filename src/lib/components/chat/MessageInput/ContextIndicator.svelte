@@ -80,7 +80,7 @@
 			<button
 				type="button"
 				aria-label={tooltip}
-				class="group flex max-w-full items-center gap-1 overflow-hidden rounded-full py-1 pr-2 pl-1.5 transition-colors duration-300 focus:outline-hidden {surface} {tone}"
+				class="group flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full py-1 pr-2 pl-1.5 transition-colors duration-300 focus:outline-hidden {surface} {tone}"
 			>
 				<svg
 					viewBox="0 0 24 24"

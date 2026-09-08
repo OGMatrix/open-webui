@@ -129,7 +129,7 @@
 	}`;
 </script>
 
-<div class="flex items-center translate-x-0.5">
+<div class="flex shrink-0 items-center translate-x-0.5">
 	{#if disabled}
 		<Tooltip content={$i18n.t('Terminal')} placement="top">
 			<button type="button" disabled aria-disabled="true" class={triggerClass}>
