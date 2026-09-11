@@ -60,14 +60,36 @@ if [ -n "$OURS" ]; then
 	git log --oneline "$BRANCH..$UPSTREAM_REMOTE/$UPSTREAM_BRANCH" -- $OURS | head -20 || true
 fi
 
+# Translations: a key empty here but translated upstream is always a loss --
+# keys are the English source, so the same key means the same thing on both
+# sides. Two syncs dropped 866 of them before this step existed.
+PYTHON=$(command -v python3 || command -v python || true)
+restore_translations() {
+	if [ -z "$PYTHON" ]; then
+		echo "no python found; run scripts/restore-upstream-translations.py yourself" >&2
+		return
+	fi
+	"$PYTHON" scripts/restore-upstream-translations.py "$UPSTREAM_REMOTE/$UPSTREAM_BRANCH"
+}
+
 echo
 if git merge --no-edit "$UPSTREAM_REMOTE/$UPSTREAM_BRANCH"; then
+	echo
+	echo "checking for translations the merge left empty ..."
+	restore_translations
+	if [ -n "$(git status --porcelain -- src/lib/i18n)" ]; then
+		git add src/lib/i18n
+		git commit -q -m "fix(i18n): restore translations the upstream merge left empty"
+		echo "committed the restored translations"
+	fi
 	echo
 	echo "merged cleanly. now verify before pushing:"
 else
 	echo
 	echo "merge stopped on conflicts. resolve them, then:" >&2
 	echo "  git add <files> && git commit" >&2
+	echo "  python scripts/restore-upstream-translations.py $UPSTREAM_REMOTE/$UPSTREAM_BRANCH" >&2
+	echo "  (and commit whatever it restores)" >&2
 	echo
 	echo "afterwards verify:" >&2
 fi
