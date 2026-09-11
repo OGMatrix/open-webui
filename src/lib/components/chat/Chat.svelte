@@ -1211,6 +1211,20 @@
 	/** The conversation whose saved selection has been put back. */
 	let selectionRestoredFor: string | null = null;
 
+	/**
+	 * A chat that has just come into being owns what is on screen.
+	 *
+	 * Called wherever a new conversation gets its id. From here a reload of it
+	 * is a reload, not an opening -- it must not put the server's copy over
+	 * the composer -- and what it was sent with is the baseline later changes
+	 * are measured against.
+	 */
+	const adoptSelection = (newChatId: string) => {
+		selectionRestoredFor = newChatId;
+		selectionRestored = true;
+		selectionBaseline = currentSelection;
+	};
+
 	const restoreSavedSelection = (saved: unknown): boolean => {
 		if (saved === undefined || saved === null) return false;
 		applySelection(resolveSelection({ saved }, availableIds()));
@@ -4019,6 +4033,7 @@
 				_chatId = createdChat.id;
 				loadedChatIdProp = _chatId;
 				await chatId.set(_chatId);
+				adoptSelection(_chatId);
 				await chatTitle.set(createdChat?.chat?.title ?? createdChat?.title ?? $i18n.t('Chat'));
 
 				params = structuredClone(createdChat?.chat?.params ?? {});
@@ -4407,6 +4422,7 @@
 						};
 					});
 					await chatId.set(res.chat_id);
+					adoptSelection(res.chat_id);
 					if (!$temporaryChatEnabled && !embedded) {
 						window.history.replaceState(history.state, '', `/c/${res.chat_id}`);
 						await refreshChatList(localStorage.token);
@@ -4415,11 +4431,18 @@
 						// params) that the backend doesn't receive in the
 						// chat completion request.  Files are now persisted
 						// by the backend at chat creation time.
-						if (Object.keys(params).length > 0) {
-							await updateChatById(localStorage.token, res.chat_id, {
-								params: params
-							});
-						}
+						//
+						// The selection goes with them: what this message was
+						// sent with is what the conversation should reopen with,
+						// whether or not anything is changed afterwards.
+						const created = await updateChatById(localStorage.token, res.chat_id, {
+							...(Object.keys(params).length > 0 ? { params } : {}),
+							selection: currentSelection
+						}).catch((error) => {
+							console.error('[new chat controls]', error);
+							return null;
+						});
+						if (created && $chatId === res.chat_id) chat = created;
 					}
 				}
 			}
@@ -4688,7 +4711,8 @@
 					history: history,
 					messages: createMessagesList(history, history.currentId),
 					tags: [],
-					timestamp: Date.now()
+					timestamp: Date.now(),
+					selection: currentSelection
 				},
 				$selectedFolder?.id,
 				chatVariables
@@ -4696,6 +4720,7 @@
 
 			_chatId = chat.id;
 			await chatId.set(_chatId);
+			adoptSelection(_chatId);
 
 			if (!embedded) {
 				window.history.replaceState(history.state, '', `/c/${_chatId}`);
