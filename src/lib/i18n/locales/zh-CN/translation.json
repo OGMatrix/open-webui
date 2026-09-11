@@ -888,6 +888,8 @@
 	"Description ({{language}})": "",
 	"Deselect": "取消选中",
 	"Destination": "目标",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "自动检测对话产物",
 	"Detect generated artifacts and show them in the artifact workspace.": "检测生成的产物并将其显示在产物工作空间中。",
 	"Detected Variables": "检测到的变量",

@@ -896,6 +896,8 @@
 	"Description ({{language}})": "",
 	"Deselect": "Desmarcar",
 	"Destination": "Destino",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "Detectar artefatos automaticamente",
 	"Detect generated artifacts and show them in the artifact workspace.": "Detecte os artefatos gerados e exiba-os no workspace de artefatos.",
 	"Detected Variables": "Variáveis Detectadas",

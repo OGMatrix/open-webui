@@ -869,6 +869,8 @@
 	"Description ({{language}})": "",
 	"Deselect": "Prekliči izbiro",
 	"Destination": "",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "Samodejno zaznaj artefakte",
 	"Detect generated artifacts and show them in the artifact workspace.": "Zaznaj ustvarjene artefakte in jih prikaži v delovnem prostoru artefaktov.",
 	"Detected Variables": "Zaznane spremenljivke",

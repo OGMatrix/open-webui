@@ -905,6 +905,8 @@
 	"Description ({{language}})": "",
 	"Deselect": "Снять выделение",
 	"Destination": "Назначение",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "Автоматическое обнаружение артефактов",
 	"Detect generated artifacts and show them in the artifact workspace.": "",
 	"Detected Variables": "",

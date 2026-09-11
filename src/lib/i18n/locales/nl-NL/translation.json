@@ -888,6 +888,8 @@
 	"Description ({{language}})": "",
 	"Deselect": "Deselecteren",
 	"Destination": "",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "Artefacten automatisch detecteren",
 	"Detect generated artifacts and show them in the artifact workspace.": "",
 	"Detected Variables": "",

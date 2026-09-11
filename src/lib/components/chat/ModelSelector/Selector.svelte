@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { splitModelName } from '$lib/utils/composerToolbar';
 	import { emphasizeNames } from '$lib/utils/modelNames';
 	import { groupModels } from '$lib/utils/modelGroups';
 	import { promoteRecent, rememberModel } from '$lib/utils/recentModels';
@@ -287,11 +288,24 @@
 	// already carries; there is no reason to add another one for the indicator.
 	$: selectedEntry = items.find((item) => item.value === primaryValue);
 	$: selectedCount = selectedValues.filter(Boolean).length;
-	$: triggerLabel = selectedModel
-		? compareEnabled && selectedCount > 1
-			? `${selectedModel.label} +${selectedCount - 1}`
-			: selectedModel.label
-		: placeholder;
+	/**
+	 * The name, and the name split so that its ending survives truncation; see
+	 * splitModelName. `qwen3.8-27b-mtp-256k` shortens to `qwen3.8-27b-…-256k`,
+	 * not to a name that could be any of four context lengths.
+	 *
+	 * One block rather than one reactive derived from another: a `$:` value
+	 * read from another `$:` value has been seen stale on first render here.
+	 */
+	let triggerLabel = '';
+	let triggerParts = { head: '', tail: '' };
+	$: {
+		triggerLabel = selectedModel
+			? compareEnabled && selectedCount > 1
+				? `${selectedModel.label} +${selectedCount - 1}`
+				: selectedModel.label
+			: placeholder;
+		triggerParts = splitModelName(triggerLabel ?? '');
+	}
 
 	let searchValue = '';
 
@@ -1146,7 +1160,17 @@
 				);
 			}}
 		>
-			<span class="min-w-0 flex-1 truncate">{triggerLabel}</span>
+			<!--
+				Two pieces with no gap between them read as one name. Only the front
+				gives way; the ending stays whole. The full name is in the title and in
+				the button's accessible name.
+			-->
+			<!-- No whitespace between the pieces: it would put a space in a copied name. -->
+			<span class="flex min-w-0 flex-1" title={triggerLabel}
+				><span class="min-w-0 truncate">{triggerParts.head}</span>{#if triggerParts.tail}<span
+						class="shrink-0">{triggerParts.tail}</span
+					>{/if}</span
+			>
 			{#if selectedCount === 1}
 				<!--
 					Whether the model is warm, without opening anything. Only when one

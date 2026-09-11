@@ -125,6 +125,14 @@
 	import IntegrationsMenu from './MessageInput/IntegrationsMenu.svelte';
 	import TerminalMenu from './MessageInput/TerminalMenu.svelte';
 	import Component from '../icons/Component.svelte';
+	import {
+		chipsFit,
+		countLabel,
+		fitDensity,
+		isCompact,
+		isStacked,
+		type ToolbarDensity
+	} from '$lib/utils/composerToolbar';
 	import PlusAlt from '../icons/PlusAlt.svelte';
 	import Dropdown from '../common/Dropdown.svelte';
 
@@ -1103,8 +1111,7 @@
 	 * as well as there.
 	 */
 	$: hasStateChips =
-		(selectedToolIds ?? []).length > 0 ||
-		(selectedSkillIds ?? []).length > 0 ||
+		contextTokenCount > 0 ||
 		(selectedFilterIds ?? []).length > 0 ||
 		!!reasoningMode ||
 		(webSearchEnabled && showWebSearchButton) ||
@@ -1112,6 +1119,114 @@
 		(codeInterpreterEnabled && showCodeInterpreterButton) ||
 		(pendingOAuthTools ?? []).length > 0 ||
 		showTerminalSelector;
+
+	/**
+	 * How many integrations are switched on, for the integrations button.
+	 *
+	 * Tools and skills used to be two more chips in the row, each a bare count
+	 * beside an icon, next to a button that opens the very menu they counted.
+	 * The count now sits in that button. Filters and modes keep chips of their
+	 * own: they are named things that change how the answer is made, and
+	 * reporting them twice would only make the number harder to read.
+	 */
+	$: integrationCount = (selectedToolIds ?? []).length + (selectedSkillIds ?? []).length;
+
+	/**
+	 * How the row lays itself out; see utils/composerToolbar.
+	 *
+	 * Decided by measuring this row, not by a breakpoint on the chat pane. The
+	 * pane can be 1700 pixels wide while the composer is held to the reading
+	 * width, and a breakpoint on the pane then promised room the composer did not
+	 * have -- which is how the chips ended up in a strip that scrolled sideways.
+	 */
+	let density: ToolbarDensity = 'full';
+	let chipList: HTMLElement | null = null;
+	let fitFrame: number | null = null;
+	let lastRowWidth = -1;
+
+	/**
+	 * Whether the chips sit on one line inside the space they were given.
+	 *
+	 * By the boxes of their buttons rather than by `scrollWidth`, whose answer
+	 * depends on the overflow mode of the element being asked -- this one has
+	 * none, so a focus ring is never clipped -- and rather than by the list's
+	 * children, several of which are `display: contents` wrappers with no box
+	 * at all. Menus open from these chips are portalled to the body, so nothing
+	 * but the chips themselves is measured.
+	 */
+	const chipsFitNow = (): boolean => {
+		if (!chipList) return true;
+		const limit = chipList.getBoundingClientRect().right;
+		const boxes = Array.from(chipList.querySelectorAll('button')).map((button) => {
+			const rect = button.getBoundingClientRect();
+			return { left: rect.left, right: rect.right, top: rect.top, width: rect.width };
+		});
+		return chipsFit(boxes, limit);
+	};
+
+	/**
+	 * Try the layouts, richest first, and keep the first that fits.
+	 *
+	 * Runs inside one animation frame: every trial is laid out and measured
+	 * before the browser paints, so the reader only ever sees the result.
+	 */
+	const fitToolbar = async () => {
+		fitFrame = null;
+		const settled = await fitDensity(async (candidate) => {
+			density = candidate;
+			await tick();
+			return chipsFitNow();
+		});
+		density = settled;
+	};
+
+	/** Coalesce every reason to re-fit within a frame into one fit. */
+	const requestFit = () => {
+		if (typeof window === 'undefined' || fitFrame !== null) return;
+		fitFrame = requestAnimationFrame(() => void fitToolbar());
+	};
+
+	/**
+	 * Re-fit when the row changes width, or when what is in it changes.
+	 *
+	 * Width alone is not enough: a model with a longer name, a filter switched
+	 * on, the gauge gaining a digit -- each changes what has to fit without the
+	 * row moving at all. Content is watched for children and text only, never
+	 * for attributes, because the fit itself works by changing classes; watching
+	 * those would have it re-fitting in answer to its own work. For the same
+	 * reason nothing in the row may add or remove elements by density.
+	 */
+	const watchToolbar = (node: HTMLElement) => {
+		const width = new ResizeObserver((entries) => {
+			const next = entries[0]?.contentRect.width ?? 0;
+			// Stacking makes the row taller; only a change of width is news.
+			if (Math.abs(next - lastRowWidth) < 0.5) return;
+			lastRowWidth = next;
+			requestFit();
+		});
+		const content = new MutationObserver(() => requestFit());
+
+		width.observe(node);
+		content.observe(node, { childList: true, subtree: true, characterData: true });
+		// Text measured in a fallback font is text measured wrong.
+		document.fonts?.ready.then(() => requestFit()).catch(() => {});
+		requestFit();
+
+		return {
+			destroy() {
+				width.disconnect();
+				content.disconnect();
+				if (fitFrame !== null) cancelAnimationFrame(fitFrame);
+				fitFrame = null;
+				lastRowWidth = -1;
+			}
+		};
+	};
+
+	$: compactChips = isCompact(density);
+	$: stackedChips = isStacked(density);
+	/** A chip's words: in view unless the row is down to icons. */
+	$: chipLabel = isCompact(density) ? 'hidden' : 'inline';
 
 	const scrollToBottom = () => {
 		const element = document.getElementById('messages-container');
@@ -2509,6 +2624,8 @@
 							</div>
 
 							<div
+								use:watchToolbar
+								data-density={density}
 								class=" flex flex-wrap justify-between gap-y-1 mt-0.5 mb-2 mx-0.5 max-w-full"
 								dir="ltr"
 							>
@@ -2623,14 +2740,36 @@
 													const chatInput = document.getElementById('chat-input');
 													chatInput?.focus();
 												}}
+												onShowDetails={(kind) => {
+													if (kind === 'tools') {
+														showTools = true;
+													} else {
+														showSkills = true;
+													}
+												}}
+												let:triggerLabel
 											>
+												<!--
+													Round while nothing is on, a pill with the count once
+													something is. The border is always there, only its colour
+													changes, so switching the first tool on does not nudge the
+													row by two pixels.
+												-->
 												<button
 													type="button"
 													id="integration-menu-button"
-													class="bg-transparent hover:bg-gray-100 text-gray-700 dark:text-white dark:hover:bg-gray-800 rounded-full size-[1.875rem] flex justify-center items-center outline-hidden focus:outline-hidden shrink-0"
-													aria-label={$i18n.t('Integrations')}
+													class="flex h-[1.875rem] min-w-[1.875rem] shrink-0 items-center justify-center gap-1 rounded-full border px-1.5 outline-hidden transition-colors focus:outline-hidden {integrationCount >
+													0
+														? 'border-gray-200/70 bg-gray-50 text-gray-700 hover:bg-gray-100 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/10'
+														: 'border-transparent bg-transparent text-gray-700 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-800'}"
+													aria-label={triggerLabel}
 												>
-													<Component className="size-4.5" strokeWidth="1.5" />
+													<Component className="size-4.5 shrink-0" strokeWidth="1.5" />
+													{#if integrationCount > 0}
+														<span class="pr-0.5 text-xs font-medium tabular-nums" aria-hidden="true"
+															>{countLabel(integrationCount)}</span
+														>
+													{/if}
 												</button>
 											</IntegrationsMenu>
 										{/if}
@@ -2657,13 +2796,15 @@
 								</div>
 
 								<!--
-									The chips take a line of their own until the row is wide enough to
-									hold them beside everything else. On a phone the alternative was a
-									hundred-pixel scrolling strip with the last chip cut in half, which
-									nobody reads as "scroll me".
+									The chips sit beside the actions while they fit there, and take a
+									line of their own above them once they do not -- decided by what
+									this row measures, see watchToolbar. They never scroll: a strip
+									that scrolls sideways is the layout people most reliably miss.
 								-->
 								<div
-									class="order-first flex w-full min-w-0 items-center @2xl:order-none @2xl:w-auto @2xl:flex-1"
+									class="flex min-w-0 items-center {stackedChips
+										? 'order-first w-full'
+										: 'order-none w-auto flex-1'}"
 								>
 									{#if hasStateChips}
 										<!--
@@ -2671,70 +2812,25 @@
 											something. The line says so without spending a word on it.
 										-->
 										<div
-											class="mx-1.5 hidden h-4 w-px shrink-0 self-center bg-gray-200/70 dark:bg-white/10 @2xl:block"
+											class="mx-1.5 h-4 w-px shrink-0 self-center bg-gray-200/70 dark:bg-white/10 {stackedChips
+												? 'hidden'
+												: 'block'}"
 											aria-hidden="true"
 										></div>
 									{/if}
 
 									<!--
-										overflow-x on its own is not possible: setting one axis to auto makes
-										the other clip too, which would slice the focus ring off a chip. The
+										No overflow of any kind, so a focus ring is never clipped. The
 										padding gives the ring room and the negative margin hands the space
-										back, so the row keeps the height it had.
+										back, so the row keeps the height it had. On one line the chips do
+										not wrap: whether they fit is measured, not guessed.
 									-->
 									<div
-										class="scrollbar-hidden -my-1 flex min-w-0 flex-wrap items-center gap-1.5 py-1 @2xl:flex-nowrap @2xl:overflow-x-auto"
+										bind:this={chipList}
+										class="-my-1 flex min-w-0 flex-1 items-center gap-1.5 py-1 {stackedChips
+											? 'flex-wrap'
+											: 'flex-nowrap'}"
 									>
-										{#if (selectedToolIds ?? []).length > 0}
-											<Tooltip
-												content={$i18n.t('{{COUNT}} Available Tools', {
-													COUNT: (selectedToolIds ?? []).length
-												})}
-											>
-												<button
-													class="{CHIP} {CHIP_FOCUS} {CHIP_COUNT}"
-													aria-label={$i18n.t('{{COUNT}} Available Tools', {
-														COUNT: (selectedToolIds ?? []).length
-													})}
-													type="button"
-													on:click={() => {
-														showTools = !showTools;
-													}}
-												>
-													<Wrench className="size-3.5 shrink-0" strokeWidth="1.75" />
-													<span class="tabular-nums">{(selectedToolIds ?? []).length}</span>
-													<!--
-														A wrench is not a symbol anyone reads reliably, and a
-														bare count says nothing about what is being counted.
-														The noun is dropped only where the composer is too
-														narrow to carry it.
-													-->
-												</button>
-											</Tooltip>
-										{/if}
-
-										{#if (selectedSkillIds ?? []).length > 0}
-											<Tooltip
-												content={$i18n.t('{{COUNT}} Available Skills', {
-													COUNT: (selectedSkillIds ?? []).length
-												})}
-											>
-												<button
-													class="{CHIP} {CHIP_FOCUS} {CHIP_COUNT}"
-													aria-label={$i18n.t('{{COUNT}} Available Skills', {
-														COUNT: (selectedSkillIds ?? []).length
-													})}
-													type="button"
-													on:click={() => {
-														showSkills = !showSkills;
-													}}
-												>
-													<Cube className="size-3.5 shrink-0" strokeWidth="1.75" />
-													<span class="tabular-nums">{(selectedSkillIds ?? []).length}</span>
-												</button>
-											</Tooltip>
-										{/if}
-
 										<!--
 											A filter is a named thing the user switched on, so it says its name. It
 											used to be a bare icon at a size nothing else in the row uses, with the
@@ -2790,7 +2886,7 @@
 															{:else}
 																<Sparkles className="size-3.5 shrink-0" strokeWidth="1.75" />
 															{/if}
-															<span class="truncate">{filterName}</span>
+															<span class="truncate {chipLabel}">{filterName}</span>
 														</button>
 													</Tooltip>
 
@@ -2813,6 +2909,7 @@
 										{/each}
 
 										<ContextIndicator
+											compact={compactChips}
 											tokens={contextTokenCount}
 											threshold={contextThresholdValue}
 											estimated={contextIsEstimated}
@@ -2823,6 +2920,7 @@
 
 										{#if reasoningMode}
 											<ReasoningEffortMenu
+												compact={compactChips}
 												mode={reasoningMode}
 												level={reasoningLevel}
 												effective={reasoningResolved.level}
@@ -2843,7 +2941,7 @@
 													class="{CHIP} {CHIP_FOCUS} {CHIP_MODE}"
 												>
 													<GlobeAlt className="size-3.5 shrink-0" strokeWidth="1.75" />
-													<span class="inline">{$i18n.t('Web Search')}</span>
+													<span class={chipLabel}>{$i18n.t('Web Search')}</span>
 													<!--
 														Always drawn, not revealed on hover. Appearing on hover changed
 														the chip's width under the cursor, and a touch screen has no
@@ -2868,7 +2966,7 @@
 													class="{CHIP} {CHIP_FOCUS} {CHIP_MODE}"
 												>
 													<Photo className="size-3.5 shrink-0" strokeWidth="1.75" />
-													<span class="inline">{$i18n.t('Image')}</span>
+													<span class={chipLabel}>{$i18n.t('Image')}</span>
 													<!--
 														Always drawn, not revealed on hover. Appearing on hover changed
 														the chip's width under the cursor, and a touch screen has no
@@ -2893,7 +2991,7 @@
 													class="{CHIP} {CHIP_FOCUS} {CHIP_MODE}"
 												>
 													<Terminal className="size-3.5 shrink-0" strokeWidth="1.75" />
-													<span class="inline">{$i18n.t('Code Interpreter')}</span>
+													<span class={chipLabel}>{$i18n.t('Code Interpreter')}</span>
 													<!--
 														Always drawn, not revealed on hover. Appearing on hover changed
 														the chip's width under the cursor, and a touch screen has no
@@ -2926,6 +3024,7 @@
 										<!-- Terminal Server Selector -->
 										{#if showTerminalSelector}
 											<TerminalMenu
+												compact={compactChips}
 												bind:show={showTerminalMenu}
 												disabled={generating ||
 													(!!history?.currentId &&

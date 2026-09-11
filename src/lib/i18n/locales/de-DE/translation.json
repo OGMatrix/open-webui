@@ -23,6 +23,8 @@
 	"Could not save your default": "Deine Voreinstellung konnte nicht gespeichert werden",
 	"Could not save your presets": "Deine Presets konnten nicht gespeichert werden",
 	"Delete preset": "Preset löschen",
+	"Details of the skills in use": "Details zu den aktiven Skills",
+	"Details of the tools in use": "Details zu den aktiven Werkzeugen",
 	"Every new chat starts with exactly this. Chats you have already started keep what they were using.": "Jeder neue Chat startet mit genau dieser Auswahl. Bereits begonnene Chats behalten, was sie verwendet haben.",
 	"Find in Chat": "Im Chat suchen",
 	"Give the preset a name": "Gib dem Preset einen Namen",

@@ -17,6 +17,14 @@
 	export let usage: ChatUsage | null = null;
 	export let pricing: ModelPricing | null = null;
 	export let windowSource: 'server' | 'model' | 'setting' | null = null;
+	/**
+	 * Down to the ring, when the row is short of room.
+	 *
+	 * Only while the window is far from full. The figure is the one thing here
+	 * worth reading, and once it passes the warning line it is worth the space:
+	 * a ring alone at 89% is a colour, and colour is not a number.
+	 */
+	export let compact = false;
 
 	let show = false;
 
@@ -67,6 +75,8 @@
 	// are short enough to sit in the row, and both beat hovering for them.
 	$: label = hasThreshold ? `${Math.round(percent)}%` : formatTokenCount(tokens);
 
+	$: ringOnly = compact && level === 'calm';
+
 	$: tooltip = hasThreshold
 		? `${$i18n.t('Context')}: ${formatTokenCount(tokens)} / ${formatTokenCount(
 				threshold as number
@@ -80,7 +90,9 @@
 			<button
 				type="button"
 				aria-label={tooltip}
-				class="group flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full py-1 pr-2 pl-1.5 transition-colors duration-300 focus:outline-hidden {surface} {tone}"
+				class="group flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full py-1 transition-colors duration-300 focus:outline-hidden {ringOnly
+					? 'px-1'
+					: 'pr-2 pl-1.5'} {surface} {tone}"
 			>
 				<svg
 					viewBox="0 0 24 24"
@@ -106,7 +118,9 @@
 						style="transition: stroke-dasharray 500ms"
 					/>
 				</svg>
-				<span class="text-xs font-medium tabular-nums">{label}</span>
+				<span class="text-xs font-medium tabular-nums {ringOnly ? 'hidden' : 'inline'}"
+					>{label}</span
+				>
 			</button>
 		</Tooltip>
 

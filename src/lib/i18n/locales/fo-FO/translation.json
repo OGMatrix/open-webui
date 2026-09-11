@@ -853,6 +853,8 @@
 	"Description ({{language}})": "",
 	"Deselect": "Tak valið av",
 	"Destination": "",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "Finn artifacts sjálvvirkandi",
 	"Detect generated artifacts and show them in the artifact workspace.": "Finn framleidd artifacts og vís tey á artifact-arbeiðsøkinum.",
 	"Detected Variables": "Funnaðir variablar",

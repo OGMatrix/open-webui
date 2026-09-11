@@ -880,6 +880,8 @@
 	"Description ({{language}})": "",
 	"Deselect": "取消選取",
 	"Destination": "",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "自動偵測對話產物",
 	"Detect generated artifacts and show them in the artifact workspace.": "",
 	"Detected Variables": "",

@@ -903,6 +903,8 @@
 	"Description": "Опис",
 	"Deselect": "Скасувати вибір",
 	"Destination": "Призначення",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "Автоматично виявляти артефакти",
 	"Detect generated artifacts and show them in the artifact workspace.": "Виявляти згенеровані артефакти та показувати їх у робочому просторі артефактів.",
 	"Detected Variables": "Виявлені змінні",

@@ -853,6 +853,8 @@
 	"Description ({{language}})": "",
 	"Deselect": "Díroghnaigh",
 	"Destination": "Ceann Scríbe",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "Déan Déantáin a bhrath go huathoibríoch",
 	"Detect generated artifacts and show them in the artifact workspace.": "Braith déantáin ghinte agus taispeáin iad sa spás oibre déantán.",
 	"Detected Variables": "Athróga Braite",

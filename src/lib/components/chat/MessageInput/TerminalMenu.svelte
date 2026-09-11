@@ -109,6 +109,9 @@
 		show = false;
 	};
 
+	/** Down to the icon when the composer row is short of room; the name is in the tooltip. */
+	export let compact = false;
+
 	$: selectedSystemTerminal = systemTerminals.find((t) => t.id === $selectedTerminalId);
 	$: selectedDirectTerminal = directTerminals.find((t) => t.url === $selectedTerminalId);
 
@@ -119,6 +122,11 @@
 		selectedDirectTerminal?.url?.replace(/^https?:\/\//, '') ||
 		$i18n.t('Terminal');
 	$: if (disabled && show) show = false;
+
+	$: terminalTooltip =
+		$selectedTerminalId && selectedLabel
+			? `${$i18n.t('Terminal')}: ${selectedLabel}`
+			: $i18n.t('Terminal');
 
 	$: triggerClass = `flex items-center gap-1.5 translate-y-[1px] text-[0.8125rem] transition rounded-lg ${
 		disabled
@@ -131,26 +139,30 @@
 
 <div class="flex shrink-0 items-center translate-x-0.5">
 	{#if disabled}
-		<Tooltip content={$i18n.t('Terminal')} placement="top">
+		<Tooltip content={terminalTooltip} placement="top">
 			<button type="button" disabled aria-disabled="true" class={triggerClass}>
 				<Cloud className="size-3.5" strokeWidth="2" />
 
 				{#if $selectedTerminalId && selectedLabel}
-					<span class="truncate text-[0.8125rem] max-w-[6.25rem] sm:max-w-[9.375rem]"
-						>{selectedLabel}</span
+					<span
+						class="truncate text-[0.8125rem] max-w-[6.25rem] sm:max-w-[9.375rem] {compact
+							? 'hidden'
+							: 'inline'}">{selectedLabel}</span
 					>
 				{/if}
 			</button>
 		</Tooltip>
 	{:else}
 		<Dropdown bind:show align="start">
-			<Tooltip content={$i18n.t('Terminal')} placement="top">
+			<Tooltip content={terminalTooltip} placement="top">
 				<button type="button" class={triggerClass}>
 					<Cloud className="size-3.5" strokeWidth="2" />
 
 					{#if $selectedTerminalId && selectedLabel}
-						<span class="truncate text-[0.8125rem] max-w-[6.25rem] sm:max-w-[9.375rem]"
-							>{selectedLabel}</span
+						<span
+							class="truncate text-[0.8125rem] max-w-[6.25rem] sm:max-w-[9.375rem] {compact
+								? 'hidden'
+								: 'inline'}">{selectedLabel}</span
 						>
 					{/if}
 				</button>

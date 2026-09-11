@@ -888,6 +888,8 @@
 	"Description ({{language}})": "",
 	"Deselect": "Avmarkera",
 	"Destination": "",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "Detektera artefakter automatiskt",
 	"Detect generated artifacts and show them in the artifact workspace.": "",
 	"Detected Variables": "",

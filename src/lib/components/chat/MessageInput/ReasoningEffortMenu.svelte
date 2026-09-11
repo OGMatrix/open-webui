@@ -11,6 +11,7 @@
 	import LightBulb from '$lib/components/icons/LightBulb.svelte';
 	import Check from '$lib/components/icons/Check.svelte';
 	import type { ReasoningLevel, ReasoningMode } from '$lib/utils/reasoning';
+	import { levelMeter } from '$lib/utils/composerToolbar';
 
 	const i18n = getContext<Writable<i18nType>>('i18n');
 
@@ -22,6 +23,13 @@
 	/** True while that level comes from a default rather than from this chat. */
 	export let inherited = false;
 	export let onSelect: (level: ReasoningLevel | null) => void = () => {};
+	/**
+	 * Bars instead of the word, when the row is short of room.
+	 *
+	 * "Sehr hoch" is ninety pixels of German; four bars of six say the same in
+	 * twenty, and the word stays in the tooltip and the accessible name.
+	 */
+	export let compact = false;
 
 	let show = false;
 
@@ -43,6 +51,10 @@
 	const labelFor = (value: ReasoningLevel) => $i18n.t(LABELS[value]);
 
 	$: active = effective !== null && effective !== 'off';
+
+	$: meter = levelMeter(mode?.levels, effective);
+	// Tallest bar a little under the bulb, the rest stepping up to it.
+	const barHeight = (index: number, total: number) => 4 + ((index + 1) / total) * 7;
 
 	// Icon-only pills, so the current choice belongs in the tooltip.
 	$: switchTooltip = `${$i18n.t('Thinking')}: ${switchedOn ? $i18n.t('On') : $i18n.t('Off')}`;
@@ -85,9 +97,10 @@
 				<!--
 					A lit bulb is not a word. It was the only control left in this row
 					that showed its state as colour alone, which is the reading the rest
-					of the row stopped relying on.
+					of the row stopped relying on -- so the word goes only where the row
+					has no room for it, and the tooltip and the name still carry it.
 				-->
-				<span class="inline">{$i18n.t('Thinking')}</span>
+				<span class={compact ? 'hidden' : 'inline'}>{$i18n.t('Thinking')}</span>
 			</button>
 		</Tooltip>
 	{:else}
@@ -100,7 +113,35 @@
 						thinking effort, and the pair of words wrapped over two lines.
 						On model default there is no level, so the noun stands in.
 					-->
-					<span>{effective !== null ? labelFor(effective) : $i18n.t('Thinking')}</span>
+					<!--
+						Hidden whenever the row is down to icons, level or not: on model
+						default the word would only name what the bulb already means,
+						which is not worth ninety pixels the row does not have.
+					-->
+					<span class={compact ? 'hidden' : 'inline'}
+						>{effective !== null ? labelFor(effective) : $i18n.t('Thinking')}</span
+					>
+					{#if meter}
+						<!--
+							The level as a meter, counted against this model's own levels.
+							Always in the tree and shown by class alone: the row re-fits when
+							its content changes, and a meter appearing by density would have
+							it re-fitting in answer to itself.
+						-->
+						<span
+							class="h-[0.6875rem] items-end gap-[0.09375rem] {compact ? 'flex' : 'hidden'}"
+							aria-hidden="true"
+						>
+							{#each Array(meter.total) as _, index}
+								<span
+									class="w-[0.125rem] rounded-full bg-current {index < meter.filled
+										? ''
+										: 'opacity-30'}"
+									style="height: {barHeight(index, meter.total)}px"
+								></span>
+							{/each}
+						</span>
+					{/if}
 				</button>
 			</Tooltip>
 

@@ -888,6 +888,8 @@
 	"Description ({{language}})": "",
 	"Deselect": "Poista valinta",
 	"Destination": "Kohde",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "Tunnista artefaktit automaattisesti",
 	"Detect generated artifacts and show them in the artifact workspace.": "Tunnista luodut artefaktit ja näytä ne artefaktien työtilassa.",
 	"Detected Variables": "Tunnistetut muuttujat",

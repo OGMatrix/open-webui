@@ -50,6 +50,7 @@
 	import LinkSlash from '$lib/components/icons/LinkSlash.svelte';
 	import Bookmark from '$lib/components/icons/Bookmark.svelte';
 	import Bolt from '$lib/components/icons/Bolt.svelte';
+	import InfoCircle from '$lib/components/icons/InfoCircle.svelte';
 	import Check from '$lib/components/icons/Check.svelte';
 	import Pencil from '$lib/components/icons/Pencil.svelte';
 	import GarbageBin from '$lib/components/icons/GarbageBin.svelte';
@@ -93,10 +94,63 @@
 
 	export let onShowValves: Function;
 	export let onClose: Function;
+	/**
+	 * Open the details of the tools or skills in use -- which functions each
+	 * tool provides, which server it comes from.
+	 *
+	 * That used to be what clicking the tool count in the composer did. The count
+	 * moved into this menu's button, so the way to the details moved in here too,
+	 * beside the list it describes.
+	 */
+	export let onShowDetails: (kind: 'tools' | 'skills') => void = () => {};
+
+	/**
+	 * What the button says about itself, to a screen reader and in its tooltip.
+	 *
+	 * The button shows a bare number; this is where the number gets its nouns.
+	 * Handed to the button through the slot, so the two can never disagree.
+	 */
+	let triggerLabel = '';
+	$: {
+		const activeSummary = [
+			(selectedToolIds ?? []).length > 0
+				? $i18n.t('{{count}} tools', { count: (selectedToolIds ?? []).length })
+				: null,
+			(selectedSkillIds ?? []).length > 0
+				? $i18n.t('{{count}} skills', { count: (selectedSkillIds ?? []).length })
+				: null
+		]
+			.filter(Boolean)
+			.join(' \u00b7 ');
+
+		triggerLabel = activeSummary
+			? `${$i18n.t('Integrations')} \u00b7 ${activeSummary}`
+			: $i18n.t('Integrations');
+	}
 	export let onWebSearchToggle: Function = () => {};
 	export let closeOnOutsideClick = true;
 
 	let show = false;
+	/**
+	 * For closing the menu from inside it the way the sidebar's chat menu does:
+	 * through the dropdown's own close(), which also runs its close handling --
+	 * clearing the searches and handing focus back -- where assigning `show`
+	 * from here would skip it.
+	 */
+	let dropdown: Dropdown;
+
+	/**
+	 * Open a details dialog once the menu is out of the way.
+	 *
+	 * Closing hands focus back to the prompt a tick later; the dialog opens after
+	 * that, so focus ends up in the dialog rather than behind it.
+	 */
+	const showDetails = async (kind: 'tools' | 'skills') => {
+		dropdown?.close();
+		await tick();
+		await tick();
+		onShowDetails(kind);
+	};
 	let tab = '';
 
 	let tools: Record<string, IntegrationItem> | null = null;
@@ -528,6 +582,7 @@
 </script>
 
 <Dropdown
+	bind:this={dropdown}
 	bind:show
 	{closeOnOutsideClick}
 	onOpenChange={(state) => {
@@ -538,8 +593,8 @@
 		}
 	}}
 >
-	<Tooltip content={$i18n.t('Integrations')} placement="top">
-		<slot />
+	<Tooltip content={triggerLabel} placement="top">
+		<slot {triggerLabel} />
 	</Tooltip>
 	<div slot="content">
 		<DropdownMenu className="min-w-70 max-w-70 max-h-72 overflow-hidden">
@@ -862,6 +917,18 @@
 							</div>
 						</button>
 
+						{#if (selectedToolIds ?? []).length > 0}
+							<Tooltip content={$i18n.t('Details of the tools in use')} placement="top-end">
+								<button
+									class="shrink-0 flex h-[1.6875rem] w-[1.6875rem] items-center justify-center rounded-xl text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
+									aria-label={$i18n.t('Details of the tools in use')}
+									on:click={() => showDetails('tools')}
+								>
+									<InfoCircle className="size-3.5" strokeWidth="1.75" />
+								</button>
+							</Tooltip>
+						{/if}
+
 						<Tooltip
 							content={allToolsOn
 								? $i18n.t('Switch off every tool in this list')
@@ -1017,6 +1084,18 @@
 								<span class="ml-0.5 text-gray-500">{skillIds.length}</span>
 							</div>
 						</button>
+
+						{#if (selectedSkillIds ?? []).length > 0}
+							<Tooltip content={$i18n.t('Details of the skills in use')} placement="top-end">
+								<button
+									class="shrink-0 flex h-[1.6875rem] w-[1.6875rem] items-center justify-center rounded-xl text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50/40 dark:hover:bg-gray-800/40"
+									aria-label={$i18n.t('Details of the skills in use')}
+									on:click={() => showDetails('skills')}
+								>
+									<InfoCircle className="size-3.5" strokeWidth="1.75" />
+								</button>
+							</Tooltip>
+						{/if}
 
 						<Tooltip
 							content={allSkillsOn

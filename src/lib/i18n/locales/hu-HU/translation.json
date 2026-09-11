@@ -888,6 +888,8 @@
 	"Description ({{language}})": "",
 	"Deselect": "Kijelölés megszüntetése",
 	"Destination": "",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "Műtermékek automatikus felismerése",
 	"Detect generated artifacts and show them in the artifact workspace.": "A generált műtermékek felismerése és megjelenítése a műtermék-munkaterületen.",
 	"Detected Variables": "Felismert változók",

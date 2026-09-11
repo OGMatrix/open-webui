@@ -881,6 +881,8 @@
 	"Description ({{language}})": "",
 	"Deselect": "선택 해제",
 	"Destination": "",
+	"Details of the skills in use": "",
+	"Details of the tools in use": "",
 	"Detect Artifacts Automatically": "아티팩트 자동 감지",
 	"Detect generated artifacts and show them in the artifact workspace.": "생성된 아티팩트를 감지하여 아티팩트 작업 공간에 표시합니다.",
 	"Detected Variables": "",
