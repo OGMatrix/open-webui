@@ -29,6 +29,14 @@
 
 	import Suggestions from './Suggestions.svelte';
 
+	/**
+	 * The chat's params, written by the composer -- the thinking effort lives
+	 * here. Chat.svelte always bound this, but nothing on this side declared or
+	 * passed it on, so on an empty chat the composer wrote to a copy of its own:
+	 * the pill said "Sehr hoch", and the first message went out without it.
+	 */
+	export let params: Record<string, any> = {};
+
 	/** Passed straight through to the composer; see Chat.svelte. */
 	export let suggestionState: 'idle' | 'asking' | 'offering' = 'idle';
 	export let suggestion: ToolSuggestion | null = null;
@@ -262,6 +270,7 @@
 						bind:selectedToolIds
 						bind:selectedSkillIds
 						bind:selectedFilterIds
+						bind:params
 						bind:imageGenerationEnabled
 						bind:codeInterpreterEnabled
 						bind:webSearchEnabled
