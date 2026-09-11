@@ -13,6 +13,22 @@ Releases are produced by the `Fork · Release` workflow, which writes this file.
 
 <!-- fork-release: new entries are inserted directly below this line -->
 
+## [0.11.3-ogm.10] - 2026-09-11
+
+Built on Open WebUI `0.11.3` (`upstream/dev` at `7aaa4a692`), fork commit `3f06218af`.
+
+Upstream: 35 commit(s) merged from open-webui/open-webui, still 0.11.3.
+
+### Added
+
+- The composer row fits itself instead of scrolling sideways (5c5273c66)
+- Lay an answer's steps out one below another, and fold bursts of tool calls (f0a9e5461)
+
+### Fixed
+
+- Keep the thinking effort chosen on an empty chat (f6c450bd4)
+- A chat born from its first message keeps what it was sent with (57e049de0)
+- **i18n:** restore 647 translations two upstream syncs left empty (d49b2ff81)
 ## [0.11.3-ogm.9] - 2026-09-08
 
 Built on Open WebUI `0.11.3` (`upstream/dev` at `ba34bee2d`), fork commit `03b627c16`.
