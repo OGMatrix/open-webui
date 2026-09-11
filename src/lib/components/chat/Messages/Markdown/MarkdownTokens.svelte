@@ -19,7 +19,13 @@
 	import ToolCallDisplay from '$lib/components/common/ToolCallDisplay.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import ConsecutiveDetailsGroup from './ConsecutiveDetailsGroup.svelte';
-	import { getDisplayTokens, isGroupableDetailToken } from '$lib/utils/markdownGrouping';
+	import {
+		getDisplayTokens,
+		isGroupableDetailToken,
+		isSpacingToken,
+		isToolStepToken
+	} from '$lib/utils/markdownGrouping';
+	import { readStepLayout, runParts } from '$lib/utils/stepLayout';
 
 	import HtmlToken from './HTMLToken.svelte';
 	import ColonFenceBlock from './ColonFenceBlock.svelte';
@@ -91,11 +97,113 @@
 		compactPreview ? 'text-xs' : 'text-[0.9375rem]'
 	} text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition`;
 
-	$: displayTokens = getDisplayTokens(tokens);
+	/**
+	 * How the steps are laid out; see utils/stepLayout. Read straight from the
+	 * settings in both places rather than one from the other: a reactive value
+	 * derived from another reactive value has been seen stale on first render
+	 * in this codebase.
+	 */
+	$: stepLayout = readStepLayout($settings);
+	$: displayTokens = getDisplayTokens(tokens, readStepLayout($settings));
 	$: singlePlainBlock =
 		displayTokens.length === 1 &&
 		(displayTokens[0]?.type === 'paragraph' || displayTokens[0]?.type === 'text');
 </script>
+
+<!--
+	One step inside a group -- a tool call, a thought, a code run, or a note
+	written between them. A snippet rather than a component of its own, so that
+	a burst of tool calls folded inside a run renders its steps the same way
+	and shares this component's resolving state with the run around it: a call
+	being allowed from one is disabled in the other.
+-->
+{#snippet groupedStep(detailToken: any, stepId: string)}
+	{@const textContent = getDetailTextContent(detailToken)}
+
+	{#if isSpacingToken(detailToken)}
+		<!--
+			Blank space between two blocks, carried along so nothing is lost or
+			reordered. It shows nothing at the top level, and shows nothing here:
+			wrapped as a note it left a gap only between the steps a blank line
+			happened to separate.
+		-->
+	{:else if !isGroupableDetailToken(detailToken)}
+		<!--
+			A note the assistant wrote between two tool calls. It is folded in
+			with them because more calls followed it, so it was written while
+			working rather than as the answer -- but it is still prose, and it
+			renders as prose.
+		-->
+		<div class="my-1 text-sm">
+			<svelte:self
+				id={`${stepId}-note`}
+				{chatId}
+				{messageId}
+				tokens={[detailToken]}
+				{done}
+				{save}
+				{preview}
+				{compactPreview}
+				{editCodeBlock}
+				{onTaskClick}
+				{sourceIds}
+				{onSourceClick}
+			/>
+		</div>
+	{:else if detailToken?.attributes?.type === 'tool_calls'}
+		<ToolCallDisplay
+			id={`${stepId}-tc`}
+			attributes={detailToken.attributes}
+			resultContent={getDetailTextContent(detailToken)}
+			grouped={true}
+			resolvable={!!chatId && !!messageId && save}
+			resolving={resolvingCallId === detailToken.attributes?.id}
+			onResolve={(approved) => resolveToolCall(detailToken.attributes?.id ?? '', approved)}
+			open={$settings?.expandDetails ?? false}
+			className="w-full"
+			buttonClassName={detailButtonClassName}
+		/>
+	{:else if textContent.length > 0}
+		<Collapsible
+			title={detailToken.summary}
+			open={$settings?.expandDetails ?? false}
+			attributes={detailToken?.attributes}
+			messageDone={done}
+			className="w-full"
+			buttonClassName={detailButtonClassName}
+			dir="auto"
+		>
+			<div class="mb-1.5" slot="content">
+				<svelte:self
+					id={`${stepId}-d`}
+					{chatId}
+					{messageId}
+					tokens={marked.lexer(decode(detailToken.text))}
+					attributes={detailToken?.attributes}
+					{done}
+					{save}
+					{preview}
+					{compactPreview}
+					{editCodeBlock}
+					{onTaskClick}
+					{sourceIds}
+					{onSourceClick}
+				/>
+			</div>
+		</Collapsible>
+	{:else}
+		<Collapsible
+			title={detailToken.summary}
+			open={false}
+			disabled={true}
+			attributes={detailToken?.attributes}
+			messageDone={done}
+			className="w-full"
+			buttonClassName={detailButtonClassName}
+			dir="auto"
+		/>
+	{/if}
+{/snippet}
 
 <!-- {JSON.stringify(tokens)} -->
 {#each displayTokens as token, tokenIdx (tokenIdx)}
@@ -274,84 +382,32 @@
 			onResolve={resolveToolCall}
 		>
 			<div slot="content">
-				{#each token.items as detailToken, detailIdx}
-					{@const textContent = getDetailTextContent(detailToken)}
-
-					{#if !isGroupableDetailToken(detailToken)}
-						<!--
-							A note the assistant wrote between two tool calls. It is
-							folded in with them because more calls followed it, so it was
-							written while working rather than as the answer -- but it is
-							still prose, and it renders as prose.
-						-->
-						<div class="my-1 text-sm">
-							<svelte:self
-								id={`${id}-${tokenIdx}-${detailIdx}-note`}
-								{chatId}
-								{messageId}
-								tokens={[detailToken]}
-								{done}
-								{save}
-								{preview}
-								{compactPreview}
-								{editCodeBlock}
-								{onTaskClick}
-								{sourceIds}
-								{onSourceClick}
-							/>
-						</div>
-					{:else if detailToken?.attributes?.type === 'tool_calls'}
-						<ToolCallDisplay
-							id={`${id}-${tokenIdx}-${detailIdx}-tc`}
-							attributes={detailToken.attributes}
-							resultContent={getDetailTextContent(detailToken)}
-							grouped={true}
+				<!--
+					Each step on its own, unless tool grouping folds the bursts of
+					back-to-back calls inside this run. A burst is a group of its own,
+					which leaves its embeds to this one: this group already shows every
+					embed of the run, and a burst showing them too would show them twice.
+				-->
+				{#each runParts(token.items, stepLayout, isToolStepToken, isSpacingToken) as part, partIdx}
+					{#if part.kind === 'tools'}
+						<ConsecutiveDetailsGroup
+							id={`${id}-${tokenIdx}-${partIdx}-burst`}
+							tokens={part.items}
+							messageDone={done}
+							{compactPreview}
+							allowEmbeds={false}
 							resolvable={!!chatId && !!messageId && save}
-							resolving={resolvingCallId === detailToken.attributes?.id}
-							onResolve={(approved) => resolveToolCall(detailToken.attributes?.id ?? '', approved)}
-							open={$settings?.expandDetails ?? false}
-							className="w-full"
-							buttonClassName={detailButtonClassName}
-						/>
-					{:else if textContent.length > 0}
-						<Collapsible
-							title={detailToken.summary}
-							open={$settings?.expandDetails ?? false}
-							attributes={detailToken?.attributes}
-							messageDone={done}
-							className="w-full"
-							buttonClassName={detailButtonClassName}
-							dir="auto"
+							{resolvingCallId}
+							onResolve={resolveToolCall}
 						>
-							<div class="mb-1.5" slot="content">
-								<svelte:self
-									id={`${id}-${tokenIdx}-${detailIdx}-d`}
-									{chatId}
-									{messageId}
-									tokens={marked.lexer(decode(detailToken.text))}
-									attributes={detailToken?.attributes}
-									{done}
-									{save}
-									{preview}
-									{compactPreview}
-									{editCodeBlock}
-									{onTaskClick}
-									{sourceIds}
-									{onSourceClick}
-								/>
+							<div slot="content">
+								{#each part.items as detailToken, burstIdx}
+									{@render groupedStep(detailToken, `${id}-${tokenIdx}-${partIdx}-${burstIdx}`)}
+								{/each}
 							</div>
-						</Collapsible>
+						</ConsecutiveDetailsGroup>
 					{:else}
-						<Collapsible
-							title={detailToken.summary}
-							open={false}
-							disabled={true}
-							attributes={detailToken?.attributes}
-							messageDone={done}
-							className="w-full"
-							buttonClassName={detailButtonClassName}
-							dir="auto"
-						/>
+						{@render groupedStep(part.item, `${id}-${tokenIdx}-${partIdx}`)}
 					{/if}
 				{/each}
 			</div>

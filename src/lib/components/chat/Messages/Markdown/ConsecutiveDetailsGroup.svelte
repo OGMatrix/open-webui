@@ -20,6 +20,7 @@
 
 	export let id = '';
 	export let tokens: Array<{
+		type?: string;
 		summary?: string;
 		text?: string;
 		attributes?: {
@@ -210,7 +211,15 @@
 	 * header would sit behind it at some of those sizes.
 	 */
 	const LONG_GROUP_FROM = 6;
-	$: longGroup = tokens.length >= LONG_GROUP_FROM;
+
+	/**
+	 * Steps, as a reader counts them. Blank space between two blocks travels
+	 * with a group so that nothing is lost or reordered, but it is not a step:
+	 * three calls with a blank line between each are three steps, not five.
+	 */
+	const countSteps = (list: typeof tokens) =>
+		list.filter((token) => token?.type !== 'space').length;
+	$: longGroup = countSteps(tokens) >= LONG_GROUP_FROM;
 
 	let groupElement: HTMLDivElement;
 
@@ -360,7 +369,7 @@
 					on:click={collapseFromFoot}
 				>
 					<ChevronUp strokeWidth="3.5" className="size-3 shrink-0" />
-					<span>{$i18n.t('Collapse {{COUNT}} steps', { COUNT: tokens.length })}</span>
+					<span>{$i18n.t('Collapse {{COUNT}} steps', { COUNT: countSteps(tokens) })}</span>
 				</button>
 			{/if}
 		</div>

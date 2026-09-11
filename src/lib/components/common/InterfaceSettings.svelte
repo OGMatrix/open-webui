@@ -88,6 +88,8 @@
 	let renderMarkdownInUserMessages = true;
 	let renderMarkdownInAssistantMessages = true;
 	let expandDetails = false;
+	let showStepsInline = false;
+	let groupToolCalls = false;
 	let chatHoverPreview = true;
 	let renderMarkdownInPreviews = true;
 	let showChatTitleInTab = true;
@@ -401,6 +403,8 @@
 		renderMarkdownInUserMessages = currentSettings?.renderMarkdownInUserMessages ?? true;
 		renderMarkdownInAssistantMessages = currentSettings?.renderMarkdownInAssistantMessages ?? true;
 		expandDetails = currentSettings?.expandDetails ?? false;
+		showStepsInline = currentSettings?.showStepsInline ?? false;
+		groupToolCalls = currentSettings?.groupToolCalls ?? false;
 		chatHoverPreview = currentSettings?.chatHoverPreview ?? true;
 		renderMarkdownInPreviews = currentSettings?.renderMarkdownInPreviews ?? true;
 
@@ -1469,6 +1473,56 @@
 		</div>
 		<p class={settingDescriptionClass}>
 			{$i18n.t('Open detail blocks by default.')}
+		</p>
+	</div>
+
+	<div>
+		<div class={settingRowClass}>
+			<div id="show-steps-inline-label" class={settingLabelClass}>
+				{$i18n.t('Show Steps One Below Another')}
+			</div>
+
+			<div class={settingControlClass}>
+				<Switch
+					ariaLabelledbyId="show-steps-inline-label"
+					tooltip={true}
+					bind:state={showStepsInline}
+					inherited={isDefaultSetting('showStepsInline')}
+					on:change={() => {
+						saveSettings({ showStepsInline });
+					}}
+				/>
+			</div>
+		</div>
+		<p class={settingDescriptionClass}>
+			{$i18n.t(
+				'List every tool call and thought of an answer on its own line, instead of folding the whole run into one summary.'
+			)}
+		</p>
+	</div>
+
+	<div>
+		<div class={settingRowClass}>
+			<div id="group-tool-calls-label" class={settingLabelClass}>
+				{$i18n.t('Group Consecutive Tool Calls')}
+			</div>
+
+			<div class={settingControlClass}>
+				<Switch
+					ariaLabelledbyId="group-tool-calls-label"
+					tooltip={true}
+					bind:state={groupToolCalls}
+					inherited={isDefaultSetting('groupToolCalls')}
+					on:change={() => {
+						saveSettings({ groupToolCalls });
+					}}
+				/>
+			</div>
+		</div>
+		<p class={settingDescriptionClass}>
+			{$i18n.t(
+				'Fold tool calls that directly follow one another into one expandable row, until a thought or text comes between them. Can be combined with the setting above.'
+			)}
 		</p>
 	</div>
 

@@ -149,3 +149,58 @@ describe('counting what is in a group', () => {
 		expect(countToolCalls()).toBe(0);
 	});
 });
+
+describe('laying the steps out one below another', () => {
+	const inline = { inline: true, groupTools: false };
+	const inlineGrouped = { inline: true, groupTools: true };
+
+	const picture = (tokens: any[], layout: { inline: boolean; groupTools: boolean }) =>
+		getDisplayTokens(tokens, layout).map((token: any) =>
+			token.type === 'detail_group'
+				? `group(${token.items.map((item: any) => item.attributes?.name ?? item.type).join(',')})`
+				: token.type === 'details'
+					? (token.attributes.name ?? token.attributes.type)
+					: token.type
+		);
+
+	it('leaves every token where it was when laid out flat', () => {
+		const tokens = [tool('a'), note(), tool('b'), reasoning(), note()];
+		expect(getDisplayTokens(tokens, inline)).toEqual(tokens);
+	});
+
+	it('folds a burst of calls and ends it at a thought', () => {
+		const tokens = [tool('a'), tool('b'), reasoning(), tool('c')];
+		expect(picture(tokens, inlineGrouped)).toEqual(['group(a,b)', 'reasoning', 'c']);
+	});
+
+	it('ends a burst at text', () => {
+		const tokens = [tool('a'), tool('b'), note(), tool('c'), tool('d')];
+		expect(picture(tokens, inlineGrouped)).toEqual(['group(a,b)', 'paragraph', 'group(c,d)']);
+	});
+
+	it('does not let the blank space between two blocks end a burst', () => {
+		const tokens = [tool('a'), blank(), tool('b'), blank(), note()];
+		expect(picture(tokens, inlineGrouped)).toEqual(['group(a,space,b)', 'space', 'paragraph']);
+	});
+
+	it('counts a code run as a tool at work', () => {
+		const run = { type: 'details', attributes: { type: 'code_interpreter' }, text: 'print(1)' };
+		expect(picture([tool('a'), run], inlineGrouped)).toEqual(['group(a,details)']);
+	});
+
+	it('never loses or reorders a token', () => {
+		const tokens = [note(), tool('a'), blank(), tool('b'), reasoning(), tool('c'), code(), note()];
+		const flat = getDisplayTokens(tokens, inlineGrouped).flatMap((token: any) =>
+			token.type === 'detail_group' ? token.items : [token]
+		);
+		expect(flat).toEqual(tokens);
+	});
+
+	it('folds the run exactly as before when both switches are off', () => {
+		const tokens = [tool('a'), note(), tool('b'), note('Das Ergebnis.')];
+		expect(getDisplayTokens(tokens)).toEqual(
+			getDisplayTokens(tokens, { inline: false, groupTools: false })
+		);
+		expect(kinds(getDisplayTokens(tokens))).toEqual(['detail_group', 'paragraph']);
+	});
+});

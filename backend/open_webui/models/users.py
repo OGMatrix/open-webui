@@ -96,6 +96,8 @@ class InterfaceSettings(BaseModel):
     renderMarkdownInUserMessages: bool | None = None
     renderMarkdownInAssistantMessages: bool | None = None
     expandDetails: bool | None = None
+    showStepsInline: bool | None = None
+    groupToolCalls: bool | None = None
     chatHoverPreview: bool | None = None
     renderMarkdownInPreviews: bool | None = None
     chatBubble: bool | None = None

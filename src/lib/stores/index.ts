@@ -273,6 +273,10 @@ type Settings = {
 	voiceInterruption?: boolean;
 	collapseCodeBlocks?: boolean;
 	expandDetails?: boolean;
+	/** Every step of an answer on its own line, not folded into one; see utils/stepLayout. */
+	showStepsInline?: boolean;
+	/** Back-to-back tool calls share one expandable row; see utils/stepLayout. */
+	groupToolCalls?: boolean;
 	notificationSound?: boolean;
 	notificationSoundAlways?: boolean;
 	stylizedPdfExport?: boolean;

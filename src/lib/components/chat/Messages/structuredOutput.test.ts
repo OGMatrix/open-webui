@@ -194,3 +194,137 @@ describe('folding a turn that talks between its tool calls', () => {
 		expect(texts).toEqual(['one', 'two', 'three']);
 	});
 });
+
+describe('laying the steps out one below another', () => {
+	const call = (name: string, id: string): OutputItem => ({
+		type: 'function_call',
+		name,
+		call_id: id,
+		status: 'completed'
+	});
+	const result = (id: string): OutputItem => ({
+		type: 'function_call_output',
+		call_id: id,
+		output: [{ type: 'output_text', text: 'ok' }]
+	});
+	const says = (text: string, id = text): OutputItem => ({
+		type: 'message',
+		id,
+		status: 'completed',
+		content: [{ type: 'output_text', text }]
+	});
+	const think = (text: string, id = text): OutputItem => ({
+		type: 'reasoning',
+		id,
+		content: [{ type: 'reasoning_text', text }]
+	});
+
+	const inline = { inline: true, groupTools: false };
+	const inlineGrouped = { inline: true, groupTools: true };
+
+	/** Each display item as one word: a group lists what it holds. */
+	const picture = (items: OutputItem[], layout = inline) =>
+		buildOutputDisplayItems(items, true, layout).map((item: any) =>
+			item.type === 'detail_group'
+				? `group(${item.tokens.map((t: any) => t.attributes.name ?? t.attributes.type).join(',')})`
+				: item.type === 'detail_single'
+					? (item.token.attributes.name ?? item.token.attributes.type)
+					: item.type === 'message'
+						? `"${item.text}"`
+						: item.type
+		);
+
+	// The live view in the report: a call, a thought, two calls, a thought, text.
+	const reported = [
+		call('shell', '1'),
+		result('1'),
+		think('first'),
+		call('shell', '2'),
+		result('2'),
+		call('github', '3'),
+		result('3'),
+		think('second'),
+		says('Now let me look at the actual state.')
+	];
+
+	it('folds nothing when laid out flat', () => {
+		expect(picture(reported)).toEqual([
+			'shell',
+			'reasoning',
+			'shell',
+			'github',
+			'reasoning',
+			'"Now let me look at the actual state."'
+		]);
+	});
+
+	it('puts the notes between calls where they were written, as text', () => {
+		const items = [call('a', '1'), result('1'), says('between'), call('b', '2'), result('2')];
+		expect(picture(items)).toEqual(['a', '"between"', 'b']);
+	});
+
+	it('folds the burst of back-to-back calls and leaves the thoughts and text in view', () => {
+		expect(picture(reported, inlineGrouped)).toEqual([
+			'shell',
+			'reasoning',
+			'group(shell,github)',
+			'reasoning',
+			'"Now let me look at the actual state."'
+		]);
+	});
+
+	it('ends a burst at text as well as at a thought', () => {
+		const items = [
+			call('a', '1'),
+			result('1'),
+			call('b', '2'),
+			result('2'),
+			says('checking'),
+			call('c', '3'),
+			result('3'),
+			call('d', '4'),
+			result('4')
+		];
+		expect(picture(items, inlineGrouped)).toEqual(['group(a,b)', '"checking"', 'group(c,d)']);
+	});
+
+	it('keeps a burst on the same row while it grows', () => {
+		// Keyed by its first call, so the third call streaming in does not
+		// replace the row the first two were already in.
+		const two = buildOutputDisplayItems(
+			[call('a', '1'), result('1'), call('b', '2'), result('2')],
+			false,
+			inlineGrouped
+		);
+		const three = buildOutputDisplayItems(
+			[call('a', '1'), result('1'), call('b', '2'), result('2'), call('c', '3')],
+			false,
+			inlineGrouped
+		);
+		expect(two).toHaveLength(1);
+		expect(three).toHaveLength(1);
+		expect(three[0].id).toBe(two[0].id);
+	});
+
+	it('leaves the folded layout exactly as it was when both switches are off', () => {
+		expect(buildOutputDisplayItems(reported, true)).toEqual(
+			buildOutputDisplayItems(reported, true, { inline: false, groupTools: false })
+		);
+		expect(buildOutputDisplayItems(reported, true).map((item) => item.type)).toEqual([
+			'detail_group',
+			'message'
+		]);
+	});
+
+	it('never loses a message or a step', () => {
+		const built = buildOutputDisplayItems(reported, true, inlineGrouped);
+		const steps = built.flatMap((item: any) =>
+			item.type === 'detail_group' ? item.tokens : item.type === 'detail_single' ? [item.token] : []
+		);
+		const texts = built
+			.filter((item: any) => item.type === 'message')
+			.map((item: any) => item.text);
+		expect(steps).toHaveLength(5);
+		expect(texts).toEqual(['Now let me look at the actual state.']);
+	});
+});

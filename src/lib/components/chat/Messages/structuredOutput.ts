@@ -1,3 +1,5 @@
+import { DEFAULT_STEP_LAYOUT, groupToolBursts, type StepLayout } from '$lib/utils/stepLayout';
+
 export type OutputContentPart = {
 	type?: string;
 	text?: unknown;
@@ -90,6 +92,14 @@ type ResponseStreamEvent = {
  * be counted as one.
  */
 export const NOTE_DETAIL_TYPE = 'note';
+
+/**
+ * Whether a step is a tool at work -- a call, or a code run -- rather than a
+ * thought or a note. Bursts of these fold together when tool grouping is on;
+ * a thought or a note ends the burst.
+ */
+export const isToolStepToken = (token: OutputDetailToken): boolean =>
+	token.attributes?.type === 'tool_calls' || token.attributes?.type === 'code_interpreter';
 
 const GROUPABLE_OUTPUT_TYPES = new Set([
 	'reasoning',
@@ -357,8 +367,13 @@ export function buildOutputDisplayItems(
 	output: OutputItem[] = [],
 	// A finished message can have nothing still in progress, whatever the last
 	// item's status says.
-	messageDone = false
+	messageDone = false,
+	layout: StepLayout = DEFAULT_STEP_LAYOUT
 ): OutputDisplayItem[] {
+	if (layout.inline) {
+		return buildInlineDisplayItems(output, messageDone, layout.groupTools);
+	}
+
 	const displayItems: OutputDisplayItem[] = [];
 	const currentDetailTokens: OutputDetailToken[] = [];
 	const toolOutputByCallId: Record<string, OutputItem> = {};
@@ -488,6 +503,99 @@ export function buildOutputDisplayItems(
 
 	flushAll();
 	return displayItems;
+}
+
+/**
+ * Every step on its own line, in the order it happened; see utils/stepLayout.
+ *
+ * The same items the folded layout produces, never gathered into a run: a step
+ * is a `detail_single`, a message is a `message` where it was written, a file
+ * is a `file`. With `groupTools`, bursts of back-to-back tool steps come back as
+ * `detail_group`s holding only those steps, keyed by their first step so a
+ * burst that grows while streaming keeps its row.
+ */
+function buildInlineDisplayItems(
+	output: OutputItem[],
+	messageDone: boolean,
+	groupTools: boolean
+): OutputDisplayItem[] {
+	const displayItems: OutputDisplayItem[] = [];
+	const toolOutputByCallId: Record<string, OutputItem> = {};
+	const toolCallByCallId: Record<string, OutputItem> = {};
+
+	for (const item of output) {
+		if (item?.type === 'function_call_output' && item.call_id) {
+			toolOutputByCallId[item.call_id] = item;
+		} else if (item?.type === 'function_call' && (item.call_id || item.id)) {
+			toolCallByCallId[item.call_id ?? item.id ?? ''] = item;
+		}
+	}
+
+	output.forEach((item, index) => {
+		if (!item) {
+			return;
+		}
+
+		if (item.type === 'function_call_output') {
+			const inlineFile = getInlineFileFromToolOutput(toolCallByCallId[item.call_id ?? ''], item);
+			if (inlineFile) {
+				displayItems.push({ type: 'file', id: item.id ?? `file-${index}`, item: inlineFile });
+			}
+			return;
+		}
+
+		if (
+			item.type === 'function_call' &&
+			item.name === 'ask_user' &&
+			(item.status === 'pending' || item.status === 'in_progress')
+		) {
+			return;
+		}
+
+		if (item.type && GROUPABLE_OUTPUT_TYPES.has(item.type)) {
+			const token = buildDetailToken(
+				item,
+				index === output.length - 1,
+				toolOutputByCallId,
+				messageDone
+			);
+			if (token) {
+				displayItems.push({ type: 'detail_single', id: `detail-${index}`, token });
+			}
+			return;
+		}
+
+		const text = getMessageText(item);
+		if (text.trim()) {
+			displayItems.push({
+				type: 'message',
+				id: item.id ?? `${item.type === 'message' ? 'message' : 'output'}-${index}`,
+				text
+			});
+		}
+	});
+
+	if (!groupTools) {
+		return displayItems;
+	}
+
+	return groupToolBursts(
+		displayItems,
+		(displayItem) => displayItem.type === 'detail_single' && isToolStepToken(displayItem.token)
+	).map((part): OutputDisplayItem => {
+		if (part.kind === 'single') {
+			return part.item;
+		}
+		const steps = part.items.filter(
+			(displayItem): displayItem is Extract<OutputDisplayItem, { type: 'detail_single' }> =>
+				displayItem.type === 'detail_single'
+		);
+		return {
+			type: 'detail_group',
+			id: `tool-group-${steps[0].id}`,
+			tokens: steps.map((step) => step.token)
+		};
+	});
 }
 
 export function getOutputText(output?: OutputItem[] | null): string {

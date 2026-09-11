@@ -18,6 +18,8 @@
  * "Explored ..." line followed by what the assistant actually concluded.
  */
 
+import { DEFAULT_STEP_LAYOUT, groupToolBursts, type StepLayout } from './stepLayout';
+
 /**
  * A marked token, as far as this module cares.
  *
@@ -55,6 +57,19 @@ export const isGroupableDetailToken = (token: Token | undefined): boolean =>
 const isAbsorbable = (token: Token | undefined): boolean => ABSORBABLE_TYPES.has(token?.type ?? '');
 
 /**
+ * Whether a token is a tool at work -- a call, or a code run -- rather than a
+ * thought. Bursts of these fold together when tool grouping is on.
+ */
+export const isToolStepToken = (token: Token): boolean =>
+	isGroupableDetailToken(token) && token.attributes?.type !== 'reasoning';
+
+/**
+ * Blank space between two blocks: neither a thought nor text, so it neither
+ * ends a burst of tool calls nor is lost from one.
+ */
+export const isSpacingToken = (token: Token): boolean => token.type === 'space';
+
+/**
  * Turn a flat token list into one where a whole run of tool activity is a
  * single item.
  *
@@ -65,8 +80,18 @@ const isAbsorbable = (token: Token | undefined): boolean => ABSORBABLE_TYPES.has
  *
  * A run of exactly one detail is passed through unwrapped, because a group of
  * one is a heading with nothing under it.
+ *
+ * That is the default layout. A reader who wants every step on its own line
+ * gets that instead; see utils/stepLayout.
  */
-export const getDisplayTokens = (tokenList: Token[] = []): DisplayToken[] => {
+export const getDisplayTokens = (
+	tokenList: Token[] = [],
+	layout: StepLayout = DEFAULT_STEP_LAYOUT
+): DisplayToken[] => {
+	if (layout.inline) {
+		return getInlineDisplayTokens(tokenList, layout.groupTools);
+	}
+
 	const display: DisplayToken[] = [];
 	let index = 0;
 
@@ -109,6 +134,24 @@ export const getDisplayTokens = (tokenList: Token[] = []): DisplayToken[] => {
 	}
 
 	return display;
+};
+
+/**
+ * Every step on its own line; see utils/stepLayout.
+ *
+ * The tokens as they came, with nothing folded at the level of the run. With
+ * `groupTools`, each burst of back-to-back tool steps becomes a group of its
+ * own -- ended by a thought or by text, not by the blank space between blocks.
+ */
+const getInlineDisplayTokens = (tokenList: Token[], groupTools: boolean): DisplayToken[] => {
+	if (!groupTools) {
+		return [...tokenList];
+	}
+
+	return groupToolBursts(tokenList, isToolStepToken, isSpacingToken).map(
+		(part): DisplayToken =>
+			part.kind === 'tools' ? { type: 'detail_group', items: part.items } : part.item
+	);
 };
 
 /** How many tool calls a group holds, for deciding whether it is worth folding. */
