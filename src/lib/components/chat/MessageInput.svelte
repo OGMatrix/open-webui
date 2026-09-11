@@ -62,7 +62,7 @@
 		getWeekday
 	} from '$lib/utils';
 	import { uploadFile } from '$lib/apis/files';
-	import { getCwd, uploadToTerminal } from '$lib/apis/terminal';
+	import { getCwd, uploadNewFileToTerminal } from '$lib/apis/terminal';
 	import { generateAutoCompletion } from '$lib/apis';
 	import { deleteFileById } from '$lib/apis/files';
 	import { getChatById } from '$lib/apis/chats';
@@ -1341,7 +1341,7 @@
 							chatId || undefined
 						)
 					)?.cwd || '/';
-				const uploadedFile = await uploadToTerminal(
+				const uploadedFile = await uploadNewFileToTerminal(
 					filesystemUploadTerminal.url,
 					filesystemUploadTerminal.key,
 					cwd,
@@ -1352,6 +1352,7 @@
 				if (uploadedFile) {
 					fileItem.type = 'filesystem';
 					fileItem.status = 'uploaded';
+					fileItem.name = uploadedFile.path.split('/').pop() || file.name;
 					fileItem.id = uploadedFile.path;
 					fileItem.path = uploadedFile.path;
 					fileItem.url = uploadedFile.path;
@@ -2469,6 +2470,11 @@
 													json={true}
 													richText={$settings?.richTextInput ?? true}
 													messageInput={true}
+													followUpSuggestion={!generating &&
+													history?.messages?.[history?.currentId]?.role === 'assistant' &&
+													history?.messages?.[history?.currentId]?.done
+														? (history.messages[history.currentId].followUps?.[0] ?? '')
+														: ''}
 													showFormattingToolbar={$settings?.showFormattingToolbar ?? false}
 													floatingMenuPlacement={'top-start'}
 													insertPromptAsRichText={$settings?.insertPromptAsRichText ?? false}

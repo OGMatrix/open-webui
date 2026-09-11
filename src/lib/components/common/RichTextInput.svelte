@@ -242,6 +242,7 @@
 	};
 
 	export let richText = true;
+	export let autoFormat = true;
 	export let dragHandle = false;
 	export let link = false;
 	export let image = false;
@@ -319,6 +320,28 @@
 	export let preserveBreaks = false;
 	export let generateAutoCompletion: Function = async () => null;
 	export let autocomplete = false;
+	export let followUpSuggestion = '';
+
+	$: if (editor && !editor.isDestroyed) {
+		const { doc } = editor.state;
+		const node = doc.firstChild;
+		if (node?.type.name === 'paragraph' && !node.attrs['data-prompt']) {
+			const suggestion = doc.childCount === 1 && node.content.size === 0 ? followUpSuggestion : '';
+			if ((node.attrs['data-suggestion'] ?? '') !== suggestion) {
+				editor.view.dispatch(
+					editor.state.tr
+						.setNodeMarkup(0, null, {
+							...node.attrs,
+							class: suggestion ? 'ai-autocompletion' : null,
+							'data-prompt': suggestion ? '' : null,
+							'data-suggestion': suggestion || null
+						})
+						.setMeta('addToHistory', false)
+				);
+			}
+		}
+	}
+
 	export let messageInput = false;
 	export let shiftEnter = false;
 	export let largeTextAsFile = false;
@@ -337,6 +360,7 @@
 	let element: Element | null = null;
 
 	let pendingUpdate = null;
+	let destroyed = false;
 
 	const options = {
 		throwOnError: false
@@ -500,7 +524,7 @@
 					const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 					// Now replace the escaped mention patterns back into real spans
 					const withMentions = escaped.replace(
-						/&lt;([@#$])([\w.\-:/]+)(?:\|([^&]*?))?&gt;|&lt;\/([\w.\-:/]+)\|([^&]*?)&gt;/g,
+						/&lt;([@#$])([^|&\s]+)(?:\|([^&]*?))?&gt;|&lt;\/([\w.\-:/]+)\|([^&]*?)&gt;/g,
 						(_, ch, id, label, slashSkillId, slashSkillLabel) => {
 							const mentionChar = ch || '$';
 							const mentionId = id || slashSkillId;
@@ -770,13 +794,15 @@
 
 		if (collaboration && editable && documentId && socket && user) {
 			const { SocketIOCollaborationProvider } = await import('./RichTextInput/Collaboration');
+			if (destroyed) return;
 			provider = new SocketIOCollaborationProvider(documentId, socket, user, content);
 		}
+		if (destroyed) return;
 		editor = new Editor({
 			element: element,
 			extensions: [
 				StarterKit.configure({
-					link: link,
+					link: link ? { autolink: autoFormat, linkOnPaste: autoFormat } : false,
 					code: false, // Disabled in favor of FixedCode (see workaround above)
 					...(messageInput ? { italic: false } : {}),
 					// When rich text is on, ListKit + CodeBlockLowlight provide these.
@@ -843,11 +869,11 @@
 							})
 						]
 					: []),
-				...(autocomplete
+				...(autocomplete || messageInput
 					? [
 							AIAutocompletion.configure({
 								generateCompletion: async (text) => {
-									if (text.trim().length === 0) {
+									if (!autocomplete || text.trim().length === 0) {
 										return null;
 									}
 
@@ -1006,8 +1032,8 @@
 					return false;
 				},
 				handlePaste: (view, event) => {
-					// Force plain-text pasting when richText === false
-					if (!richText) {
+					// Paste literal text when automatic formatting is disabled.
+					if (!richText || !autoFormat) {
 						// swallow HTML completely
 						event.preventDefault();
 						const { state, dispatch } = view;
@@ -1016,6 +1042,11 @@
 							/\r\n/g,
 							'\n'
 						);
+
+						if (state.selection.$from.parent.type.spec.code) {
+							dispatch(state.tr.insertText(plainText).scrollIntoView());
+							return true;
+						}
 
 						const lines = plainText.split('\n');
 						const nodes = [];
@@ -1030,7 +1061,11 @@
 						});
 
 						const fragment = Fragment.fromArray(nodes);
-						dispatch(state.tr.replaceSelectionWith(fragment, false).scrollIntoView());
+						dispatch(
+							state.tr
+								.replaceWith(state.selection.from, state.selection.to, fragment)
+								.scrollIntoView()
+						);
 
 						return true; // handled
 					}
@@ -1282,8 +1317,8 @@
 					floatingMenuElement.style.opacity = '0';
 				}
 			},
-			enableInputRules: richText,
-			enablePasteRules: richText
+			enableInputRules: richText && autoFormat,
+			enablePasteRules: richText && autoFormat
 		});
 
 		provider?.setEditor(editor, () => ({ md: mdValue, html: htmlValue, json: jsonValue }));
@@ -1294,6 +1329,7 @@
 	});
 
 	onDestroy(() => {
+		destroyed = true;
 		if (pendingUpdate) {
 			cancelAnimationFrame(pendingUpdate);
 		}

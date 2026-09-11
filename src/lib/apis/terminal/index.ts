@@ -428,6 +428,42 @@ export const uploadToTerminal = async (
 	return res;
 };
 
+// ponytail: serialize new uploads in this page; cross-client races need server-side protection.
+let newFileUploadQueue: Promise<void> = Promise.resolve();
+
+export const uploadNewFileToTerminal = async (
+	baseUrl: string,
+	apiKey: string,
+	directory: string,
+	file: File,
+	sessionId?: string
+): Promise<{ path: string; size: number } | null> => {
+	const upload = newFileUploadQueue.then(async () => {
+		const listing = await listFiles(baseUrl, apiKey, directory, sessionId);
+		if (!listing) return null;
+
+		const names = new Set(listing.entries.map((entry) => entry.name));
+		const extensionIndex = file.name.startsWith('.') ? -1 : file.name.lastIndexOf('.');
+		const stem = extensionIndex > 0 ? file.name.slice(0, extensionIndex) : file.name;
+		const extension = extensionIndex > 0 ? file.name.slice(extensionIndex) : '';
+		let name = file.name;
+		for (let suffix = 1; names.has(name); suffix++) {
+			name = `${stem} (${suffix})${extension}`;
+		}
+
+		const uploadFile =
+			name === file.name
+				? file
+				: new File([file], name, { type: file.type, lastModified: file.lastModified });
+		return uploadToTerminal(baseUrl, apiKey, directory, uploadFile, sessionId);
+	});
+	newFileUploadQueue = upload.then(
+		() => undefined,
+		() => undefined
+	);
+	return upload;
+};
+
 export const createDirectory = async (
 	baseUrl: string,
 	apiKey: string,
@@ -630,4 +666,60 @@ export const stopNotebookSession = async (
 		headers: bearerHeaders(apiKey)
 	}).catch(() => null);
 	return res?.ok ?? false;
+};
+
+export type TerminalDiffLine = {
+	type: 'added' | 'removed' | 'context';
+	oldNumber: number | null;
+	newNumber: number | null;
+	content: string;
+	revisedContent?: string;
+	segments: { text: string; changed: boolean }[];
+};
+export type TerminalComparisonRequest = {
+	original: string;
+	revised: string;
+	ignore_whitespace: boolean;
+};
+export type TerminalComparison = {
+	original: { name: string; path: string; notices: string[] };
+	revised: { name: string; path: string; notices: string[] };
+	additions: number;
+	deletions: number;
+	hunks: { header: string; lines: TerminalDiffLine[] }[];
+};
+
+export const compareFiles = async (
+	baseUrl: string,
+	apiKey: string,
+	request: TerminalComparisonRequest,
+	sessionId?: string,
+	signal?: AbortSignal
+): Promise<TerminalComparison> => {
+	const response = await fetch(`${baseUrl.replace(/\/$/, '')}/files/compare`, {
+		method: 'POST',
+		signal,
+		headers: {
+			...bearerHeaders(apiKey),
+			'Content-Type': 'application/json',
+			...(sessionId ? { 'X-Session-Id': sessionId } : {})
+		},
+		body: JSON.stringify(request)
+	});
+	const body = await response.json().catch(() => null);
+	if (
+		response.status === 405 ||
+		(response.status === 404 && ((!body?.detail && !body?.error) || body.detail === 'Not Found'))
+	) {
+		throw new Error(
+			'File comparison is not available on this terminal. Update Open Terminal to use Compare.'
+		);
+	}
+	if (!response.ok)
+		throw new Error(
+			typeof body?.detail === 'string'
+				? body.detail
+				: (body?.error ?? `Comparison failed (${response.status})`)
+		);
+	return body;
 };
