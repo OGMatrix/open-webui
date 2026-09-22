@@ -91,7 +91,7 @@ from open_webui.utils.auth import (
 )
 from open_webui.utils.groups import apply_default_group_assignment
 from open_webui.utils.misc import parse_duration
-from open_webui.utils.validate import validate_profile_image_url
+from open_webui.utils.validate import validate_image_url
 from starlette.responses import RedirectResponse
 
 # Some IdPs put private params in ID token JOSE headers (CAS: client_id, CyberArk: app_id).
@@ -186,6 +186,16 @@ OAUTH_RUNTIME_CONFIG = {
 
 def _default_value(value):
     return getattr(value, 'value', value)
+
+
+def _get_roles_claim(claims: dict, claim: str) -> list | str | int | None:
+    """Read nested or flat claims, preserving explicit empty values and zero."""
+    value = claims
+    for key in claim.split('.'):
+        value = value.get(key) if isinstance(value, dict) else None
+    if not isinstance(value, (list, str, int)):
+        value = claims.get(claim)
+    return value if isinstance(value, (list, str, int)) else None
 
 
 async def get_oauth_runtime_config() -> SimpleNamespace:
@@ -339,6 +349,19 @@ def is_in_blocked_groups(group_name: str, groups: list) -> bool:
                 return True
 
     return False
+
+
+def _parse_blocked_groups(value) -> list[str]:
+    """Accept JSON arrays, persisted lists, and comma-separated admin input."""
+    if isinstance(value, str):
+        try:
+            parsed = JSONCodec.loads(value)
+        except JSONCodec.JSONDecodeError:
+            parsed = None
+        value = parsed if isinstance(parsed, list) else [group.strip() for group in value.split(',')]
+    if not isinstance(value, list):
+        return []
+    return [group for group in value if isinstance(group, str) and group]
 
 
 def get_parsed_and_base_url(server_url) -> tuple[urllib.parse.ParseResult, str]:
@@ -1505,7 +1528,7 @@ class OAuthManager:
             log.error(f'Exception during token refresh for provider {provider}: {e}')
             return None
 
-    async def get_user_role(self, user, user_data):
+    async def get_user_role(self, user, user_data, *, access_token: str | None = None):
         auth_config = await get_oauth_runtime_config()
         user_count = await Users.get_num_users()
         if user and user_count == 1:
@@ -1529,18 +1552,15 @@ class OAuthManager:
             # Keep existing users at their current role unless the provider sent roles.
             role = user.role if user else auth_config.DEFAULT_USER_ROLE
 
-            # Next block extracts the roles from the user data, accepting nested claims of any depth
-            if oauth_claim and oauth_allowed_roles and oauth_admin_roles:
-                claim_data = user_data
-                nested_claims = oauth_claim.split('.')
-                for nested_claim in nested_claims:
-                    claim_data = claim_data.get(nested_claim, {})
-
-                # Try flat claim structure as alternative
-                if not claim_data:
-                    claim_data = user_data.get(oauth_claim, {})
-
-                oauth_roles = []
+            if oauth_claim:
+                claim_data = _get_roles_claim(user_data, oauth_claim)
+                if claim_data is None and access_token is not None:
+                    # The exchange endpoint has already validated this token with the provider's userinfo endpoint.
+                    try:
+                        token_claims = jwt.decode(access_token, options={'verify_signature': False})
+                        claim_data = _get_roles_claim(token_claims, oauth_claim)
+                    except jwt.PyJWTError as e:
+                        log.debug('Token exchange: cannot decode token claims: %s', e)
 
                 if isinstance(claim_data, list):
                     oauth_roles = claim_data
@@ -1552,6 +1572,10 @@ class OAuthManager:
                         oauth_roles = [claim_data]
                 elif isinstance(claim_data, int):
                     oauth_roles = [str(claim_data)]
+
+            if access_token is not None and not oauth_roles and oauth_allowed_roles and '*' not in oauth_allowed_roles:
+                log.warning('Token exchange denied: no readable roles claim in userinfo or the token')
+                raise HTTPException(status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.ACCESS_PROHIBITED)
 
             log.debug('Oauth Roles claim: %s', oauth_claim)
             log.debug('User roles from oauth: %s', oauth_roles)
@@ -1599,9 +1623,10 @@ class OAuthManager:
         user_data,
         provider,
         *,
+        access_token: str | None = None,
         db=None,
     ):
-        determined_role = await self.get_user_role(user, user_data)
+        determined_role = await self.get_user_role(user, user_data, access_token=access_token)
         if user.role == determined_role:
             return user
 
@@ -1624,11 +1649,7 @@ class OAuthManager:
         log.debug('Running OAUTH Group management')
         oauth_claim = auth_config.OAUTH_GROUPS_CLAIM
 
-        try:
-            blocked_groups = JSONCodec.loads(auth_config.OAUTH_BLOCKED_GROUPS)
-        except Exception as e:
-            log.exception(f'Error loading OAUTH_BLOCKED_GROUPS: {e}')
-            blocked_groups = []
+        blocked_groups = _parse_blocked_groups(auth_config.OAUTH_BLOCKED_GROUPS)
 
         user_oauth_groups = []
         # Nested claim search for groups claim
@@ -1812,7 +1833,7 @@ class OAuthManager:
                         picture = await resp.read()
                         base64_encoded_picture = base64.b64encode(picture).decode('utf-8')
                         try:
-                            return validate_profile_image_url(f'data:{upstream_mime};base64,{base64_encoded_picture}')
+                            return validate_image_url(f'data:{upstream_mime};base64,{base64_encoded_picture}')
                         except ValueError:
                             log.warning(
                                 f'Rejected OAuth profile picture from {picture_url}: '

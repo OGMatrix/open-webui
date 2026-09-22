@@ -171,23 +171,23 @@
 		}}
 	>
 		<h2 class="text-sm font-medium text-gray-900 dark:text-white mb-4">
-			{$i18n.t('Interface')}
+			{$i18n.t('settings.admin.interface.title')}
 		</h2>
 
 		<div class="flex-1 min-h-0 overflow-y-auto scrollbar-hover pr-1.5">
-			<AdminSettingSection title={$i18n.t('Tasks')} first>
+			<AdminSettingSection title={$i18n.t('settings.admin.interface.sections.tasks.title')} first>
 				<div>
 					<div class="mb-2">
-						<div class="text-xs text-gray-600 dark:text-gray-400">{$i18n.t('Task Model')}</div>
+						<div class="text-xs text-gray-600 dark:text-gray-400">
+							{$i18n.t('settings.admin.interface.taskModel.label')}
+						</div>
 						<div class="mt-1.5 text-[0.6875rem] text-gray-400 dark:text-gray-600">
-							{$i18n.t(
-								'Choose fallback models for background tasks. Current Model follows the active chat model.'
-							)}
+							{$i18n.t('settings.admin.interface.taskModel.description')}
 						</div>
 					</div>
 
 					<div class="grid w-full grid-cols-1 gap-2.5 sm:grid-cols-2">
-						<AdminSettingField label={$i18n.t('Local Task Model')}>
+						<AdminSettingField label={$i18n.t('settings.admin.interface.localTaskModel.label')}>
 							<SettingsSelect
 								bind:value={taskConfig.TASK_MODEL}
 								className="w-full"
@@ -206,7 +206,7 @@
 							</SettingsSelect>
 						</AdminSettingField>
 
-						<AdminSettingField label={$i18n.t('External Task Model')}>
+						<AdminSettingField label={$i18n.t('settings.admin.interface.externalTaskModel.label')}>
 							<SettingsSelect
 								bind:value={taskConfig.TASK_MODEL_EXTERNAL}
 								className="w-full"
@@ -237,7 +237,7 @@
 							}}
 						>
 							<span class="text-xs text-gray-600 dark:text-gray-400">
-								{$i18n.t('Task Model Parameters')}
+								{$i18n.t('settings.admin.interface.taskModelParameters.label')}
 							</span>
 							<span class="text-[0.6875rem] text-gray-400 dark:text-gray-600">
 								{showTaskParameters ? $i18n.t('Close') : $i18n.t('Configure')}
@@ -257,24 +257,22 @@
 				</div>
 			</AdminSettingSection>
 
-			<AdminSettingSection title={$i18n.t('Chat')}>
+			<AdminSettingSection title={$i18n.t('settings.admin.interface.sections.chat.title')}>
 				<AdminSettingRow
-					label={$i18n.t('Tool Permissions')}
-					description={$i18n.t('Show Full access and Ask for approval in the chat input menu.')}
+					label={$i18n.t('settings.admin.interface.toolPermissions.label')}
+					description={$i18n.t('settings.admin.interface.toolPermissions.description')}
 					let:labelId
 				>
 					<div slot="label" class="flex items-center gap-2">
-						<span>{$i18n.t('Tool Permissions')}</span>
+						<span>{$i18n.t('settings.admin.interface.toolPermissions.label')}</span>
 						<ExperimentalBadge />
 					</div>
 					<Switch bind:state={chatConfig.ENABLE_TOOL_PERMISSIONS} ariaLabelledbyId={labelId} />
 				</AdminSettingRow>
 
 				<AdminSettingRow
-					label={$i18n.t('Context Compaction')}
-					description={$i18n.t(
-						"Keep long chats going by summarizing older turns before they outgrow the model's context window."
-					)}
+					label={$i18n.t('settings.admin.interface.contextCompaction.label')}
+					description={$i18n.t('settings.admin.interface.contextCompaction.description')}
 					let:labelId
 				>
 					<Switch bind:state={chatConfig.ENABLE_CONTEXT_COMPACTION} ariaLabelledbyId={labelId} />
@@ -282,10 +280,8 @@
 
 				{#if chatConfig.ENABLE_CONTEXT_COMPACTION}
 					<AdminSettingField
-						label={$i18n.t('Context Compaction Model')}
-						description={$i18n.t(
-							'Choose a dedicated model for context compaction summaries. Current Model follows the active chat model.'
-						)}
+						label={$i18n.t('settings.admin.interface.contextCompactionModel.label')}
+						description={$i18n.t('settings.admin.interface.contextCompactionModel.description')}
 					>
 						<SettingsSelect
 							bind:value={chatConfig.CONTEXT_COMPACTION_MODEL}
@@ -308,10 +304,8 @@
 					</AdminSettingField>
 
 					<AdminSettingField
-						label={$i18n.t('Token Threshold')}
-						description={$i18n.t(
-							"Leave at 0 to work this out from each model's own context window, which is the only figure that is right for more than one model. A number here overrides that for every model."
-						)}
+						label={$i18n.t('settings.admin.interface.tokenThreshold.label')}
+						description={$i18n.t('settings.admin.interface.tokenThreshold.description')}
 					>
 						<input
 							type="number"
@@ -324,10 +318,8 @@
 					</AdminSettingField>
 
 					<AdminSettingField
-						label={$i18n.t('Token Cap')}
-						description={$i18n.t(
-							'An upper limit no per-model threshold may exceed. Leave at 0 for none.'
-						)}
+						label={$i18n.t('settings.admin.interface.tokenCap.label')}
+						description={$i18n.t('settings.admin.interface.tokenCap.description')}
 					>
 						<input
 							type="number"
@@ -340,10 +332,8 @@
 					</AdminSettingField>
 
 					<AdminSettingField
-						label={$i18n.t('Retained Context')}
-						description={$i18n.t(
-							'Share of the usable context kept as recent turns, word for word, after a compaction. What is left over is the room the next several turns grow into.'
-						)}
+						label={$i18n.t('settings.admin.interface.retainedMessages.label')}
+						description={$i18n.t('settings.admin.interface.retainedMessages.description')}
 					>
 						<input
 							type="number"
@@ -356,10 +346,8 @@
 					</AdminSettingField>
 
 					<AdminSettingField
-						label={$i18n.t('Context Compaction Prompt')}
-						description={$i18n.t(
-							'Controls how older messages are rewritten into a running summary.'
-						)}
+						label={$i18n.t('settings.admin.interface.contextCompactionPrompt.label')}
+						description={$i18n.t('settings.admin.interface.contextCompactionPrompt.description')}
 					>
 						<Textarea
 							className={textareaClass}
@@ -369,7 +357,7 @@
 							)}
 						/>
 						<div class="mt-1 text-[0.6875rem] text-gray-400 dark:text-gray-600">
-							{$i18n.t('Available variables')}:
+							{$i18n.t('settings.admin.interface.availableVariables.label')}:
 							<code>{'{{PREVIOUS_SUMMARY}}'}</code>,
 							<code>{'{{COMPACTED_MESSAGES}}'}</code>,
 							<code>{'{{RECENT_MESSAGES}}'}</code>,
@@ -380,10 +368,10 @@
 				{/if}
 			</AdminSettingSection>
 
-			<AdminSettingSection title={$i18n.t('Generation')}>
+			<AdminSettingSection title={$i18n.t('settings.admin.interface.sections.generation.title')}>
 				<AdminSettingRow
-					label={$i18n.t('Title Generation')}
-					description={$i18n.t('Allow automatic names for new chats.')}
+					label={$i18n.t('settings.admin.interface.titleGeneration.label')}
+					description={$i18n.t('settings.admin.interface.titleGeneration.description')}
 					let:labelId
 				>
 					<Switch bind:state={taskConfig.ENABLE_TITLE_GENERATION} ariaLabelledbyId={labelId} />
@@ -391,8 +379,8 @@
 
 				{#if taskConfig.ENABLE_TITLE_GENERATION}
 					<AdminSettingField
-						label={$i18n.t('Title Generation Prompt')}
-						description={$i18n.t('Shapes the short label generated for each chat.')}
+						label={$i18n.t('settings.admin.interface.titleGenerationPrompt.label')}
+						description={$i18n.t('settings.admin.interface.titleGenerationPrompt.description')}
 					>
 						<Textarea
 							className={textareaClass}
@@ -405,8 +393,8 @@
 				{/if}
 
 				<AdminSettingRow
-					label={$i18n.t('Voice Mode Prompt')}
-					description={$i18n.t('Apply voice-specific instructions while voice mode is active.')}
+					label={$i18n.t('settings.admin.interface.voiceModePrompt.label')}
+					description={$i18n.t('settings.admin.interface.voiceModePrompt.description')}
 					let:labelId
 				>
 					<Switch bind:state={taskConfig.ENABLE_VOICE_MODE_PROMPT} ariaLabelledbyId={labelId} />
@@ -414,8 +402,8 @@
 
 				{#if taskConfig.ENABLE_VOICE_MODE_PROMPT}
 					<AdminSettingField
-						label={$i18n.t('Prompt Template')}
-						description={$i18n.t('Defines the behavior used for spoken conversations.')}
+						label={$i18n.t('settings.admin.interface.promptTemplate.label')}
+						description={$i18n.t('settings.admin.interface.promptTemplate.description')}
 					>
 						<Textarea
 							className={textareaClass}
@@ -428,8 +416,8 @@
 				{/if}
 
 				<AdminSettingRow
-					label={$i18n.t('Follow Up Generation')}
-					description={$i18n.t('Show suggested next questions after assistant responses.')}
+					label={$i18n.t('settings.admin.interface.followUpGeneration.label')}
+					description={$i18n.t('settings.admin.interface.followUpGeneration.description')}
 					let:labelId
 				>
 					<Switch bind:state={taskConfig.ENABLE_FOLLOW_UP_GENERATION} ariaLabelledbyId={labelId} />
@@ -437,8 +425,8 @@
 
 				{#if taskConfig.ENABLE_FOLLOW_UP_GENERATION}
 					<AdminSettingField
-						label={$i18n.t('Follow Up Generation Prompt')}
-						description={$i18n.t('Guides the suggestions shown after an assistant response.')}
+						label={$i18n.t('settings.admin.interface.followUpGenerationPrompt.label')}
+						description={$i18n.t('settings.admin.interface.followUpGenerationPrompt.description')}
 					>
 						<Textarea
 							className={textareaClass}
@@ -478,8 +466,8 @@
 				{/if}
 
 				<AdminSettingRow
-					label={$i18n.t('Tags Generation')}
-					description={$i18n.t('Create chat tags from conversation content.')}
+					label={$i18n.t('settings.admin.interface.tagsGeneration.label')}
+					description={$i18n.t('settings.admin.interface.tagsGeneration.description')}
 					let:labelId
 				>
 					<Switch bind:state={taskConfig.ENABLE_TAGS_GENERATION} ariaLabelledbyId={labelId} />
@@ -487,8 +475,8 @@
 
 				{#if taskConfig.ENABLE_TAGS_GENERATION}
 					<AdminSettingField
-						label={$i18n.t('Tags Generation Prompt')}
-						description={$i18n.t('Controls how chat tags are inferred.')}
+						label={$i18n.t('settings.admin.interface.tagsGenerationPrompt.label')}
+						description={$i18n.t('settings.admin.interface.tagsGenerationPrompt.description')}
 					>
 						<Textarea
 							className={textareaClass}
@@ -501,8 +489,8 @@
 				{/if}
 
 				<AdminSettingRow
-					label={$i18n.t('Retrieval Query Generation')}
-					description={$i18n.t('Rewrite user requests for knowledge retrieval.')}
+					label={$i18n.t('settings.admin.interface.retrievalQueryGeneration.label')}
+					description={$i18n.t('settings.admin.interface.retrievalQueryGeneration.description')}
 					let:labelId
 				>
 					<Switch
@@ -512,8 +500,8 @@
 				</AdminSettingRow>
 
 				<AdminSettingRow
-					label={$i18n.t('Web Search Query Generation')}
-					description={$i18n.t('Rewrite user requests into web-search queries.')}
+					label={$i18n.t('settings.admin.interface.webSearchQueryGeneration.label')}
+					description={$i18n.t('settings.admin.interface.webSearchQueryGeneration.description')}
 					let:labelId
 				>
 					<Switch
@@ -523,8 +511,8 @@
 				</AdminSettingRow>
 
 				<AdminSettingField
-					label={$i18n.t('Query Generation Prompt')}
-					description={$i18n.t('Shared prompt for retrieval and web-search query rewriting.')}
+					label={$i18n.t('settings.admin.interface.queryGenerationPrompt.label')}
+					description={$i18n.t('settings.admin.interface.queryGenerationPrompt.description')}
 				>
 					<Textarea
 						className={textareaClass}
@@ -534,8 +522,8 @@
 				</AdminSettingField>
 
 				<AdminSettingRow
-					label={$i18n.t('Autocomplete Generation')}
-					description={$i18n.t('Suggest completions while users type chat messages.')}
+					label={$i18n.t('settings.admin.interface.autocompleteGeneration.label')}
+					description={$i18n.t('settings.admin.interface.autocompleteGeneration.description')}
 					let:labelId
 				>
 					<Switch
@@ -546,8 +534,10 @@
 
 				{#if taskConfig.ENABLE_AUTOCOMPLETE_GENERATION}
 					<AdminSettingField
-						label={$i18n.t('Autocomplete Generation Input Max Length')}
-						description={$i18n.t('Limit how much draft text is sent for suggestion generation.')}
+						label={$i18n.t('settings.admin.interface.autocompleteGenerationInputMaxLength.label')}
+						description={$i18n.t(
+							'settings.admin.interface.autocompleteGenerationInputMaxLength.description'
+						)}
 					>
 						<input
 							type="number"
@@ -560,8 +550,10 @@
 					</AdminSettingField>
 
 					<AdminSettingField
-						label={$i18n.t('Autocomplete Generation Prompt')}
-						description={$i18n.t('Guides inline completions while users type a message.')}
+						label={$i18n.t('settings.admin.interface.autocompleteGenerationPrompt.label')}
+						description={$i18n.t(
+							'settings.admin.interface.autocompleteGenerationPrompt.description'
+						)}
 					>
 						<Textarea
 							className={textareaClass}
@@ -574,8 +566,8 @@
 				{/if}
 
 				<AdminSettingField
-					label={$i18n.t('Image Prompt Generation Prompt')}
-					description={$i18n.t('Rewrites user intent into an image-generation prompt.')}
+					label={$i18n.t('settings.admin.interface.imagePromptGenerationPrompt.label')}
+					description={$i18n.t('settings.admin.interface.imagePromptGenerationPrompt.description')}
 				>
 					<Textarea
 						className={textareaClass}
@@ -585,8 +577,8 @@
 				</AdminSettingField>
 
 				<AdminSettingField
-					label={$i18n.t('Tools Function Calling Prompt')}
-					description={$i18n.t('Guides how the assistant formats tool and function calls.')}
+					label={$i18n.t('settings.admin.interface.toolsFunctionCallingPrompt.label')}
+					description={$i18n.t('settings.admin.interface.toolsFunctionCallingPrompt.description')}
 				>
 					<Textarea
 						className={textareaClass}

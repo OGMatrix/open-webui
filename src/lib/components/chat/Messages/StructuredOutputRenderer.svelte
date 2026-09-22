@@ -27,6 +27,7 @@
 	export let renderMarkdown = true;
 	export let editCodeBlock = true;
 	export let topPadding = false;
+	export let allowEmbeds = false;
 	export let sourceIds: string[] = [];
 	export let formatMessageContent: (content: string) => string = (content) => content;
 	export let onSave: any = () => {};
@@ -92,6 +93,7 @@
 					{preview}
 					{compactPreview}
 					{done}
+					{allowEmbeds}
 					{editCodeBlock}
 					{topPadding}
 					{sourceIds}
@@ -112,6 +114,7 @@
 			tokens={displayItem.tokens}
 			messageDone={done}
 			{compactPreview}
+			{allowEmbeds}
 			resolvable={!!chatId && !!messageId && save}
 			{resolvingCallId}
 			onResolve={resolveToolCall}
@@ -145,6 +148,7 @@
 										{chatId}
 										{messageId}
 										{done}
+										{allowEmbeds}
 										{save}
 										{preview}
 										{compactPreview}

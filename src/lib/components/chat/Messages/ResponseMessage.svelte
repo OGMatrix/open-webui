@@ -51,6 +51,7 @@
 	import RateComment from './RateComment.svelte';
 	import WebSearchResults from './ResponseMessage/WebSearchResults.svelte';
 	import Sparkles from '$lib/components/icons/Sparkles.svelte';
+	import ArrowUpLeft from '$lib/components/icons/ArrowUpLeft.svelte';
 
 	import DeleteConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 
@@ -473,6 +474,9 @@
 			annotation: {
 				...(message?.annotation ?? {}),
 				...(rating !== null ? { rating: rating } : {}),
+				...(rating !== null && rating !== message?.annotation?.rating
+					? { reason: null, details: null }
+					: {}),
 				...(details ? details : {})
 			}
 		};
@@ -533,9 +537,12 @@
 				message.feedbackId,
 				feedbackItem
 			).catch((error) => {
-				toast.error(`${error}`);
+				console.error(error);
+				return null;
 			});
-		} else {
+		}
+
+		if (!feedback) {
 			feedback = await createNewFeedback(localStorage.token, feedbackItem).catch((error) => {
 				toast.error(`${error}`);
 			});
@@ -724,7 +731,7 @@
 							</div>
 						{/if}
 
-						{#if message?.embeds && message.embeds.length > 0}
+						{#if !readOnly && message?.embeds && message.embeds.length > 0}
 							<div
 								class="my-1 w-full flex overflow-x-auto gap-2 flex-wrap"
 								id={`${message.id}-embeds-container`}
@@ -852,6 +859,7 @@
 									{editCodeBlock}
 									{topPadding}
 									done={message?.done ?? false}
+									allowEmbeds={!readOnly}
 									{model}
 									onTaskClick={async (e) => {
 										console.log(e);
@@ -955,6 +963,22 @@
 						class="flex items-center justify-start overflow-x-auto whitespace-nowrap buttons text-gray-600 dark:text-gray-500 mt-0.5 [&>*]:shrink-0"
 					>
 						{#if message.done || siblings.length > 1}
+							{#if message.done && onInsertToNote && visibleResponseContent}
+								<Tooltip content={$i18n.t('Insert into note')} placement="bottom">
+									<button
+										aria-label={$i18n.t('Insert into note')}
+										class="{isLastMessage || ($settings?.highContrastMode ?? false)
+											? 'visible'
+											: 'hover-reveal'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
+										on:click={() => {
+											onInsertToNote?.(visibleResponseContent);
+										}}
+									>
+										<ArrowUpLeft className="size-3.5" strokeWidth="2" />
+									</button>
+								</Tooltip>
+							{/if}
+
 							{#if siblings.length > 1}
 								<div class="flex self-center min-w-fit" dir="ltr">
 									<button
@@ -1649,15 +1673,17 @@
 					</div>
 
 					{#if message.done && showRateComment}
-						<RateComment
-							bind:message
-							bind:show={showRateComment}
-							on:save={async (e) => {
-								await feedbackHandler(null, {
-									...e.detail
-								});
-							}}
-						/>
+						{#key message?.annotation?.rating}
+							<RateComment
+								bind:message
+								bind:show={showRateComment}
+								on:save={async (e) => {
+									await feedbackHandler(null, {
+										...e.detail
+									});
+								}}
+							/>
+						{/key}
 					{/if}
 
 					{#if (isLastMessage || ($settings?.keepFollowUpPrompts ?? false)) && message.done && !readOnly && (message?.followUps ?? []).length > 0}

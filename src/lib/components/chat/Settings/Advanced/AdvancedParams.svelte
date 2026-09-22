@@ -114,15 +114,13 @@
 >
 	<div>
 		<Tooltip
-			content={$i18n.t(
-				'When enabled, the model will respond to each chat message in real-time, generating a response as soon as the user sends a message. This mode is useful for live chat applications, but may impact performance on slower hardware.'
-			)}
+			content={$i18n.t('settings.personal.general.parameters.streamChatResponse.description')}
 			placement="top-start"
 			className="inline-tooltip"
 		>
 			<div class=" py-0.5 flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{$i18n.t('Stream Chat Response')}
+					{$i18n.t('settings.personal.general.parameters.streamChatResponse.label')}
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition"
@@ -187,15 +185,13 @@
 	{#if admin}
 		<div>
 			<Tooltip
-				content={$i18n.t(
-					'The stream delta chunk size for the model. Increasing the chunk size will make the model respond with larger pieces of text at once.'
-				)}
+				content={$i18n.t('settings.personal.general.parameters.streamDeltaChunkSize.description')}
 				placement="top-start"
 				className="inline-tooltip"
 			>
 				<div class="flex w-full justify-between">
 					<div class=" self-center text-xs">
-						{$i18n.t('Stream Delta Chunk Size')}
+						{$i18n.t('settings.personal.general.parameters.streamDeltaChunkSize.label')}
 					</div>
 					<button
 						class="p-1 px-3 text-xs flex rounded-sm transition shrink-0 outline-hidden"
@@ -217,7 +213,7 @@
 			{#if (params?.stream_delta_chunk_size ?? null) !== null}
 				{@render rangeParam(
 					'stream_delta_chunk_size',
-					$i18n.t('Stream Delta Chunk Size'),
+					$i18n.t('settings.personal.general.parameters.streamDeltaChunkSize.label'),
 					1,
 					128,
 					1,
@@ -230,14 +226,14 @@
 		<div>
 			<Tooltip
 				content={$i18n.t(
-					'Set a model-specific context compaction token threshold. When set, this overrides the global threshold up to the global cap.'
+					'settings.personal.general.parameters.contextCompactionThreshold.description'
 				)}
 				placement="top-start"
 				className="inline-tooltip"
 			>
 				<div class="flex w-full justify-between">
 					<div class=" self-center text-xs">
-						{$i18n.t('Context Compaction Threshold')}
+						{$i18n.t('settings.personal.general.parameters.contextCompactionThreshold.label')}
 					</div>
 					<button
 						class="p-1 px-3 text-xs flex rounded-sm transition shrink-0 outline-hidden"
@@ -262,7 +258,9 @@
 						<input
 							class="text-sm w-full bg-transparent outline-hidden outline-none"
 							type="number"
-							aria-label={$i18n.t('Context Compaction Threshold')}
+							aria-label={$i18n.t(
+								'settings.personal.general.parameters.contextCompactionThreshold.label'
+							)}
 							placeholder={$i18n.t('Enter token threshold')}
 							bind:value={params.compact_token_threshold}
 							autocomplete="off"
@@ -277,15 +275,13 @@
 
 	<div>
 		<Tooltip
-			content={$i18n.t(
-				"Native mode (default) leverages the model's built-in tool-calling capabilities. Legacy mode works with a wider range of models by calling tools once before execution via prompt injection."
-			)}
+			content={$i18n.t('settings.personal.general.parameters.functionCalling.description')}
 			placement="top-start"
 			className="inline-tooltip"
 		>
 			<div class=" py-0.5 flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{$i18n.t('Function Calling')}
+					{$i18n.t('settings.personal.general.parameters.functionCalling.label')}
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition"
@@ -314,15 +310,13 @@
 
 	<div class=" py-0.5 w-full justify-between">
 		<Tooltip
-			content={$i18n.t(
-				'Enable, disable, or customize the reasoning tags used by the model. "Enabled" uses default tags, "Disabled" turns off reasoning tags, and "Custom" lets you specify your own start and end tags.'
-			)}
+			content={$i18n.t('settings.personal.general.parameters.reasoningTags.description')}
 			placement="top-start"
 			className="inline-tooltip"
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{$i18n.t('Reasoning Tags')}
+					{$i18n.t('settings.personal.general.parameters.reasoningTags.label')}
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition shrink-0 outline-hidden"
@@ -381,15 +375,13 @@
 
 	<div class=" py-0.5 w-full justify-between">
 		<Tooltip
-			content={$i18n.t(
-				'Sets the random number seed to use for generation. Setting this to a specific number will make the model generate the same text for the same prompt.'
-			)}
+			content={$i18n.t('settings.personal.general.parameters.seed.description')}
 			placement="top-start"
 			className="inline-tooltip"
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{$i18n.t('Seed')}
+					{$i18n.t('settings.personal.general.parameters.seed.label')}
 				</div>
 
 				<button
@@ -414,7 +406,7 @@
 					<input
 						class="text-sm w-full bg-transparent outline-hidden outline-none"
 						type="number"
-						aria-label={$i18n.t('Seed')}
+						aria-label={$i18n.t('settings.personal.general.parameters.seed.label')}
 						placeholder={$i18n.t('Enter Seed')}
 						bind:value={params.seed}
 						autocomplete="off"
@@ -427,15 +419,13 @@
 
 	<div class=" py-0.5 w-full justify-between">
 		<Tooltip
-			content={$i18n.t(
-				'Sets the stop sequences to use. When this pattern is encountered, the LLM will stop generating text and return. Multiple stop patterns may be set by specifying multiple separate stop parameters in a modelfile.'
-			)}
+			content={$i18n.t('settings.personal.general.parameters.stopSequence.description')}
 			placement="top-start"
 			className="inline-tooltip"
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{$i18n.t('Stop Sequence')}
+					{$i18n.t('settings.personal.general.parameters.stopSequence.label')}
 				</div>
 
 				<button
@@ -460,7 +450,7 @@
 					<input
 						class="text-sm w-full bg-transparent outline-hidden outline-none"
 						type="text"
-						aria-label={$i18n.t('Stop Sequence')}
+						aria-label={$i18n.t('settings.personal.general.parameters.stopSequence.label')}
 						placeholder={$i18n.t('Enter stop sequence')}
 						bind:value={params.stop}
 						autocomplete="off"
@@ -472,15 +462,13 @@
 
 	<div class=" py-0.5 w-full justify-between">
 		<Tooltip
-			content={$i18n.t(
-				'The temperature of the model. Increasing the temperature will make the model answer more creatively.'
-			)}
+			content={$i18n.t('settings.personal.general.parameters.temperature.description')}
 			placement="top-start"
 			className="inline-tooltip"
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{$i18n.t('Temperature')}
+					{$i18n.t('settings.personal.general.parameters.temperature.label')}
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition shrink-0 outline-hidden"
@@ -499,21 +487,25 @@
 		</Tooltip>
 
 		{#if (params?.temperature ?? null) !== null}
-			{@render rangeParam('temperature', $i18n.t('Temperature'), 0, 2, 0.05)}
+			{@render rangeParam(
+				'temperature',
+				$i18n.t('settings.personal.general.parameters.temperature.label'),
+				0,
+				2,
+				0.05
+			)}
 		{/if}
 	</div>
 
 	<div class=" py-0.5 w-full justify-between">
 		<Tooltip
-			content={$i18n.t(
-				'Constrains effort on reasoning for reasoning models. Only applicable to reasoning models from specific providers that support reasoning effort.'
-			)}
+			content={$i18n.t('settings.personal.general.parameters.reasoningEffort.description')}
 			placement="top-start"
 			className="inline-tooltip"
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{$i18n.t('Reasoning Effort')}
+					{$i18n.t('settings.personal.general.parameters.reasoningEffort.label')}
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition shrink-0 outline-hidden"
@@ -537,7 +529,7 @@
 					<input
 						class="text-sm w-full bg-transparent outline-hidden outline-none"
 						type="text"
-						aria-label={$i18n.t('Reasoning Effort')}
+						aria-label={$i18n.t('settings.personal.general.parameters.reasoningEffort.label')}
 						placeholder={$i18n.t('Enter reasoning effort')}
 						bind:value={params.reasoning_effort}
 						autocomplete="off"
@@ -557,7 +549,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'logit_bias'}
+					{$i18n.t('settings.personal.general.parameters.logitBias.label')}
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition shrink-0 outline-hidden"
@@ -581,7 +573,7 @@
 					<input
 						class="text-sm w-full bg-transparent outline-hidden outline-none"
 						type="text"
-						aria-label="logit_bias"
+						aria-label={$i18n.t('settings.personal.general.parameters.logitBias.label')}
 						placeholder={$i18n.t(
 							'Enter comma-separated "token:bias_value" pairs (example: 5432:100, 413:-100)'
 						)}
@@ -603,7 +595,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'max_tokens'}
+					{$i18n.t('settings.personal.general.parameters.maxTokens.label')}
 				</div>
 
 				<button
@@ -623,7 +615,15 @@
 		</Tooltip>
 
 		{#if (params?.max_tokens ?? null) !== null}
-			{@render rangeParam('max_tokens', 'max_tokens', -2, 131072, 1, 1, undefined)}
+			{@render rangeParam(
+				'max_tokens',
+				$i18n.t('settings.personal.general.parameters.maxTokens.label'),
+				-2,
+				131072,
+				1,
+				1,
+				undefined
+			)}
 		{/if}
 	</div>
 
@@ -637,7 +637,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'top_k'}
+					{$i18n.t('settings.personal.general.parameters.topK.label')}
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition shrink-0 outline-hidden"
@@ -660,7 +660,7 @@
 				<div class=" flex-1">
 					<input
 						type="range"
-						aria-label="top_k"
+						aria-label={$i18n.t('settings.personal.general.parameters.topK.label')}
 						min="0"
 						max="1000"
 						step="1"
@@ -673,7 +673,7 @@
 					<input
 						value={params.top_k}
 						type="number"
-						aria-label="top_k"
+						aria-label={$i18n.t('settings.personal.general.parameters.topK.label')}
 						class=" bg-transparent text-center w-14"
 						min="0"
 						max="1000"
@@ -695,7 +695,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'top_p'}
+					{$i18n.t('settings.personal.general.parameters.topP.label')}
 				</div>
 
 				<button
@@ -715,7 +715,13 @@
 		</Tooltip>
 
 		{#if (params?.top_p ?? null) !== null}
-			{@render rangeParam('top_p', 'top_p', 0, 1, 0.05)}
+			{@render rangeParam(
+				'top_p',
+				$i18n.t('settings.personal.general.parameters.topP.label'),
+				0,
+				1,
+				0.05
+			)}
 		{/if}
 	</div>
 
@@ -729,7 +735,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'min_p'}
+					{$i18n.t('settings.personal.general.parameters.minP.label')}
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition shrink-0 outline-hidden"
@@ -748,7 +754,13 @@
 		</Tooltip>
 
 		{#if (params?.min_p ?? null) !== null}
-			{@render rangeParam('min_p', 'min_p', 0, 1, 0.05)}
+			{@render rangeParam(
+				'min_p',
+				$i18n.t('settings.personal.general.parameters.minP.label'),
+				0,
+				1,
+				0.05
+			)}
 		{/if}
 	</div>
 
@@ -762,7 +774,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'frequency_penalty'}
+					{$i18n.t('settings.personal.general.parameters.frequencyPenalty.label')}
 				</div>
 
 				<button
@@ -782,7 +794,13 @@
 		</Tooltip>
 
 		{#if (params?.frequency_penalty ?? null) !== null}
-			{@render rangeParam('frequency_penalty', 'frequency_penalty', -2, 2, 0.05)}
+			{@render rangeParam(
+				'frequency_penalty',
+				$i18n.t('settings.personal.general.parameters.frequencyPenalty.label'),
+				-2,
+				2,
+				0.05
+			)}
 		{/if}
 	</div>
 
@@ -796,7 +814,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'presence_penalty'}
+					{$i18n.t('settings.personal.general.parameters.presencePenalty.label')}
 				</div>
 
 				<button
@@ -816,7 +834,13 @@
 		</Tooltip>
 
 		{#if (params?.presence_penalty ?? null) !== null}
-			{@render rangeParam('presence_penalty', 'presence_penalty', -2, 2, 0.05)}
+			{@render rangeParam(
+				'presence_penalty',
+				$i18n.t('settings.personal.general.parameters.presencePenalty.label'),
+				-2,
+				2,
+				0.05
+			)}
 		{/if}
 	</div>
 
@@ -828,7 +852,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'mirostat'}
+					{$i18n.t('settings.personal.general.parameters.mirostat.label')}
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition shrink-0 outline-hidden"
@@ -847,7 +871,14 @@
 		</Tooltip>
 
 		{#if (params?.mirostat ?? null) !== null}
-			{@render rangeParam('mirostat', 'mirostat', 0, 2, 1, 1)}
+			{@render rangeParam(
+				'mirostat',
+				$i18n.t('settings.personal.general.parameters.mirostat.label'),
+				0,
+				2,
+				1,
+				1
+			)}
 		{/if}
 	</div>
 
@@ -861,7 +892,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'mirostat_eta'}
+					{$i18n.t('settings.personal.general.parameters.mirostatEta.label')}
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition shrink-0 outline-hidden"
@@ -880,7 +911,13 @@
 		</Tooltip>
 
 		{#if (params?.mirostat_eta ?? null) !== null}
-			{@render rangeParam('mirostat_eta', 'mirostat_eta', 0, 1, 0.05)}
+			{@render rangeParam(
+				'mirostat_eta',
+				$i18n.t('settings.personal.general.parameters.mirostatEta.label'),
+				0,
+				1,
+				0.05
+			)}
 		{/if}
 	</div>
 
@@ -894,7 +931,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'mirostat_tau'}
+					{$i18n.t('settings.personal.general.parameters.mirostatTau.label')}
 				</div>
 
 				<button
@@ -914,7 +951,13 @@
 		</Tooltip>
 
 		{#if (params?.mirostat_tau ?? null) !== null}
-			{@render rangeParam('mirostat_tau', 'mirostat_tau', 0, 10, 0.5)}
+			{@render rangeParam(
+				'mirostat_tau',
+				$i18n.t('settings.personal.general.parameters.mirostatTau.label'),
+				0,
+				10,
+				0.5
+			)}
 		{/if}
 	</div>
 
@@ -926,7 +969,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'repeat_last_n'}
+					{$i18n.t('settings.personal.general.parameters.repeatLastN.label')}
 				</div>
 
 				<button
@@ -946,7 +989,14 @@
 		</Tooltip>
 
 		{#if (params?.repeat_last_n ?? null) !== null}
-			{@render rangeParam('repeat_last_n', 'repeat_last_n', -1, 128, 1, 1)}
+			{@render rangeParam(
+				'repeat_last_n',
+				$i18n.t('settings.personal.general.parameters.repeatLastN.label'),
+				-1,
+				128,
+				1,
+				1
+			)}
 		{/if}
 	</div>
 
@@ -960,7 +1010,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'tfs_z'}
+					{$i18n.t('settings.personal.general.parameters.tfsZ.label')}
 				</div>
 
 				<button
@@ -980,7 +1030,13 @@
 		</Tooltip>
 
 		{#if (params?.tfs_z ?? null) !== null}
-			{@render rangeParam('tfs_z', 'tfs_z', 0, 2, 0.05)}
+			{@render rangeParam(
+				'tfs_z',
+				$i18n.t('settings.personal.general.parameters.tfsZ.label'),
+				0,
+				2,
+				0.05
+			)}
 		{/if}
 	</div>
 
@@ -994,7 +1050,7 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'repeat_penalty'}
+					{$i18n.t('settings.personal.general.parameters.repeatPenalty.label')}
 				</div>
 
 				<button
@@ -1014,7 +1070,13 @@
 		</Tooltip>
 
 		{#if (params?.repeat_penalty ?? null) !== null}
-			{@render rangeParam('repeat_penalty', 'repeat_penalty', -2, 2, 0.05)}
+			{@render rangeParam(
+				'repeat_penalty',
+				$i18n.t('settings.personal.general.parameters.repeatPenalty.label'),
+				-2,
+				2,
+				0.05
+			)}
 		{/if}
 	</div>
 
@@ -1029,7 +1091,7 @@
 			>
 				<div class="flex w-full justify-between">
 					<div class=" self-center text-xs">
-						{'use_mmap'}
+						{$i18n.t('settings.personal.general.parameters.useMmap.label')}
 					</div>
 					<button
 						class="p-1 px-3 text-xs flex rounded-sm transition shrink-0 outline-hidden"
@@ -1053,7 +1115,10 @@
 						{params.use_mmap ? $i18n.t('Enabled') : $i18n.t('Disabled')}
 					</div>
 					<div class=" pr-2">
-						<Switch bind:state={params.use_mmap} ariaLabel="use_mmap" />
+						<Switch
+							bind:state={params.use_mmap}
+							ariaLabel={$i18n.t('settings.personal.general.parameters.useMmap.label')}
+						/>
 					</div>
 				</div>
 			{/if}
@@ -1069,7 +1134,7 @@
 			>
 				<div class="flex w-full justify-between">
 					<div class=" self-center text-xs">
-						{'use_mlock'}
+						{$i18n.t('settings.personal.general.parameters.useMlock.label')}
 					</div>
 
 					<button
@@ -1095,7 +1160,10 @@
 					</div>
 
 					<div class=" pr-2">
-						<Switch bind:state={params.use_mlock} ariaLabel="use_mlock" />
+						<Switch
+							bind:state={params.use_mlock}
+							ariaLabel={$i18n.t('settings.personal.general.parameters.useMlock.label')}
+						/>
 					</div>
 				</div>
 			{/if}
@@ -1104,15 +1172,15 @@
 
 	<div class=" py-0.5 w-full justify-between">
 		<Tooltip
-			content={$i18n.t(
-				'This option enables or disables the use of the reasoning feature in Ollama, which allows the model to think before generating a response. When enabled, the model can take a moment to process the conversation context and generate a more thoughtful response.'
-			)}
+			content={$i18n.t('settings.personal.general.parameters.ollama.description')}
 			placement="top-start"
 			className="inline-tooltip"
 		>
 			<div class=" py-0.5 flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'think'} ({$i18n.t('Ollama')})
+					{$i18n.t('settings.personal.general.parameters.think.label')} ({$i18n.t(
+						'settings.personal.general.parameters.ollama.label'
+					)})
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition"
@@ -1148,7 +1216,7 @@
 					<input
 						class="text-sm w-full bg-transparent outline-hidden outline-none"
 						type="text"
-						aria-label={`think (${$i18n.t('Ollama')})`}
+						aria-label={`${$i18n.t('settings.personal.general.parameters.think.label')} (${$i18n.t('settings.personal.general.parameters.ollama.label')})`}
 						placeholder={$i18n.t("e.g. 'low', 'medium', 'high'")}
 						bind:value={params.think}
 						autocomplete="off"
@@ -1166,7 +1234,9 @@
 		>
 			<div class=" py-0.5 flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'format'} ({$i18n.t('Ollama')})
+					{$i18n.t('settings.personal.general.parameters.format.label')} ({$i18n.t(
+						'settings.personal.general.parameters.ollama.label'
+					)})
 				</div>
 				<button
 					class="p-1 px-3 text-xs flex rounded-sm transition"
@@ -1188,7 +1258,7 @@
 			<div class="flex mt-0.5 space-x-2">
 				<Textarea
 					className="w-full  text-sm bg-transparent outline-hidden"
-					ariaLabel={`format (${$i18n.t('Ollama')})`}
+					ariaLabel={`${$i18n.t('settings.personal.general.parameters.format.label')} (${$i18n.t('settings.personal.general.parameters.ollama.label')})`}
 					placeholder={$i18n.t('e.g. "json" or a JSON schema')}
 					bind:value={params.format}
 				/>
@@ -1206,7 +1276,9 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'num_keep'} ({$i18n.t('Ollama')})
+					{$i18n.t('settings.personal.general.parameters.numKeep.label')} ({$i18n.t(
+						'settings.personal.general.parameters.ollama.label'
+					)})
 				</div>
 
 				<button
@@ -1228,7 +1300,7 @@
 		{#if (params?.num_keep ?? null) !== null}
 			{@render rangeParam(
 				'num_keep',
-				`num_keep (${$i18n.t('Ollama')})`,
+				`${$i18n.t('settings.personal.general.parameters.numKeep.label')} (${$i18n.t('settings.personal.general.parameters.ollama.label')})`,
 				-1,
 				10240000,
 				1,
@@ -1246,7 +1318,9 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'num_ctx'} ({$i18n.t('Ollama')})
+					{$i18n.t('settings.personal.general.parameters.numCtx.label')} ({$i18n.t(
+						'settings.personal.general.parameters.ollama.label'
+					)})
 				</div>
 
 				<button
@@ -1268,7 +1342,7 @@
 		{#if (params?.num_ctx ?? null) !== null}
 			{@render rangeParam(
 				'num_ctx',
-				`num_ctx (${$i18n.t('Ollama')})`,
+				`${$i18n.t('settings.personal.general.parameters.numCtx.label')} (${$i18n.t('settings.personal.general.parameters.ollama.label')})`,
 				-1,
 				10240000,
 				1,
@@ -1288,7 +1362,9 @@
 		>
 			<div class="flex w-full justify-between">
 				<div class=" self-center text-xs">
-					{'num_batch'} ({$i18n.t('Ollama')})
+					{$i18n.t('settings.personal.general.parameters.numBatch.label')} ({$i18n.t(
+						'settings.personal.general.parameters.ollama.label'
+					)})
 				</div>
 
 				<button
@@ -1310,7 +1386,7 @@
 		{#if (params?.num_batch ?? null) !== null}
 			{@render rangeParam(
 				'num_batch',
-				`num_batch (${$i18n.t('Ollama')})`,
+				`${$i18n.t('settings.personal.general.parameters.numBatch.label')} (${$i18n.t('settings.personal.general.parameters.ollama.label')})`,
 				256,
 				8192,
 				256,
@@ -1331,7 +1407,9 @@
 			>
 				<div class="flex w-full justify-between">
 					<div class=" self-center text-xs">
-						{'num_thread'} ({$i18n.t('Ollama')})
+						{$i18n.t('settings.personal.general.parameters.numThread.label')} ({$i18n.t(
+							'settings.personal.general.parameters.ollama.label'
+						)})
 					</div>
 
 					<button
@@ -1351,7 +1429,14 @@
 			</Tooltip>
 
 			{#if (params?.num_thread ?? null) !== null}
-				{@render rangeParam('num_thread', `num_thread (${$i18n.t('Ollama')})`, 1, 256, 1, 1)}
+				{@render rangeParam(
+					'num_thread',
+					`${$i18n.t('settings.personal.general.parameters.numThread.label')} (${$i18n.t('settings.personal.general.parameters.ollama.label')})`,
+					1,
+					256,
+					1,
+					1
+				)}
 			{/if}
 		</div>
 
@@ -1365,7 +1450,9 @@
 			>
 				<div class="flex w-full justify-between">
 					<div class=" self-center text-xs">
-						{'num_gpu'} ({$i18n.t('Ollama')})
+						{$i18n.t('settings.personal.general.parameters.numGpu.label')} ({$i18n.t(
+							'settings.personal.general.parameters.ollama.label'
+						)})
 					</div>
 
 					<button
@@ -1385,7 +1472,14 @@
 			</Tooltip>
 
 			{#if (params?.num_gpu ?? null) !== null}
-				{@render rangeParam('num_gpu', `num_gpu (${$i18n.t('Ollama')})`, 0, 256, 1, 1)}
+				{@render rangeParam(
+					'num_gpu',
+					`${$i18n.t('settings.personal.general.parameters.numGpu.label')} (${$i18n.t('settings.personal.general.parameters.ollama.label')})`,
+					0,
+					256,
+					1,
+					1
+				)}
 			{/if}
 		</div>
 
@@ -1399,7 +1493,9 @@
 			>
 				<div class=" py-0.5 flex w-full justify-between">
 					<div class=" self-center text-xs">
-						{'keep_alive'} ({$i18n.t('Ollama')})
+						{$i18n.t('settings.personal.general.parameters.keepAlive.label')} ({$i18n.t(
+							'settings.personal.general.parameters.ollama.label'
+						)})
 					</div>
 					<button
 						class="p-1 px-3 text-xs flex rounded-sm transition"
@@ -1422,7 +1518,7 @@
 					<input
 						class="w-full text-sm bg-transparent outline-hidden"
 						type="text"
-						aria-label={`keep_alive (${$i18n.t('Ollama')})`}
+						aria-label={`${$i18n.t('settings.personal.general.parameters.keepAlive.label')} (${$i18n.t('settings.personal.general.parameters.ollama.label')})`}
 						placeholder={$i18n.t("e.g. '30s','10m'. Valid time units are 's', 'm', 'h'.")}
 						bind:value={params.keep_alive}
 					/>

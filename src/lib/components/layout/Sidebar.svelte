@@ -233,7 +233,7 @@
 					current.splice(oldIndex, 1);
 					current.splice(newIndex, 0, itemId);
 					settings.set({ ...$settings, pinnedMenuItems: current });
-					await updateUserSettings(localStorage.token, { ui: $settings });
+					await updateUserSettings(localStorage.token, { ui: { pinnedMenuItems: current } });
 				}
 			});
 		}
@@ -308,7 +308,7 @@
 		folders = folderMap;
 	};
 
-	const createFolder = async ({ name, data, parent_id }) => {
+	const createFolder = async ({ name, data, meta, parent_id }) => {
 		name = name?.trim();
 		if (!name) {
 			toast.error($i18n.t('Folder name cannot be empty.'));
@@ -345,6 +345,7 @@
 		const res = await createNewFolder(localStorage.token, {
 			name,
 			data,
+			meta,
 			parent_id
 		}).catch((error) => {
 			toast.error(`${error}`);

@@ -1903,6 +1903,7 @@ export interface ModelMeta {
 	hidden?: boolean;
 	capabilities?: Partial<Record<ModelCapability, boolean>>;
 	profile_image_url?: string;
+	background_image_url?: string | null;
 }
 
 export interface ModelParams {}

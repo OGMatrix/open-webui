@@ -120,6 +120,7 @@
 				{compactPreview}
 				{editCodeBlock}
 				{topPadding}
+				{onInsertToNote}
 			/>
 		{:else}
 			{#key messageId}

@@ -34,6 +34,7 @@
 		showCallOverlay,
 		tools,
 		skills,
+		terminalSkills,
 		toolServers,
 		terminalServers,
 		user as _user,
@@ -59,7 +60,8 @@
 		getUsageTokenCount,
 		getUserPosition,
 		getUserTimezone,
-		getWeekday
+		getWeekday,
+		isRasterImageContentType
 	} from '$lib/utils';
 	import { uploadFile } from '$lib/apis/files';
 	import { getCwd, uploadNewFileToTerminal } from '$lib/apis/terminal';
@@ -232,6 +234,12 @@
 	$: glowGrain = $settings?.generationGlowGrain ?? false;
 	$: glowHue =
 		typeof $settings?.generationGlowHue === 'number' ? $settings.generationGlowHue : null;
+	$: hasChatContent = history?.currentId
+		? createMessagesList(history, history.currentId).some(
+				(message) =>
+					!!message?.content || !!message?.tool_calls || !!message?.files || !!message?.models
+			)
+		: false;
 	$: canToggleTemporary =
 		!embedded &&
 		!chatId &&
@@ -801,10 +809,16 @@
 		}
 
 		if ($temporaryChatEnabled) {
-			window.history.replaceState(null, '', '?temporary-chat=true');
+			window.history.replaceState(window.history.state, '', '?temporary-chat=true');
 		} else {
-			window.history.replaceState(null, '', location.pathname);
+			window.history.replaceState(window.history.state, '', location.pathname);
 		}
+	};
+
+	const createSkillHandler = async () => {
+		prompt = '/skills:create';
+		await tick();
+		dispatch('submit', prompt);
 	};
 
 	const insertTextAtCursor = async (text: string) => {
@@ -1046,7 +1060,9 @@
 	$: showToolsButton = ($tools ?? []).length > 0 || ($toolServers ?? []).length > 0;
 
 	let showSkillsButton = false;
-	$: showSkillsButton = ($skills ?? []).some((skill) => skill.is_active);
+	$: showSkillsButton =
+		($skills ?? []).some((skill) => skill.is_active) ||
+		($terminalSkills ?? []).some((skill) => skill.is_active);
 
 	let showWebSearchButton = false;
 	$: showWebSearchButton =
@@ -1501,7 +1517,7 @@
 				return;
 			}
 
-			if (file['type'].startsWith('image/')) {
+			if (isRasterImageContentType(file['type'])) {
 				if (visionCapableModels.length === 0) {
 					toast.error($i18n.t('Selected model(s) do not support image inputs'));
 					return;
@@ -1809,7 +1825,17 @@
 						return;
 					}
 
-					if (['compact', 'fork', 'status', 'model', 'settings', 'temporary'].includes(props?.id)) {
+					if (
+						[
+							'compact',
+							'fork',
+							'status',
+							'model',
+							'settings',
+							'temporary',
+							'skills:create'
+						].includes(props?.id)
+					) {
 						editor.chain().focus().deleteRange(range).run();
 						return;
 					}
@@ -1836,6 +1862,7 @@
 						($_user?.role === 'admin' || ($_user?.permissions?.chat?.import ?? true)),
 					forkDisabled: () => isActive,
 					canTemporary: () => canToggleTemporary,
+					hasChatContent: hasChatContent,
 					temporaryEnabled: () => $temporaryChatEnabled === true,
 					contextUsage: () => statusContextUsage,
 					onCompact: compactHandler,
@@ -1844,6 +1871,7 @@
 					onModel: () => modelSelector?.open(),
 					onSettings: () => showSettings.set(true),
 					onTemporary: temporaryHandler,
+					onCreateSkill: createSkillHandler,
 					onSelect: (e) => {
 						const { type, data } = e;
 
@@ -1934,7 +1962,10 @@
 				command: ({ editor, range, props }) => {
 					// Convert the Unicode hex codepoint (e.g. "1F44B") to the actual emoji character (👋)
 					const codepoint = props.id;
-					const emoji = String.fromCodePoint(parseInt(codepoint, 16));
+					const emoji = codepoint
+						.split('-')
+						.map((cp) => String.fromCodePoint(parseInt(cp, 16)))
+						.join('');
 					editor.chain().focus().deleteRange(range).insertContent(emoji).run();
 				},
 				render: getSuggestionRenderer(CommandSuggestionList, {
@@ -2128,6 +2159,7 @@
 					>
 						<button
 							id="generate-message-pair-button"
+							type="button"
 							aria-label={$i18n.t('Generate message pair')}
 							class="hidden"
 							on:click={() => createMessagePair(prompt)}
@@ -2343,7 +2375,7 @@
 									dir={$settings?.chatDirection ?? 'auto'}
 								>
 									{#each files as file, fileIdx}
-										{#if file.type === 'image' || (file?.content_type ?? '').startsWith('image/')}
+										{#if file.type === 'image' || isRasterImageContentType(file?.content_type)}
 											{@const fileUrl =
 												file.url.startsWith('data') || file.url.startsWith('http')
 													? file.url

@@ -228,6 +228,7 @@ if CUSTOM_NAME:
 ####################################
 
 ENABLE_DIRECT_CONNECTIONS = os.getenv('ENABLE_DIRECT_CONNECTIONS', 'False').lower() == 'true'
+ENABLE_DIRECT_INTEGRATIONS = os.getenv('ENABLE_DIRECT_INTEGRATIONS', 'False').lower() == 'true'
 
 ####################################
 # OLLAMA_BASE_URL
@@ -739,6 +740,10 @@ else:
         PGVECTOR_IVFFLAT_LISTS = int(PGVECTOR_IVFFLAT_LISTS)
     except Exception:
         PGVECTOR_IVFFLAT_LISTS = 100
+
+PGVECTOR_ITERATIVE_SCAN = os.getenv('PGVECTOR_ITERATIVE_SCAN', 'relaxed_order').strip().lower()
+if PGVECTOR_ITERATIVE_SCAN not in ('off', 'relaxed_order', 'strict_order'):
+    PGVECTOR_ITERATIVE_SCAN = 'relaxed_order'
 
 # openGauss
 OPENGAUSS_DB_URL = os.getenv('OPENGAUSS_DB_URL', DATABASE_URL)
@@ -1297,6 +1302,12 @@ TAVILY_API_KEY = os.getenv('TAVILY_API_KEY', '')
 
 TAVILY_EXTRACT_DEPTH = os.getenv('TAVILY_EXTRACT_DEPTH', 'basic')
 
+STAAN_API_KEY = os.getenv('STAAN_API_KEY', '')
+
+STAAN_MARKET = os.getenv('STAAN_MARKET', 'en-us')
+
+STAAN_MAX_SNIPPETS = int(os.getenv('STAAN_MAX_SNIPPETS', '0'))
+
 PLAYWRIGHT_WS_URL = os.getenv('PLAYWRIGHT_WS_URL', '')
 
 PLAYWRIGHT_TIMEOUT = int(os.getenv('PLAYWRIGHT_TIMEOUT', '10000'))
@@ -1664,43 +1675,13 @@ DEFAULT_MODELS = os.getenv('DEFAULT_MODELS', None)
 
 DEFAULT_PINNED_MODELS = os.getenv('DEFAULT_PINNED_MODELS', None)
 
+# None uses the frontend's localized defaults; an empty list disables suggestions.
 try:
-    default_prompt_suggestions = JSONCodec.loads(os.getenv('DEFAULT_PROMPT_SUGGESTIONS', '[]'))
+    DEFAULT_PROMPT_SUGGESTIONS = JSONCodec.loads(os.getenv('DEFAULT_PROMPT_SUGGESTIONS', 'null'))
 except Exception as e:
     log.exception(f'Error loading DEFAULT_PROMPT_SUGGESTIONS: {e}')
-    default_prompt_suggestions = []
-if default_prompt_suggestions == []:
-    default_prompt_suggestions = [
-        {
-            'title': ['Help me study', 'vocabulary for a college entrance exam'],
-            'content': "Help me study vocabulary: write a sentence for me to fill in the blank, and I'll try to pick the correct option.",
-        },
-        {
-            'title': ['Give me ideas', "for what to do with my kids' art"],
-            'content': "What are 5 creative things I could do with my kids' art? I don't want to throw them away, but it's also so much clutter.",
-        },
-        {
-            'title': ['Tell me a fun fact', 'about the Roman Empire'],
-            'content': 'Tell me a random fun fact about the Roman Empire',
-        },
-        {
-            'title': ['Show me a code snippet', "of a website's sticky header"],
-            'content': "Show me a code snippet of a website's sticky header in CSS and JavaScript.",
-        },
-        {
-            'title': [
-                'Explain options trading',
-                "if I'm familiar with buying and selling stocks",
-            ],
-            'content': "Explain options trading in simple terms if I'm familiar with buying and selling stocks.",
-        },
-        {
-            'title': ['Overcome procrastination', 'give me tips'],
-            'content': 'Could you start by asking me about instances when I procrastinate the most and then give me some suggestions to overcome it?',
-        },
-    ]
+    DEFAULT_PROMPT_SUGGESTIONS = None
 
-DEFAULT_PROMPT_SUGGESTIONS = default_prompt_suggestions
 DEFAULT_PROMPT_SUGGESTIONS_I18N = {}
 
 try:
@@ -2887,6 +2868,7 @@ LDAP_ATTRIBUTE_FOR_GROUPS = os.getenv('LDAP_ATTRIBUTE_FOR_GROUPS', 'memberOf')
 
 DEFAULT_CONFIG = {
     'direct.enable': ENABLE_DIRECT_CONNECTIONS,
+    'direct.integrations.enable': ENABLE_DIRECT_INTEGRATIONS,
     'ollama.enable': ENABLE_OLLAMA_API,
     'ollama.base_urls': OLLAMA_BASE_URLS,
     'ollama.api_configs': OLLAMA_API_CONFIGS,
@@ -3063,6 +3045,9 @@ DEFAULT_CONFIG = {
     'web.search.sougou_api_sk': SOUGOU_API_SK,
     'web.search.tavily_api_key': TAVILY_API_KEY,
     'web.search.tavily_extract_depth': TAVILY_EXTRACT_DEPTH,
+    'web.search.staan_api_key': STAAN_API_KEY,
+    'web.search.staan_market': STAAN_MARKET,
+    'web.search.staan_max_snippets': STAAN_MAX_SNIPPETS,
     'web.loader.playwright_ws_url': PLAYWRIGHT_WS_URL,
     'web.loader.playwright_timeout': PLAYWRIGHT_TIMEOUT,
     'web.loader.firecrawl_api_key': FIRECRAWL_API_KEY,

@@ -1,4 +1,7 @@
 // mention-extension.ts
+import { get } from 'svelte/store';
+import { skills, terminalSkills } from '$lib/stores';
+
 type MentionOptions = {
 	triggerChar?: string; // default "@"
 	className?: string; // default "mention"
@@ -20,6 +23,14 @@ function mentionStart(src: string) {
 
 function mentionRenderer(token: any, options: MentionOptions = {}) {
 	const trigger = options.triggerChar ?? '@';
+	if (
+		trigger === '$' &&
+		![...(get(skills) ?? []), ...(get(terminalSkills) ?? [])].some(
+			(skill) => skill.id === token.id && skill.is_active
+		)
+	) {
+		return escapeHtml(token.raw);
+	}
 	const cls = options.className ?? 'mention';
 	const extra = options.extraAttrs ?? {};
 

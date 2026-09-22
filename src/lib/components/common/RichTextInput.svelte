@@ -2,6 +2,7 @@
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
 	import equal from 'fast-deep-equal';
+	import { skills, terminalSkills } from '$lib/stores';
 
 	marked.use({
 		breaks: true,
@@ -525,9 +526,17 @@
 					// Now replace the escaped mention patterns back into real spans
 					const withMentions = escaped.replace(
 						/&lt;([@#$])([^|&\s]+)(?:\|([^&]*?))?&gt;|&lt;\/([\w.\-:/]+)\|([^&]*?)&gt;/g,
-						(_, ch, id, label, slashSkillId, slashSkillLabel) => {
+						(match, ch, id, label, slashSkillId, slashSkillLabel) => {
 							const mentionChar = ch || '$';
 							const mentionId = id || slashSkillId;
+							if (
+								mentionChar === '$' &&
+								![...($skills ?? []), ...($terminalSkills ?? [])].some(
+									(skill) => skill.id === mentionId && skill.is_active
+								)
+							) {
+								return match;
+							}
 							const display = (label || slashSkillLabel)?.length
 								? label || slashSkillLabel
 								: mentionId;
@@ -720,9 +729,9 @@
 					props: {
 						decorations: (state) => {
 							const { selection } = state;
-							const { focused } = this.editor;
+							const { isFocused } = this.editor;
 
-							if (focused || selection.empty) {
+							if (isFocused || selection.empty) {
 								return null;
 							}
 
@@ -826,7 +835,7 @@
 				...(messageInput ? [PromptItalic] : []),
 				...(dragHandle ? [ListItemDragHandle] : []),
 				Placeholder.configure({ placeholder: () => _placeholder, showOnlyWhenEditable: false }),
-				SelectionDecoration,
+				...(messageInput ? [] : [SelectionDecoration]),
 
 				...(richText
 					? [
