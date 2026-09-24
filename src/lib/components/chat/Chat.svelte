@@ -70,7 +70,7 @@
 		displayFileHandler,
 		getUsageTokenCount,
 		initMermaid,
-		renderVegaVisualization
+		renderVegaVisualization,
 		isRasterImageContentType
 	} from '$lib/utils';
 	import { getContextWindow } from '$lib/utils/contextWindow';

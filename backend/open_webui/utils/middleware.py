@@ -2350,50 +2350,6 @@ def sanitize_tool_pairs(messages: list[dict]) -> list[dict]:
     return sanitized
 
 
-# Ids are validated as [a-z0-9_-]+ on create; matching that keeps ordinary "<$..." text intact.
-SKILL_MENTION_RE = re.compile(r'<(?:\$([a-z0-9_-]+)(?:\|[^>]*)?|/([a-z0-9_-]+)\|[^>]*)>')
-
-
-def _get_text_parts(message: dict) -> list[str]:
-    """Return all text segments from a message's content."""
-    content = message.get('content')
-    if isinstance(content, str):
-        return [content]
-    if isinstance(content, list):
-        return [p.get('text', '') for p in content if isinstance(p, dict) and p.get('type') == 'text']
-    return []
-
-
-def extract_skill_ids_from_messages(messages: list[dict]) -> set[str]:
-    """Extract skill IDs from <$skillId|label> and </skillId|label> mention tags."""
-    ids: set[str] = set()
-    for message in messages:
-        for text in _get_text_parts(message):
-            ids.update(m.group(1) or m.group(2) for m in SKILL_MENTION_RE.finditer(text))
-    return ids
-
-
-SKILL_MENTION_STRIP_RE = re.compile(r'<(?:\$[a-z0-9_-]+(?:\|([^>]*))?|/[a-z0-9_-]+\|([^>]*))>')
-
-
-def strip_skill_mentions(messages: list[dict]) -> None:
-    """Replace <$skillId|label> and </skillId|label> mention tags with the label in-place."""
-
-    def label(match):
-        return match.group(1) or match.group(2) or ''
-
-    for message in messages:
-        content = message.get('content')
-        if isinstance(content, str) and SKILL_MENTION_STRIP_RE.search(content):
-            message['content'] = SKILL_MENTION_STRIP_RE.sub(label, content).strip()
-        elif isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict) and part.get('type') == 'text':
-                    text = part.get('text', '')
-                    if SKILL_MENTION_STRIP_RE.search(text):
-                        part['text'] = SKILL_MENTION_STRIP_RE.sub(label, text).strip()
-
-
 # How long a server's tool list is trusted before it is fetched again. Tool
 # lists change when someone edits the server, not between two messages.
 MCP_SPEC_CACHE_TTL = 300
