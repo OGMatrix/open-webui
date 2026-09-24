@@ -71,6 +71,7 @@ class InterfaceSettings(BaseModel):
 
     autoTags: bool | None = None
     autoFollowUps: bool | None = None
+    toolSuggestions: bool | None = None
     highContrastMode: bool | None = None
     detectArtifacts: bool | None = None
     responseAutoCopy: bool | None = None
@@ -81,6 +82,8 @@ class InterfaceSettings(BaseModel):
     voiceInterruption: bool | None = None
     displayMultiModelResponsesInTabs: bool | None = None
     chatFadeStreamingText: bool | None = None
+    showGenerationStats: bool | None = None
+    generationGlowGrain: bool | None = None
     richTextInput: bool | None = None
     showFormattingToolbar: bool | None = None
     insertPromptAsRichText: bool | None = None
@@ -126,6 +129,12 @@ class InterfaceSettings(BaseModel):
     terminalFileDisplay: Literal['sidebar', 'inline'] | None = None
     defaultUploadContext: Literal['full', 'focused'] | None = None
     webSearch: Literal['always'] | None = None
+    readingWidth: Literal['narrow', 'comfortable', 'wide'] | None = None
+    generationGlow: Literal['off', 'sweep', 'pulse', 'aurora', 'nebula', 'ripple', 'meter'] | None = None
+    generationGlowSpeed: float | None = None
+    generationGlowIntensity: float | None = None
+    generationGlowSpill: float | None = None
+    generationGlowHue: int | None = None
     models: list[str] | None = None
     backgroundImageUrl: str | None = None
     fontFamily: str | None = None
