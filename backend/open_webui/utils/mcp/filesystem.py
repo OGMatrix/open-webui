@@ -34,6 +34,7 @@ READ_OPERATIONS: dict[str, tuple[str, ...]] = {
     'list': ('list_directory_with_sizes', 'list_directory'),
     'tree': ('directory_tree',),
     'read': ('read_text_file', 'read_file'),
+    'media': ('read_media_file',),
     'info': ('get_file_info',),
     'search': ('search_files',),
 }

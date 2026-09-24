@@ -267,6 +267,7 @@
 			// can distinguish "clear this field" from "don't change this field"
 			FILE_MAX_SIZE: RAGConfig.FILE_MAX_SIZE ?? '',
 			FILE_MAX_COUNT: RAGConfig.FILE_MAX_COUNT ?? '',
+			PRESENT_FILE_MAX_SIZE: RAGConfig.PRESENT_FILE_MAX_SIZE ?? '',
 			FILE_IMAGE_COMPRESSION_WIDTH: RAGConfig.FILE_IMAGE_COMPRESSION_WIDTH ?? '',
 			FILE_IMAGE_COMPRESSION_HEIGHT: RAGConfig.FILE_IMAGE_COMPRESSION_HEIGHT ?? '',
 			ALLOWED_FILE_EXTENSIONS: RAGConfig.ALLOWED_FILE_EXTENSIONS.split(',')
@@ -1493,6 +1494,20 @@
 						/>
 					</AdminSettingField>
 				</div>
+
+				<AdminSettingField
+					label={$i18n.t('settings.admin.documents.presentedFileMaxSize.label')}
+					description={$i18n.t('settings.admin.documents.presentedFileMaxSize.description')}
+				>
+					<input
+						class={inputClass}
+						type="number"
+						placeholder="50"
+						bind:value={RAGConfig.PRESENT_FILE_MAX_SIZE}
+						autocomplete="off"
+						min="0"
+					/>
+				</AdminSettingField>
 
 				<div class="grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2">
 					<AdminSettingField

@@ -71,6 +71,7 @@ from open_webui.tools.builtin import (
     list_memories,
     list_memory_paths,
     notify,
+    present_file,
     query_chat_files,
     query_knowledge_bases,
     query_knowledge_files,
@@ -581,6 +582,12 @@ async def get_builtin_tools(
 
     if is_builtin_tool_enabled('user_input', True):
         builtin_functions.append(ask_user)
+
+    # Handing over a file is worth offering wherever the model can call tools:
+    # with a terminal or filesystem connected it hands over a path, and without
+    # one it can still write the file out itself.
+    if is_builtin_tool_enabled('present_file', True):
+        builtin_functions.append(present_file)
 
     # Diagrams: the chat renders mermaid and vega-lite blocks, and this lets the
     # model check one before it reaches the reader as a broken drawing.

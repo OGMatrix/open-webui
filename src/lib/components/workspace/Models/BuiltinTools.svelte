@@ -58,6 +58,12 @@
 			label: $i18n.t('settings.admin.models.builtinTools.codeInterpreter.label'),
 			description: $i18n.t('settings.admin.models.builtinTools.codeInterpreter.description')
 		},
+		present_file: {
+			label: $i18n.t('Handing over files'),
+			description: $i18n.t(
+				'Give the user a file to download, from a path or from content it writes'
+			)
+		},
 		diagrams: {
 			label: $i18n.t('Diagrams'),
 			description: $i18n.t('Check a diagram or chart before it is drawn in the chat')

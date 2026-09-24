@@ -10,6 +10,9 @@
 	import { getKnowledgeById } from '$lib/apis/knowledge';
 	import { getFileById, getFileContentById } from '$lib/apis/files';
 
+	/** Past this, reading a file into the modal is slower than downloading it. */
+	const RAW_TEXT_LIMIT = 2 * 1024 * 1024;
+
 	import CodeBlock from '$lib/components/chat/Messages/CodeBlock.svelte';
 	import Markdown from '$lib/components/chat/Messages/Markdown.svelte';
 
@@ -96,6 +99,9 @@
 			item.name.toLowerCase().endsWith('.rs') ||
 			item.name.toLowerCase().endsWith('.php') ||
 			item.name.toLowerCase().endsWith('.rb'));
+
+	/** Anything whose bytes read as text, and therefore need no extraction. */
+	$: isTextLike = isMarkdown || isCode || (item?.meta?.content_type ?? '').startsWith('text/');
 
 	$: isAudio =
 		(item?.meta?.content_type ?? '').startsWith('audio/') ||
@@ -223,6 +229,23 @@
 
 			if (file) {
 				item.file = file || {};
+			}
+
+			// Nothing was extracted for this one -- a file handed over by the
+			// assistant is stored as a download, not as something to search, and an
+			// upload can be stored as-is too. Its own bytes are the text, so read
+			// them rather than showing an empty Content tab.
+			if (!item?.file?.data?.content && isTextLike && (item?.meta?.size ?? 0) <= RAW_TEXT_LIMIT) {
+				const buffer = await getFileContentById(item.id).catch(() => null);
+				if (buffer) {
+					item.file = {
+						...(item.file ?? {}),
+						data: {
+							...(item.file?.data ?? {}),
+							content: new TextDecoder().decode(new Uint8Array(buffer))
+						}
+					};
+				}
 			}
 
 			// Load Excel content if it's an Excel file

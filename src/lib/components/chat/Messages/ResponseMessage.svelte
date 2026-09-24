@@ -59,6 +59,7 @@
 	import Citations from './Citations.svelte';
 	import CodeExecutions from './CodeExecutions.svelte';
 	import ContentRenderer from './ContentRenderer.svelte';
+	import PresentedFiles from './PresentedFiles.svelte';
 	import { KokoroWorker } from '$lib/workers/KokoroWorker';
 	import FileItem from '$lib/components/common/FileItem.svelte';
 	import FollowUps from './ResponseMessage/FollowUps.svelte';
@@ -203,6 +204,18 @@
 	$: visibleResponseContent =
 		getOutputText(message.output) || removeAllDetails(message.content ?? '');
 	$: hasResponseContent = Boolean((message.content ?? '').trim() || message.output?.length);
+
+	/**
+	 * Files the answer handed over, and the rest.
+	 *
+	 * A handed-over file is the thing the reader asked for, so it sits under the
+	 * answer as its own card; a generated image or a working file stays in the
+	 * strip above, where message attachments have always been.
+	 */
+	$: presentedFiles = (message.files ?? []).filter((file: any) => file?.presented);
+	$: attachedFiles = (message.files ?? []).filter(
+		(file: any) => !file?.presented && ['image', 'file'].includes(file.type)
+	);
 	$: showGenerationStats =
 		($settings?.showGenerationStats ?? true) && Boolean(message.generationStats);
 
@@ -707,12 +720,12 @@
 							<StatusHistory statusHistory={message?.statusHistory} />
 						{/if}
 
-						{#if message?.files && message.files?.filter( (f) => ['image', 'file'].includes(f.type) ).length > 0}
+						{#if attachedFiles.length > 0}
 							<div
 								class="my-1 w-full flex overflow-x-auto gap-2 flex-wrap"
 								dir={$settings?.chatDirection ?? 'auto'}
 							>
-								{#each message.files.filter((f) => ['image', 'file'].includes(f.type)) as file}
+								{#each attachedFiles as file}
 									<div>
 										{#if file.type === 'image' || (file?.content_type ?? '').startsWith('image/')}
 											<Image src={file.url} alt={file.name || $i18n.t('Generated Image')} />
@@ -913,6 +926,8 @@
 									></span>
 								</div>
 							{/if}
+
+							<PresentedFiles files={presentedFiles} id={message?.id ?? ''} />
 
 							{#if showGenerationStats}
 								<GenerationStats

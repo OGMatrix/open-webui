@@ -310,6 +310,7 @@ RETRIEVAL_CONFIG_KEYS = {
     'FILE_IMAGE_COMPRESSION_WIDTH': 'file.image_compression_width',
     'FILE_MAX_COUNT': 'rag.file.max_count',
     'FILE_MAX_SIZE': 'rag.file.max_size',
+    'PRESENT_FILE_MAX_SIZE': 'file.present_max_size',
     'FIRECRAWL_API_BASE_URL': 'web.loader.firecrawl_api_url',
     'FIRECRAWL_API_KEY': 'web.loader.firecrawl_api_key',
     'FIRECRAWL_TIMEOUT': 'web.loader.firecrawl_timeout',
@@ -699,6 +700,7 @@ async def get_rag_config(request: Request, user=Depends(get_admin_user)):
         # File upload settings
         'FILE_MAX_SIZE': config.FILE_MAX_SIZE,
         'FILE_MAX_COUNT': config.FILE_MAX_COUNT,
+        'PRESENT_FILE_MAX_SIZE': config.PRESENT_FILE_MAX_SIZE,
         'FILE_IMAGE_COMPRESSION_WIDTH': config.FILE_IMAGE_COMPRESSION_WIDTH,
         'FILE_IMAGE_COMPRESSION_HEIGHT': config.FILE_IMAGE_COMPRESSION_HEIGHT,
         'ALLOWED_FILE_EXTENSIONS': config.ALLOWED_FILE_EXTENSIONS,
@@ -947,6 +949,7 @@ class ConfigForm(BaseModel):
     # File upload settings
     FILE_MAX_SIZE: Union[int, str | None] = None
     FILE_MAX_COUNT: Union[int, str | None] = None
+    PRESENT_FILE_MAX_SIZE: Union[int, str | None] = None
     FILE_IMAGE_COMPRESSION_WIDTH: Union[int, str | None] = None
     FILE_IMAGE_COMPRESSION_HEIGHT: Union[int, str | None] = None
     ALLOWED_FILE_EXTENSIONS: list[str] | None = None
@@ -1283,6 +1286,10 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         config.FILE_MAX_SIZE = None if form_data.FILE_MAX_SIZE == '' else form_data.FILE_MAX_SIZE
     if form_data.FILE_MAX_COUNT is not None:
         config.FILE_MAX_COUNT = None if form_data.FILE_MAX_COUNT == '' else form_data.FILE_MAX_COUNT
+    if form_data.PRESENT_FILE_MAX_SIZE is not None:
+        config.PRESENT_FILE_MAX_SIZE = (
+            None if form_data.PRESENT_FILE_MAX_SIZE == '' else form_data.PRESENT_FILE_MAX_SIZE
+        )
     if form_data.FILE_IMAGE_COMPRESSION_WIDTH is not None:
         config.FILE_IMAGE_COMPRESSION_WIDTH = (
             None if form_data.FILE_IMAGE_COMPRESSION_WIDTH == '' else form_data.FILE_IMAGE_COMPRESSION_WIDTH
@@ -1462,6 +1469,7 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         # File upload settings
         'FILE_MAX_SIZE': config.FILE_MAX_SIZE,
         'FILE_MAX_COUNT': config.FILE_MAX_COUNT,
+        'PRESENT_FILE_MAX_SIZE': config.PRESENT_FILE_MAX_SIZE,
         'FILE_IMAGE_COMPRESSION_WIDTH': config.FILE_IMAGE_COMPRESSION_WIDTH,
         'FILE_IMAGE_COMPRESSION_HEIGHT': config.FILE_IMAGE_COMPRESSION_HEIGHT,
         'ALLOWED_FILE_EXTENSIONS': config.ALLOWED_FILE_EXTENSIONS,

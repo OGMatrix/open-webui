@@ -982,6 +982,10 @@ RAG_FILE_MAX_COUNT = int(os.getenv('RAG_FILE_MAX_COUNT')) if os.getenv('RAG_FILE
 
 RAG_FILE_MAX_SIZE = int(os.getenv('RAG_FILE_MAX_SIZE')) if os.getenv('RAG_FILE_MAX_SIZE') else None
 
+# How large a file the assistant hands the user may be, in MB. Unlike an upload
+# limit this one is about storage the user did not ask for, so it has a default.
+PRESENT_FILE_MAX_SIZE = int(os.getenv('PRESENT_FILE_MAX_SIZE', '50'))
+
 ENABLE_KNOWLEDGE_FILE_RETENTION = os.getenv('ENABLE_KNOWLEDGE_FILE_RETENTION', 'False').lower() == 'true'
 
 RAG_FILE_CONTENT_SEARCH_MAX_CHARS = int(os.getenv('RAG_FILE_CONTENT_SEARCH_MAX_CHARS', str(64 * 1024 * 1024)))
@@ -2952,6 +2956,7 @@ DEFAULT_CONFIG = {
     'rag.full_context': RAG_FULL_CONTEXT,
     'rag.file.max_count': RAG_FILE_MAX_COUNT,
     'rag.file.max_size': RAG_FILE_MAX_SIZE,
+    'file.present_max_size': PRESENT_FILE_MAX_SIZE,
     'file.image_compression_width': FILE_IMAGE_COMPRESSION_WIDTH,
     'file.image_compression_height': FILE_IMAGE_COMPRESSION_HEIGHT,
     'rag.file.allowed_extensions': RAG_ALLOWED_FILE_EXTENSIONS,

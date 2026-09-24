@@ -65,6 +65,7 @@ from open_webui.routers.retrieval import search_web as _search_web
 from open_webui.socket.main import sio
 from open_webui.tasks import stop_item_tasks
 from open_webui.tools.knowledge_fs import kb_exec  # noqa: F401 — re-exported
+from open_webui.utils import present
 from open_webui.utils.chat_id import is_saved_chat_id
 from open_webui.utils.ask_user import (
     ASK_USER_REFUSALS,
@@ -605,6 +606,106 @@ async def ask_user(
     except Exception as e:
         log.exception(f'ask_user error: {e}')
         return JSONCodec.dumps({'status': 'error', 'error': str(e)}, ensure_ascii=False)
+
+
+# =============================================================================
+# PRESENTING A FILE
+# =============================================================================
+
+
+async def present_file(
+    path: str = '',
+    content: str = '',
+    name: str = '',
+    __request__: Request = None,
+    __user__: dict = None,
+    __event_emitter__: callable = None,
+    __chat_id__: str = None,
+    __message_id__: str = None,
+    __metadata__: dict = None,
+) -> str:
+    """
+    Give the user a file to download. It appears under your answer with its name, size and a download button, and stays there.
+
+    Use `path` for a file that already exists on a connected terminal or filesystem -- nothing is read into the conversation, so the size of the file does not matter to you. Use `content` with `name` for something you write yourself.
+
+    :param path: Path of an existing file, on the connected terminal or filesystem
+    :param content: The file's text, when you are writing it here instead
+    :param name: File name to hand it over under (required with content)
+    :return: Confirmation, or what went wrong
+    """
+    if __request__ is None:
+        return JSONCodec.dumps({'error': 'Request context not available'})
+
+    path = (path or '').strip()
+    if not path and not content:
+        return JSONCodec.dumps({'error': 'Give a path to an existing file, or content with a name.'})
+
+    try:
+        limit = await present.max_size_bytes()
+        metadata = __metadata__ or {}
+
+        if content:
+            data, source_type = present.bytes_from_content(content)
+            source = 'inline'
+        else:
+            found = await present.read_from_terminal(__request__, __user__, metadata, limit, path)
+            source = 'terminal'
+            if found is None:
+                found = await present.read_from_filesystem(__request__, __user__, limit, path)
+                source = 'filesystem'
+            if found is None:
+                return JSONCodec.dumps(
+                    {
+                        'error': (
+                            'No terminal or filesystem is connected in this chat, '
+                            'so there is no path to read. Pass `content` and `name` instead.'
+                        )
+                    }
+                )
+            data, source_type = found
+
+        if not data:
+            return JSONCodec.dumps({'error': f'{path or name} is empty, so there is nothing to hand over.'})
+        if len(data) > limit:
+            return JSONCodec.dumps(
+                {'error': f'That file is {present.format_size(len(data))}; the limit is {present.format_size(limit)}.'}
+            )
+
+        file_name = present.file_name_for(name, path, source_type)
+        content_type = present.content_type_for(file_name, source_type)
+        file_item = {
+            **await present.store_presented_file(__request__, __user__, metadata, file_name, data, content_type),
+            'source': source,
+            **({'path': path} if path else {}),
+        }
+
+        files = [file_item]
+        if is_saved_chat_id(__chat_id__) and __message_id__:
+            stored = await Chats.add_message_files_by_id_and_message_id(__chat_id__, __message_id__, files)
+            if stored is not None:
+                files = stored
+
+        if __event_emitter__:
+            await __event_emitter__({'type': 'chat:message:files', 'data': {'files': files}})
+
+        return JSONCodec.dumps(
+            {
+                'status': 'success',
+                'file': file_name,
+                'size': present.format_size(len(data)),
+                'message': (
+                    'The user has it under your answer with a download button. '
+                    'Do not repeat its content and do not write a link to it.'
+                ),
+            },
+            ensure_ascii=False,
+        )
+    except present.PresentError as e:
+        return JSONCodec.dumps({'error': str(e)}, ensure_ascii=False)
+    except Exception as e:
+        log.exception(f'present_file error: {e}')
+        return JSONCodec.dumps({'error': str(e)}, ensure_ascii=False)
 
 
 # =============================================================================
