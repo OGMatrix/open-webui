@@ -13,6 +13,21 @@ Releases are produced by the `Fork · Release` workflow, which writes this file.
 
 <!-- fork-release: new entries are inserted directly below this line -->
 
+## [0.11.4-ogm.1] - 2026-09-24
+
+Built on Open WebUI `0.11.4` (`upstream/dev` at `bbfa876af`), fork commit `7a6c67f49`.
+
+Upstream: 237 commit(s) merged from open-webui/open-webui, 0.11.3 to 0.11.4.
+
+### Added
+
+- Let an answer hand the reader a file to download (0167e7a2a)
+
+### Fixed
+
+- The interface permission covers the fork's own settings too (aeff9c593)
+- **i18n:** put back the settings translations the last sync dropped (85041ceff)
+- Make the branch answer and build again after the last sync (1cd709f4f)
 ## [0.11.3-ogm.10] - 2026-09-11
 
 Built on Open WebUI `0.11.3` (`upstream/dev` at `7aaa4a692`), fork commit `3f06218af`.
