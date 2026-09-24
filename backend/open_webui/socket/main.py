@@ -24,6 +24,7 @@ from open_webui.env import (
     WEBSOCKET_REDIS_CLUSTER,
     WEBSOCKET_REDIS_LOCK_TIMEOUT,
     WEBSOCKET_REDIS_OPTIONS,
+    WEBSOCKET_REDIS_ROOM_CHANNELS,
     WEBSOCKET_REDIS_URL,
     WEBSOCKET_SENTINEL_HOSTS,
     WEBSOCKET_SENTINEL_PORT,
@@ -38,6 +39,7 @@ from open_webui.models.chats import Chats
 from open_webui.models.folders import Folders
 from open_webui.models.notes import Notes, NoteUpdateForm
 from open_webui.models.users import UserNameResponse, Users
+from open_webui.socket.redis_room_channels import AsyncRedisRoomChannelManager
 from open_webui.socket.utils import CachedRedisDict, RedisDict, RedisLock, YdocManager
 from open_webui.tasks import (
     REDIS_PUBSUB_MAX_RECONNECT_INTERVAL,
@@ -93,7 +95,8 @@ if WEBSOCKET_MANAGER == 'redis':
         if sentinel_hosts
         else WEBSOCKET_REDIS_URL
     )
-    redis_manager = socketio.AsyncRedisManager(ws_redis_url, redis_options=WEBSOCKET_REDIS_OPTIONS, json=SOCKETIO_JSON)
+    manager_class = AsyncRedisRoomChannelManager if WEBSOCKET_REDIS_ROOM_CHANNELS else socketio.AsyncRedisManager
+    redis_manager = manager_class(ws_redis_url, redis_options=WEBSOCKET_REDIS_OPTIONS, json=SOCKETIO_JSON)
     sio = socketio.AsyncServer(
         cors_allowed_origins=SOCKETIO_CORS_ORIGINS,
         async_mode='asgi',
@@ -343,8 +346,20 @@ def get_session_ids_from_room(room):
 
 def get_session_ids_by_user_id(user_id: str) -> list[str]:
     """Get known session IDs for a user across the local rooms and shared session pool."""
-    session_ids = set(get_session_ids_from_room(f'user:{user_id}'))
-    session_ids.update(sid for sid, entry in SESSION_POOL.items() if entry and entry.get('id') == user_id)
+    return get_session_ids_by_user_ids([user_id])
+
+
+def get_session_ids_by_user_ids(user_ids: list[str]) -> list[str]:
+    """Get known session IDs for users across the local rooms and shared session pool."""
+    if not user_ids:
+        return []
+
+    user_ids = set(user_ids)
+    session_ids = set()
+    for user_id in user_ids:
+        session_ids.update(get_session_ids_from_room(f'user:{user_id}'))
+    for batch in get_session_pool_batches():
+        session_ids.update(sid for sid, user in batch if user and user.get('id') in user_ids)
     return list(session_ids)
 
 
@@ -383,6 +398,15 @@ async def enter_room_for_users(room: str, user_ids: list[str]):
                 await sio.enter_room(sid, room)
     except Exception as e:
         log.debug('Failed to make users %s join room %s: %s', user_ids, room, e)
+
+
+async def leave_room_for_users(room: str, user_ids: list[str]):
+    """Make all sessions of each user leave a room, including sessions on other workers."""
+    for sid in get_session_ids_by_user_ids(user_ids):
+        try:
+            await sio.leave_room(sid, room)
+        except Exception as e:
+            log.debug('Failed to make session %s leave room %s: %s', sid, room, e)
 
 
 async def disconnect_user_sessions(user_id: str):
@@ -866,7 +890,7 @@ async def yjs_document_update(sid, data):
             await asyncio.sleep(0.5)
             await document_save_handler(document_id, data.get('data', {}), user)
 
-        if data.get('data'):
+        if document_id.startswith('note:') and data.get('data'):
             # Only drop the pending save when a new one takes its place.
             # Updates without a content snapshot (the resync a client sends
             # after rejoining a document) would otherwise cancel the pending

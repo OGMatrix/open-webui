@@ -1196,7 +1196,6 @@ async def process_tool_result(
                                 'chat_id': metadata.get('chat_id', None),
                                 'message_id': metadata.get('message_id', None),
                                 'session_id': metadata.get('session_id', None),
-                                'result': item,
                             },
                             user,
                         )
@@ -3640,6 +3639,8 @@ async def drain_approved_tool_calls(request, form_data, user, model, metadata) -
                 output_parts.append({'type': 'input_image', 'image_url': image_url})
             else:
                 display_files.append(file_item)
+                if file_item.get('type') == 'image' and file_item.get('url'):
+                    output_parts.append({'type': 'input_image', 'image_url': file_item['url']})
 
         output.append(
             {
@@ -4017,7 +4018,7 @@ async def background_tasks_handler(ctx):
 
             if isinstance(content, str):
                 content = re.sub(
-                    r'<details\b[^>]*>.*?<\/details>|!\[.*?\]\(.*?\)',
+                    r'<details\b[^<>]*>(?:(?!<details\b).)*?<\/details>|!\[[^\[\]]*\]\([^()]*\)',
                     '',
                     content,
                     flags=re.S | re.I,
@@ -4192,7 +4193,7 @@ async def background_tasks_handler(ctx):
             await review_memory_after_turn(
                 request=request,
                 user=user,
-                model=ctx['model'],
+                model=ctx.get('model'),
                 metadata=metadata,
                 form_data=form_data,
                 assistant_message=ctx.get('assistant_message') or {},
@@ -6041,7 +6042,7 @@ async def streaming_chat_response_handler(response, ctx):
                     frontend_output = []
                     for item in full_output() if snapshot else full_output()[output_start:]:
                         if item.get('type') == 'function_call_output':
-                            # input_image parts are base64 data URIs only for the LLM, via convert_output_to_messages
+                            # input_image parts are for the LLM only, via convert_output_to_messages
                             item = {
                                 **item,
                                 'output': [
@@ -6311,8 +6312,7 @@ async def streaming_chat_response_handler(response, ctx):
                         )
                         result_status_by_call_id[result.get('tool_call_id', '')] = local_output_status
 
-                        # Separate image data URIs (for LLM via input_image) from
-                        # other files (for frontend display via files attribute).
+                        # Data-URI images: LLM only. File-URL images: LLM and frontend. Other files: frontend.
                         display_files = []
                         for file_item in result.get('files', []):
                             if file_item.get('type') == 'image' and file_item.get('url', '').startswith('data:'):
@@ -6320,8 +6320,9 @@ async def streaming_chat_response_handler(response, ctx):
                                 image_url = await store_tool_result_image(request, file_item['url'], metadata, user)
                                 output_parts.append({'type': 'input_image', 'image_url': image_url})
                             else:
-                                # Frontend display (MCP images, audio, etc.)
                                 display_files.append(file_item)
+                                if file_item.get('type') == 'image' and file_item.get('url'):
+                                    output_parts.append({'type': 'input_image', 'image_url': file_item['url']})
 
                         output.append(
                             {
